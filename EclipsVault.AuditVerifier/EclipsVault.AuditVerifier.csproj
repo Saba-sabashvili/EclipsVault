@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>eclipsvault-audit-verify</AssemblyName>
+    <RootNamespace>EclipsVault.AuditVerifier</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- References ONLY Core: the verifier shares the vault's hashing + verification logic
+         but has no dependency on the web app, the database, or the signing private key. -->
+    <ProjectReference Include="..\EclipsVault.Core\EclipsVault.Core.csproj" />
+  </ItemGroup>
+
+</Project>

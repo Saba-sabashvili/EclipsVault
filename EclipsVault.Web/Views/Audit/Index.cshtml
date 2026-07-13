@@ -31,6 +31,42 @@
 }
 
 <section class="panel">
+    <div class="panel-header">
+        <h2>Attestation</h2>
+        <span class="badge tone-muted mono">key @Model.SigningKeyId</span>
+    </div>
+    <p class="hint muted">
+        The hash chain is tamper-evident to anyone with the database. A <strong>signed checkpoint</strong> goes further:
+        it binds the chain head with an ECDSA signature, so an outside auditor can prove the trail hasn't been rewritten
+        using only the public key — even against someone who deleted rows and recomputed every hash. Export a bundle and
+        verify it offline with the <code>EclipsVault.AuditVerifier</code> tool.
+    </p>
+
+    <dl class="detail-grid">
+        <dt>Latest checkpoint</dt>
+        <dd>
+            @if (Model.LatestCheckpoint is { } cp)
+            {
+                <text>sequence <strong>@cp.Sequence</strong> · @cp.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") · <span class="mono">@cp.SigningKeyId</span></text>
+            }
+            else
+            {
+                <span class="muted">none yet — create one to attest the current trail</span>
+            }
+        </dd>
+    </dl>
+
+    <div class="button-row">
+        <form asp-action="CreateCheckpoint" method="post">
+            <button type="submit" class="button">Create signed checkpoint</button>
+        </form>
+        <form asp-action="Export" method="post">
+            <button type="submit" class="button primary">Export signed bundle</button>
+        </form>
+    </div>
+</section>
+
+<section class="panel">
     <div class="table-toolbar">
         <input type="search" class="table-search" placeholder="Filter by user, action, resource, IP…" data-filter="#audit-table" aria-label="Filter audit entries" />
     </div>

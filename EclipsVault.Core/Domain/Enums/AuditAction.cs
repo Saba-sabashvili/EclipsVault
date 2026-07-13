@@ -66,5 +66,9 @@ public enum AuditAction
 
     // MFA recovery ("backup") codes.
     RecoveryCodesGenerated = 100,
-    RecoveryCodeUsed = 101
+    RecoveryCodeUsed = 101,
+
+    // Audit attestation (signed checkpoints / export).
+    AuditCheckpointCreated = 110,
+    AuditBundleExported = 111
 }

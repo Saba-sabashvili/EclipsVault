@@ -23,14 +23,21 @@ EclipsVault.slnx                  # modern XML solution format
 │   ├── Persistence/              #   EF Core 10 DbContext, Fluent API Configurations/,
 │   │                             #     Repositories/, audit SaveChangesInterceptor,
 │   │                             #     Migrations/ (schema source of truth), seeder
-│   ├── Security/                 #   Argon2id, AES-256-GCM envelope crypto, TOTP,
-│   │                             #     crypto engine factory, IP blacklist, revocation
+│   ├── Security/                 #   grouped into subfolders:
+│   │     ├── Cryptography/       #     Argon2id, AES-256-GCM envelope crypto + KEK, TOTP,
+│   │     │                       #       API-key factory, audit checkpoint signer
+│   │     ├── Defense/            #     IP blacklist, session revocation, intrusion response,
+│   │     │                       #       trusted networks, breached-password screen
+│   │     └── WebAuthn/           #     the passkey relying-party verifier
+│   ├── Auditing/                 #   audit checkpoint / export service
 │   ├── Media/                    #   ImageSharp avatar processor
 │   ├── Caching/ · Logging/ · Workers/
 ├── EclipsVault.Web/              # Composition root. Thin controllers, ViewModels,
 │   ├── Authorization/ · Middleware/ · Services/ · Extensions/ · Views/
+├── EclipsVault.AuditVerifier/    # Standalone console tool. Verifies an exported audit
+│                                 #   bundle offline — references Core only, no app/DB.
 └── EclipsVault.Tests/            # xUnit. Pure-Core invariants: ABAC decision matrix,
-                                  #   audit hash-chain, recovery-code format, crypto round-trip
+                                  #   audit hash-chain, bundle verifier, recovery codes, crypto
 ```
 
 Dependency rule: `Web → Infrastructure → Core`. Nothing ever points outward. Database entities never leave Infrastructure; controllers see DTOs; views see ViewModels.
@@ -107,7 +114,7 @@ Startup fails fast if the KEK is missing or malformed outside Development.
   - **Users** — provision accounts (Argon2id + breached-password screening + first-login TOTP enrollment); **edit role** (clearance + project, which revokes the user's sessions so the change applies at next sign-in); **enable/disable** an account (disabling revokes sessions immediately and blocks sign-in); **force logout**; reset a lost authenticator; delete. Guards block disabling/demoting/deleting yourself or the last administrator.
   - **Networks** — shows *your current address exactly as the vault sees it* (on a VPN that's the VPN egress) with a one-click **Trust this address** button. Manage runtime-trusted CIDR ranges (applied immediately, no restart) and lift intrusion-defence IP blocks. Note: network trust is a property of the request's source address, never of a user account.
   - **Service accounts** — provision non-interactive identities (name + clearance + project) for applications; issue **API keys** (shown once, stored only as a SHA-256 hash, optional expiry) — each optionally **scoped** to narrow it below the account (clearance ceiling, single project, or metadata-only); revoke keys; and disable/delete accounts. See the **Programmatic API** below.
-  - **Audit log** — filterable viewer over the immutable trail; critical rows highlighted; a **Verify integrity** action re-walks the hash chain and flags any tampering.
+  - **Audit log** — filterable viewer over the immutable trail; critical rows highlighted; a **Verify integrity** action re-walks the hash chain and flags any tampering. An **Attestation** panel signs the current chain head into a checkpoint and **exports a signed bundle** that can be verified offline with the `EclipsVault.AuditVerifier` tool.
   - **Encryption keys** — shows which master KEK each secret is wrapped under and runs a **rotation** that re-wraps everything under the current KEK. See *KEK rotation* under Security architecture.
 
 The distinction is clean: **profile** actions only ever touch your own account and can never change clearance or project; **clearance and project are administrative** and live in the Users console. Login username (immutable audit anchor) is separate from the editable display name.
@@ -150,6 +157,7 @@ Scopes are enforced by the **same pure ABAC engine** as everything else — they
 - **ABAC** — `AuthorizationHandler<SecretAccessRequirement, SecretDetailsDto>` extracts subject claims (clearance, project), computes runtime context (a configurable time window for Production secrets — UTC by default, or a real IANA zone via `Abac:TimeZoneId` so "business hours" track the org's locale and DST — and a trusted-network check for Confidential+ against static config **plus** the DB-backed runtime trusted networks), and delegates to the pure rule engine `SecretAccessPolicy` in Core (fully unit-testable, no framework types — see the `EclipsVault.Tests` decision matrix). Denials surface their exact reasons on the Denied page.
 - **Fail-closed audit** — an EF `SaveChangesInterceptor` injects an `AuditLogs` row into the *same transaction* as every secret insert/update/delete; if the audit can't be written the whole transaction rolls back. Reads are audited *before* decryption — no audit row, no plaintext, and the caller gets a 503, never data.
 - **Tamper-evident audit trail** — the same interceptor is the single choke point for every audit insert, so it stamps each row into a **hash chain**: `EntryHash = SHA-256(row content ‖ previous row's hash)`, with a monotonic sequence. Any edit, deletion, insertion, or reorder — even by someone with direct database access — breaks the chain and is caught by the **Verify integrity** action on the Audit page, which pinpoints the exact broken entry. The chain head advances only on commit (a rolled-back write leaves no gap), it is seeded from the persisted tail on restart, and the whole pre-existing history is back-filled into the chain at first startup. Aligns with PCI-DSS 10.5, NIST 800-53 AU-9/AU-10, and SOC 2 CC7.
+- **Signed audit checkpoints & external verification** — the hash chain is tamper-evident to anyone with the database; a signed checkpoint makes it tamper-evident to anyone with the *public key*. The admin Audit page can **sign** the current chain head (ECDSA P-256 / SHA-256 over the head sequence + hash) and **export** a self-contained bundle — every chained row, the signed checkpoint, and the public key. The standalone `EclipsVault.AuditVerifier` tool re-walks the chain and checks the signature *offline*, with no access to the vault, its database, or its private key — so an outside auditor can prove the trail was not rewritten even by an insider who deleted rows and recomputed every hash (they cannot forge the signature). The private key comes from `ECLIPSVAULT_AUDIT_SIGNING_KEY` (dev uses an ephemeral key). Extends the RFC 6962-style transparency model to the vault's own log.
 - **Honey-tokens** — seeded decoys (`Production_AWS_Root_Key`, `Global_SQL_SA_Password`). Any by-id read bypasses ABAC entirely and: revokes the caller's sessions (server-side kill switch checked on every request), blacklists the source IP range (/24 v4, /64 v6) in middleware, writes a critical audit row, and emits a `Fatal` Serilog alert. The attacker just sees a sign-out. TopSecret administrators see a `decoy` badge and a confirm-gated open on the list so they don't trip their own trap; ordinary users see decoys as indistinguishable from real secrets.
 - **Break-glass recovery** — the block page carries a *Recover access* link to `/Account/Recover`, the one path the IP-blacklist middleware exempts. It demands all factors at once (password + TOTP), is restricted to TopSecret clearance, is rate limited, and audits every attempt (`BreakGlassRecovery`). A verified admin lifts the block on their own range and is signed straight back in; anyone else is refused and the block stands. This means a locked-out administrator always has a way back to the dashboard, without a process restart.
 - **TTL shredder** — a `BackgroundService` sweeps every 60 s, destroys expired key material (row remains as an auditable tombstone), evicts cache entries and logs the event. A 5-minute demo secret is seeded so you can watch it happen.
@@ -195,6 +203,8 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 - ✅ **MFA recovery codes** — single-use backup codes, generated from the profile and shown once, that redeem in place of TOTP when the authenticator is lost. Stored only as salted Argon2id hashes; verified without an early-out timing signal; consumed on use; wired into lockout and the audit trail; and purged whenever the authenticator is reset. Migration `AddMfaRecoveryCodes`. NIST 800-63B "look-up secrets". *(Security-standards hardening track.)*
 
 - ✅ **Breached-password screening** — every password set or changed is refused if it appears in a bundled, offline compromised-password corpus (embedded resource, loaded once into a case-folded `HashSet`), with a debounced live check on the change-password / create-user forms. Behind the `IBreachedPasswordScreen` port. NIST 800-63B §5.1.1.2, OWASP ASVS 2.1.7. *(Security-standards hardening track — this completes the track.)*
+
+- ✅ **Signed audit checkpoints & offline verification** — the hash-chained audit trail can now be signed (ECDSA P-256) at its head and exported as a self-contained bundle, verifiable *offline* by the new standalone `EclipsVault.AuditVerifier` project with no access to the app, its database, or its private key. This lifts tamper-evidence from "provable to anyone with the DB" to "provable to anyone with the public key," defeating even an insider who rewrites the whole chain. Migration `AddAuditCheckpoints`; new `Infrastructure/Auditing` + reorganised `Infrastructure/Security` (Cryptography/ · Defense/ · WebAuthn/). RFC 6962-style transparency; NIST 800-53 AU-9.
 
 **Engineering hardening** (from a security & architecture review — all landed):
 

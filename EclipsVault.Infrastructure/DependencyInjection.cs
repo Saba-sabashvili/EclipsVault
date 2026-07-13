@@ -1,3 +1,4 @@
+using EclipsVault.Infrastructure.Auditing;
 using EclipsVault.Infrastructure.Caching;
 using EclipsVault.Infrastructure.Media;
 using EclipsVault.Infrastructure.Notifications;
@@ -25,6 +26,7 @@ public static class DependencyInjection
         services.Configure<LifecycleOptions>(configuration.GetSection(LifecycleOptions.SectionName));
         services.Configure<WebAuthnOptions>(configuration.GetSection(WebAuthnOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddMemoryCache();
@@ -88,6 +90,10 @@ public static class DependencyInjection
         // Runtime-managed trusted networks + audit reading.
         services.AddScoped<ITrustedNetworkService, TrustedNetworkService>();
         services.AddScoped<IAuditLogReader, AuditLogReader>();
+
+        // Audit attestation: an ECDSA signer over the hash-chain head + the export service.
+        services.AddSingleton<IAuditCheckpointSigner, EcdsaAuditCheckpointSigner>();
+        services.AddScoped<IAuditCheckpointService, AuditCheckpointService>();
 
         // Application services (pure Core classes, composed here).
         services.AddScoped<ISecretService, SecretService>();

@@ -8,6 +8,12 @@ public sealed class AuditIndexViewModel
 
     /// <summary>Set only after the admin runs "Verify integrity"; null on a plain page load.</summary>
     public AuditIntegrityReport? Integrity { get; init; }
+
+    /// <summary>The most recent signed checkpoint, or null if none has been created.</summary>
+    public AuditCheckpointDto? LatestCheckpoint { get; init; }
+
+    /// <summary>Identifier of the active audit signing key.</summary>
+    public string? SigningKeyId { get; init; }
 }
 
 /// <summary>Presentation mapping for audit actions: human label + badge tone.</summary>
@@ -57,6 +63,8 @@ public static class AuditDisplay
         AuditAction.ServiceAccountEnabled => ("Service account enabled", "ok"),
         AuditAction.ApiKeyIssued => ("API key issued", "ok"),
         AuditAction.ApiKeyRevoked => ("API key revoked", "warn"),
+        AuditAction.AuditCheckpointCreated => ("Checkpoint signed", "ok"),
+        AuditAction.AuditBundleExported => ("Audit exported", "muted"),
         _ => (action.ToString(), "muted")
     };
 

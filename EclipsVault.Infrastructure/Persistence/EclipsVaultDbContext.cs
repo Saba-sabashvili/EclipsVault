@@ -23,6 +23,8 @@ public sealed class EclipsVaultDbContext : DbContext
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    public DbSet<AuditCheckpoint> AuditCheckpoints => Set<AuditCheckpoint>();
+
     public DbSet<PasskeyCredential> PasskeyCredentials => Set<PasskeyCredential>();
 
     public DbSet<MfaRecoveryCode> MfaRecoveryCodes => Set<MfaRecoveryCode>();
