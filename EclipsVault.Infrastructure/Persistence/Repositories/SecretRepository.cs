@@ -1,0 +1,73 @@
+using EclipsVault.Core.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace EclipsVault.Infrastructure.Persistence.Repositories;
+
+public sealed class SecretRepository : ISecretRepository
+{
+    private readonly EclipsVaultDbContext _context;
+
+    public SecretRepository(EclipsVaultDbContext context) => _context = context;
+
+    public Task<Secret?> FindAsync(Guid id, CancellationToken ct)
+        => _context.Secrets.FirstOrDefaultAsync(s => s.Id == id, ct);
+
+    public async Task<IReadOnlyList<Secret>> ListActiveAsync(DateTimeOffset asOfUtc, CancellationToken ct)
+        => await _context.Secrets
+            .AsNoTracking()
+            .Where(s => !s.IsShredded && (s.ExpiresAtUtc == null || s.ExpiresAtUtc > asOfUtc))
+            .OrderBy(s => s.Name)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Secret>> ListExpiredAsync(DateTimeOffset asOfUtc, CancellationToken ct)
+        => await _context.Secrets
+            .Where(s => !s.IsShredded && s.ExpiresAtUtc != null && s.ExpiresAtUtc <= asOfUtc)
+            .ToListAsync(ct);
+
+    public async Task AddAsync(Secret secret, CancellationToken ct)
+    {
+        _context.Secrets.Add(secret);
+        await _context.SaveChangesAsync(ct); // audit row injected atomically by the interceptor
+    }
+
+    public async Task UpdateAsync(Secret secret, CancellationToken ct)
+    {
+        _context.Secrets.Update(secret);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteAsync(Secret secret, CancellationToken ct)
+    {
+        _context.Secrets.Remove(secret); // archived versions cascade-delete via the FK
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task RotateAsync(Secret secret, SecretVersion archivedVersion, CancellationToken ct)
+    {
+        _context.SecretVersions.Add(archivedVersion);
+        _context.Secrets.Update(secret);
+        await _context.SaveChangesAsync(ct); // interceptor injects the SecretUpdated audit atomically
+    }
+
+    public async Task ShredAsync(Secret secret, CancellationToken ct)
+    {
+        // Archived versions hold key material — purge them as part of the shred.
+        var versions = _context.SecretVersions.Where(v => v.SecretId == secret.Id);
+        _context.SecretVersions.RemoveRange(versions);
+        _context.Secrets.Update(secret);
+        await _context.SaveChangesAsync(ct); // interceptor injects the SecretShredded audit
+    }
+
+    public async Task<IReadOnlyList<SecretVersion>> ListVersionsAsync(Guid secretId, CancellationToken ct)
+        => await _context.SecretVersions
+            .AsNoTracking()
+            .Where(v => v.SecretId == secretId)
+            .OrderByDescending(v => v.VersionNumber)
+            .ToListAsync(ct);
+
+    public Task<SecretVersion?> FindVersionAsync(Guid secretId, Guid versionId, CancellationToken ct)
+        => _context.SecretVersions.FirstOrDefaultAsync(v => v.Id == versionId && v.SecretId == secretId, ct);
+
+    public Task<int> CountVersionsAsync(Guid secretId, CancellationToken ct)
+        => _context.SecretVersions.CountAsync(v => v.SecretId == secretId, ct);
+}

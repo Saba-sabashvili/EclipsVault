@@ -1,0 +1,67 @@
+@model AuditIndexViewModel
+@{
+    ViewData["Title"] = "Audit log";
+    var now = DateTimeOffset.UtcNow;
+}
+
+<div class="page-header">
+    <div>
+        <h1>Audit log</h1>
+        <p class="page-sub">Immutable, fail-closed trail — showing the latest @Model.Entries.Count entries.</p>
+    </div>
+    <form asp-action="Verify" method="post">
+        <button type="submit" class="button">Verify integrity</button>
+    </form>
+</div>
+
+@if (Model.Integrity is { } report)
+{
+    <div class="notice @(report.Intact ? "notice-ok" : "notice-critical")">
+        @if (report.Intact)
+        {
+            <strong>✓ Hash chain intact.</strong>
+            <span>@report.Message Any edit, deletion, or reordering of a row would break the chain and be caught here.</span>
+        }
+        else
+        {
+            <strong>✗ Tampering detected.</strong>
+            <span>@report.Message (First broken entry: #@report.FirstBrokenSequence.)</span>
+        }
+    </div>
+}
+
+<section class="panel">
+    <div class="table-toolbar">
+        <input type="search" class="table-search" placeholder="Filter by user, action, resource, IP…" data-filter="#audit-table" aria-label="Filter audit entries" />
+    </div>
+    <div class="table-scroll">
+        <table class="data-table" id="audit-table">
+            <thead>
+                <tr>
+                    <th>When (UTC)</th>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>Actor</th>
+                    <th>Source IP</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model.Entries)
+                {
+                    var (label, tone) = AuditDisplay.For(entry.Action);
+                    <tr class="@(entry.IsCritical ? "row-critical" : "")">
+                        <td class="muted" title="@entry.TimestampUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")">
+                            @AuditDisplay.Ago(entry.TimestampUtc, now)
+                        </td>
+                        <td><span class="badge tone-@tone">@label</span></td>
+                        <td class="mono">@(entry.ResourceName ?? entry.ResourceType)</td>
+                        <td>@entry.Username</td>
+                        <td class="mono muted">@entry.SourceIp</td>
+                        <td class="muted cell-wrap">@entry.Details</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>

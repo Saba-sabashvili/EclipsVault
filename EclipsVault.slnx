@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="EclipsVault.Core/EclipsVault.Core.csproj" />
+  <Project Path="EclipsVault.Infrastructure/EclipsVault.Infrastructure.csproj" />
+  <Project Path="EclipsVault.Web/EclipsVault.Web.csproj" />
+  <Project Path="EclipsVault.Tests/EclipsVault.Tests.csproj" />
+</Solution>

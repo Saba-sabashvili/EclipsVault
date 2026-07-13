@@ -1,0 +1,45 @@
+namespace EclipsVault.Web.Authorization;
+
+public static class VaultClaimTypes
+{
+    public const string Clearance = "vault:clearance";
+    public const string Project = "vault:project";
+    public const string AuthTime = "vault:auth_time";
+
+    /// <summary>User-editable display name shown in the UI. The immutable login username stays in ClaimTypes.Name (the audit anchor).</summary>
+    public const string Display = "vault:display";
+
+    /// <summary>Cache-busting version for the current user's avatar URL; bumped on sign-in and whenever the avatar changes.</summary>
+    public const string AvatarVersion = "vault:avatar_v";
+
+    /// <summary>Distinguishes an interactive user from a "service" account principal.</summary>
+    public const string ActorType = "vault:actor_type";
+
+    /// <summary>API-key scope: restricts the key to a single project (present only for scoped keys).</summary>
+    public const string ScopeProject = "vault:scope_project";
+
+    /// <summary>API-key scope: "true" when the key may read metadata but never a secret value.</summary>
+    public const string ScopeMetadataOnly = "vault:scope_metadata_only";
+}
+
+public static class AuthSchemes
+{
+    /// <summary>Short-lived scheme issued after the password factor, before TOTP.</summary>
+    public const string MfaPending = "EclipsVault.MfaPending";
+
+    /// <summary>Bearer / X-Api-Key authentication for non-interactive service accounts.</summary>
+    public const string ApiKey = "ApiKey";
+}
+
+public static class VaultPolicies
+{
+    public const string SecretAccess = "SecretAccess";
+
+    /// <summary>Requires TopSecret clearance; gates the administration area.</summary>
+    public const string AdminOnly = "AdminOnly";
+}
+
+public static class RateLimitPolicies
+{
+    public const string Authentication = "auth";
+}

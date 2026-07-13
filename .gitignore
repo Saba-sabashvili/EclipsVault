@@ -1,0 +1,21 @@
+bin/
+obj/
+logs/
+*.log
+*.user
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets & local config — never commit these. Use the committed *.template as a starting point.
+appsettings.Production.json
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.Local.json
+.env
+.env.*
+*.pfx
+*.key
+secrets.json

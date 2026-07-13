@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure domain + application layer. Deliberately has ZERO package references:
+       no ASP.NET, no EF Core, no logging frameworks. Only the BCL. -->
+
+</Project>

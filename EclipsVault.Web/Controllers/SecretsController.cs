@@ -1,0 +1,285 @@
+using System.Security.Claims;
+using EclipsVault.Core.Application.Secrets;
+using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Core.Domain.Exceptions;
+using EclipsVault.Web.Authorization;
+using EclipsVault.Web.Extensions;
+using EclipsVault.Web.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace EclipsVault.Web.Controllers;
+
+/// <summary>
+/// Thin HTTP layer over ISecretService. Every by-id action runs the ABAC policy
+/// against the resource's attributes before anything sensitive happens; the service
+/// layer independently enforces honey-token traps and fail-closed auditing.
+/// </summary>
+public sealed class SecretsController : Controller
+{
+    private readonly ISecretService _secrets;
+    private readonly ISecretGrantService _grants;
+    private readonly IAuthorizationService _authorization;
+
+    public SecretsController(ISecretService secrets, ISecretGrantService grants, IAuthorizationService authorization)
+    {
+        _secrets = secrets;
+        _grants = grants;
+        _authorization = authorization;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        var secrets = await _secrets.ListAsync(ct);
+
+        // Only administrators get the decoy marker; to everyone else the bait must
+        // look exactly like a real secret.
+        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)Core.Domain.Enums.ClearanceLevel.TopSecret).ToString());
+
+        var items = secrets
+            .Select(s => new SecretListItemViewModel(
+                s.Id, s.Name, s.ProjectKey, s.Environment, s.Sensitivity,
+                s.CreatedAtUtc, s.ExpiresAtUtc, IsDecoy: isAdmin && s.IsHoneyToken))
+            .ToList();
+        return View(items);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Details(Guid id, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        return View(await BuildViewModelAsync(details, ct));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Reveal(Guid id, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        var revealed = await _secrets.RevealAsync(id, ct);
+        return View("Details", await BuildViewModelAsync(details, ct, revealed.Value, "current value"));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Rotate(RotateSecretViewModel model, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(model.Id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        if (!ModelState.IsValid)
+        {
+            this.FlashError("Enter the new value to rotate this secret.");
+            return RedirectToAction(nameof(Details), new { id = model.Id });
+        }
+
+        await _secrets.RotateAsync(model.Id, model.NewValue, string.IsNullOrWhiteSpace(model.ChangeNote) ? null : model.ChangeNote.Trim(), ct);
+        this.FlashSuccess("Secret rotated. The previous value was archived to version history.");
+        return RedirectToAction(nameof(Details), new { id = model.Id });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> RevealVersion(Guid id, Guid versionId, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        var revealed = await _secrets.RevealVersionAsync(id, versionId, ct);
+        var versions = await _secrets.ListVersionsAsync(id, ct);
+        var number = versions.FirstOrDefault(v => v.Id == versionId)?.VersionNumber;
+        var label = number is int n ? $"version {n}" : "archived version";
+        return View("Details", await BuildViewModelAsync(details, ct, revealed.Value, label));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> RestoreVersion(Guid id, Guid versionId, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        await _secrets.RestoreVersionAsync(id, versionId, ct);
+        this.FlashSuccess("Secret reverted to the selected version. The value it replaced was archived.");
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [HttpGet]
+    public IActionResult Create()
+        => View(new CreateSecretViewModel
+        {
+            ProjectKey = User.FindFirst(VaultClaimTypes.Project)?.Value ?? string.Empty
+        });
+
+    [HttpPost]
+    public async Task<IActionResult> Create(CreateSecretViewModel model, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        // A user may not classify a secret above their own clearance.
+        var clearance = int.TryParse(User.FindFirst(VaultClaimTypes.Clearance)?.Value, out var c) ? c : 0;
+        if ((int)model.Sensitivity > clearance)
+        {
+            ModelState.AddModelError(nameof(model.Sensitivity),
+                "You cannot create a secret classified above your own clearance level.");
+            return View(model);
+        }
+
+        var id = await _secrets.CreateAsync(
+            new CreateSecretRequest(model.Name, model.Value, model.ProjectKey, model.Environment, model.Sensitivity, model.TtlDays),
+            ct);
+
+        this.FlashSuccess($"Secret '{model.Name}' was envelope-encrypted and stored.");
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> SharedWithMe(CancellationToken ct)
+    {
+        var shared = await _grants.ListSharedWithUserAsync(CurrentUserId(), ct);
+        return View(shared);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Grant(ShareSecretViewModel model, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(model.SecretId, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        if (!CanShare(details))
+        {
+            return Forbid();
+        }
+
+        if (!ModelState.IsValid)
+        {
+            this.FlashError("Enter the username or email of the person to share with.");
+            return RedirectToAction(nameof(Details), new { id = model.SecretId });
+        }
+
+        try
+        {
+            await _grants.GrantAsync(model.SecretId, details.Name, model.GranteeUsernameOrEmail, model.TtlDays, ct);
+            this.FlashSuccess($"Access to '{details.Name}' was shared with {model.GranteeUsernameOrEmail}.");
+        }
+        catch (SharingException ex)
+        {
+            this.FlashError(ex.Message);
+        }
+
+        return RedirectToAction(nameof(Details), new { id = model.SecretId });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> RevokeGrant(Guid id, Guid grantId, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        if (!CanShare(details))
+        {
+            return Forbid();
+        }
+
+        if (await _grants.RevokeAsync(grantId, ct))
+        {
+            this.FlashSuccess("Access revoked.");
+        }
+        else
+        {
+            this.FlashError("That grant no longer exists.");
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        await _secrets.DeleteAsync(id, ct);
+        this.FlashSuccess("Secret deleted. The action was recorded in the audit trail.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Null when access is allowed; otherwise a redirect to the Denied page
+    /// carrying the policy's denial reasons so the user can see what was not satisfied.</summary>
+    private async Task<IActionResult?> CheckAccessAsync(SecretDetailsDto details)
+    {
+        var result = await _authorization.AuthorizeAsync(User, details, VaultPolicies.SecretAccess);
+        if (result.Succeeded)
+        {
+            return null;
+        }
+
+        var reasons = result.Failure?.FailureReasons.Select(r => r.Message) ?? [];
+        TempData[AccountController.DenialReasonsTempDataKey] = string.Join('\n', reasons);
+        // The secret id rides the query string (reliable across the redirect) so the Denied
+        // page can offer to file an access request for it.
+        return RedirectToAction(nameof(AccountController.Denied), "Account", new { secretId = details.Id });
+    }
+
+    private async Task<SecretDetailsViewModel> BuildViewModelAsync(
+        SecretDetailsDto dto, CancellationToken ct, string? revealedValue = null, string? revealedLabel = null)
+    {
+        var canShare = CanShare(dto);
+        return new()
+        {
+            Id = dto.Id,
+            Name = dto.Name,
+            ProjectKey = dto.ProjectKey,
+            Environment = dto.Environment,
+            Sensitivity = dto.Sensitivity,
+            Algorithm = dto.Algorithm,
+            CreatedAtUtc = dto.CreatedAtUtc,
+            UpdatedAtUtc = dto.UpdatedAtUtc,
+            ExpiresAtUtc = dto.ExpiresAtUtc,
+            RevealedValue = revealedValue,
+            RevealedLabel = revealedLabel,
+            Versions = await _secrets.ListVersionsAsync(dto.Id, ct),
+            CanShare = canShare,
+            Grants = canShare ? await _grants.ListForSecretAsync(dto.Id, ct) : []
+        };
+    }
+
+    /// <summary>Sharing is managed by administrators and by members of the secret's own project.</summary>
+    private bool CanShare(SecretDetailsDto dto)
+    {
+        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
+        var project = User.FindFirst(VaultClaimTypes.Project)?.Value;
+        return isAdmin || string.Equals(project, dto.ProjectKey, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Guid CurrentUserId()
+        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
+}

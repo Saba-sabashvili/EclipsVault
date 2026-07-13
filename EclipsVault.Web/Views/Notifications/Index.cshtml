@@ -1,0 +1,60 @@
+@model IReadOnlyList<EmailLogDto>
+@{
+    ViewData["Title"] = "Notifications";
+
+    (string cls, string label) StatusBadge(EmailDeliveryStatus s) => s switch
+    {
+        EmailDeliveryStatus.Sent => ("tone-ok", "Sent"),
+        EmailDeliveryStatus.Failed => ("tone-danger", "Failed"),
+        _ => ("tone-muted", "Suppressed")
+    };
+}
+
+<div class="page-header">
+    <div>
+        <h1>Notifications</h1>
+        <p class="page-sub">Every email the vault composed and tried to deliver, newest first. This is a delivery record, not a mailbox.</p>
+    </div>
+</div>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2>Outbox</h2>
+        <input type="search" class="table-search" placeholder="Filter by recipient, subject, event…" data-filter="#outbox" aria-label="Filter notifications" />
+    </div>
+
+    @if (Model.Count == 0)
+    {
+        <p class="muted">No notifications yet. Approving an access request, changing a password, or provisioning a user will send one.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table" id="outbox">
+                <thead>
+                    <tr><th>Sent (UTC)</th><th>To</th><th>Subject</th><th>Event</th><th>Transport</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in Model)
+                    {
+                        var badge = StatusBadge(e.Status);
+                        <tr>
+                            <td class="muted">@e.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="mono">@e.ToAddress</td>
+                            <td class="cell-strong" title="@e.Body">@e.Subject</td>
+                            <td><span class="badge tone-muted">@e.EventType</span></td>
+                            <td class="muted">@e.Transport</td>
+                            <td>
+                                <span class="badge @badge.cls">@badge.label</span>
+                                @if (e.Status == EmailDeliveryStatus.Failed && !string.IsNullOrEmpty(e.Error))
+                                {
+                                    <span class="hint muted" title="@e.Error"> ⚠</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -1,0 +1,19 @@
+namespace EclipsVault.Core.Application.Mfa;
+
+/// <summary>
+/// Self-service management of single-use MFA recovery codes (NIST SP 800-63B "look-up
+/// secrets"). Generation returns the plaintext exactly once; only salted Argon2id hashes
+/// are ever stored. Redeeming a code during sign-in is handled by the authentication
+/// service (see <see cref="Authentication.IVaultAuthenticationService"/>).
+/// </summary>
+public interface IMfaRecoveryService
+{
+    /// <summary>How many unused codes the user currently holds.</summary>
+    Task<int> CountRemainingAsync(Guid userId, CancellationToken ct);
+
+    /// <summary>
+    /// Generates a fresh set, invalidating any codes the user held before, and returns the
+    /// plaintext codes to display exactly once. Audited.
+    /// </summary>
+    Task<IReadOnlyList<string>> GenerateAsync(Guid userId, CancellationToken ct);
+}

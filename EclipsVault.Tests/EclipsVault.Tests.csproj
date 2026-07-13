@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Test code is exempt from the production warnings-as-errors gate so xUnit analyzer
+         suggestions don't fail CI; the projects under test keep the strict gate. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EclipsVault.Core\EclipsVault.Core.csproj" />
+    <ProjectReference Include="..\EclipsVault.Infrastructure\EclipsVault.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

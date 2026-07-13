@@ -1,0 +1,219 @@
+# 🌒 EclipsVault
+
+A production-grade credentials & secret-management engine built on **ASP.NET Core MVC (.NET 10)** with strict Clean Architecture, envelope encryption, mandatory MFA, attribute-based access control, fail-closed immutable auditing, and active intrusion defence.
+
+## Solution layout
+
+```
+EclipsVault.slnx                  # modern XML solution format
+├── EclipsVault.Core/             # Pure C#. ZERO package references (BCL only).
+│   ├── Domain/                   #   Entities, enums, domain exceptions
+│   └── Application/              #   Organised by FEATURE, not by technical kind:
+│       ├── Abstractions/         #     infra "ports" (crypto, hashing, TOTP, cache,
+│       │                         #       blacklist, revocation, avatar, audit context)
+│       ├── Abac/                 #     pure ABAC rule engine
+│       ├── Authentication/       #     sign-in + TOTP workflow, auth DTOs
+│       ├── Secrets/              #     secret service, repo port, DTOs
+│       ├── Users/                #     user admin service, repo port, DTOs
+│       ├── Profile/              #     self-service profile service
+│       ├── Networks/             #     trusted-network service
+│       ├── Auditing/             #     audit-log reader
+│       └── Dashboard/            #     overview aggregation
+├── EclipsVault.Infrastructure/   # Implements Core interfaces.
+│   ├── Persistence/              #   EF Core 10 DbContext, Fluent API Configurations/,
+│   │                             #     Repositories/, audit SaveChangesInterceptor,
+│   │                             #     Migrations/ (schema source of truth), seeder
+│   ├── Security/                 #   Argon2id, AES-256-GCM envelope crypto, TOTP,
+│   │                             #     crypto engine factory, IP blacklist, revocation
+│   ├── Media/                    #   ImageSharp avatar processor
+│   ├── Caching/ · Logging/ · Workers/
+├── EclipsVault.Web/              # Composition root. Thin controllers, ViewModels,
+│   ├── Authorization/ · Middleware/ · Services/ · Extensions/ · Views/
+└── EclipsVault.Tests/            # xUnit. Pure-Core invariants: ABAC decision matrix,
+                                  #   audit hash-chain, recovery-code format, crypto round-trip
+```
+
+Dependency rule: `Web → Infrastructure → Core`. Nothing ever points outward. Database entities never leave Infrastructure; controllers see DTOs; views see ViewModels.
+
+**Reproducible, gated builds** — package versions are pinned centrally in `Directory.Packages.props` with committed `packages.lock.json` files (CI restores in `--locked-mode`); `Directory.Build.props` turns compiler/nullable warnings into build errors. `dotnet test` runs the suite; the GitHub Actions workflow (`.github/workflows/ci.yml`) builds, tests, and fails on any vulnerable dependency. Local secrets never enter source control — see *Configuration & secrets* below.
+
+**Application is sliced by feature** (vertical slices inside the layer): each folder holds the interface, its DTOs, and the service for one capability, so a feature is read and changed in one place. Cross-feature references resolve through per-project `GlobalUsings.cs`, so adding a feature folder needs no per-file `using` edits. `Abstractions/` is the exception — it holds the technical "port" interfaces that Infrastructure implements.
+
+**Auditing is a single cross-cutting port.** Every audit row is written through one fail-closed `IAuditSink.WriteAsync(AuditEntry)` (Core.Application.Abstractions → `Infrastructure/Persistence/AuditSink`), not bolted onto repository contracts. Repositories persist their own aggregate only; a service never borrows another aggregate's repository just to record an event. The sink escalates any write failure to `AuditWriteFailedException`, so a secret read that cannot be audited aborts before decrypting (fail-closed). Writes that must be atomic with a data change (secret create/update/shred) are still injected by the `SaveChangesInterceptor`.
+
+**Schema is owned by EF Core Migrations** (`Infrastructure/Migrations/`). Startup runs `Database.MigrateAsync()`; there is no `EnsureCreated` and no hand-written DDL. Add a schema change with:
+
+```bash
+dotnet ef migrations add <Name> --project EclipsVault.Infrastructure --startup-project EclipsVault.Infrastructure
+```
+
+A design-time `IDesignTimeDbContextFactory` lets the tooling build the context without booting the web host.
+
+## Prerequisites
+
+- .NET 10 SDK
+- SQL Server on `localhost,1433` (e.g. `docker start sql_server_final`)
+- Trusted dev cert: `dotnet dev-certs https --trust` (recommended)
+
+## Run it
+
+```bash
+dotnet run --project EclipsVault.Web
+# → https://localhost:7443
+```
+
+**Configuration & secrets** — the database connection string is deliberately **absent from `appsettings.json`** so credentials are never committed. Local development reads it (plus the dev KEK fallback and seed passwords) from `appsettings.Development.json`, which is git-ignored — copy `appsettings.Development.json.template` to create it. For any real deployment, supply it via the environment (`ConnectionStrings__DefaultConnection`) or a secret store, using a least-privilege SQL login and `Encrypt=True;TrustServerCertificate=False`. Startup fails fast with a clear message if it is missing.
+
+First launch creates and seeds the `EclipsVaultUmbraDb` database ("umbra" — the darkest part of an eclipse's shadow).
+
+| Account | Password | Attributes |
+|---|---|---|
+| `vault-admin` | `ChangeMe!Umbra#2026-Admin` | TopSecret clearance, project GLOBAL |
+| `dev-user` | `ChangeMe!Umbra#2026-Dev` | Standard clearance, project PHOENIX |
+
+Sign in with **either the username or the email** (both seeded accounts also accept their `@eclipsvault.local` email). On first sign-in each account walks through **mandatory TOTP enrollment** (add the displayed key to any authenticator app). No session cookie exists until the second factor passes.
+
+Once a user registers a **passkey** (Profile → Passkeys), the login page offers **“Sign in with a passkey”** for a fully passwordless sign-in — a passkey verifies the user on their device, so it satisfies both factors on its own and skips the password and TOTP steps entirely.
+
+Lost your authenticator? The two-factor step has a **“Use a recovery code”** link. Recovery codes are single-use backup codes you generate from **Profile → Security → Recovery codes** (shown exactly once, stored only as salted Argon2id hashes); one redeems in place of the TOTP code, then is permanently consumed. Resetting the authenticator — by the owner or an admin — invalidates any outstanding codes.
+
+**Emails are generated automatically.** When an admin provisions a user they supply a first and last name; the vault assigns a unique `firstname.lastname.N@<domain>` address, where `N` increments for people who share a name (a second "Saba Sabashvili" becomes `saba.sabashvili.2@…`). The domain is `Identity:EmailDomain` (default `eclipsvault.local`). Email is a unique login identity (enforced by a unique index).
+
+**Account lockout** — after 5 consecutive failed password/TOTP attempts (configurable via `Lockout:MaxFailedAttempts` / `Lockout:LockoutMinutes`) the account is locked for 15 minutes; a successful sign-in resets the counter. Admins see a `Locked` badge in the Users console and can clear it with **Unlock**. This complements the per-IP rate limiter (which throttles the request rate) by throttling per-account guessing.
+
+### Master key (KEK)
+
+In `Development`, a fallback KEK from `appsettings.Development.json` is used (with a loud warning). For anything real:
+
+```bash
+export ECLIPSVAULT_KEK="$(openssl rand -base64 32)"
+```
+
+Startup fails fast if the KEK is missing or malformed outside Development.
+
+**Rotating the KEK**: generate a new key and set it as `ECLIPSVAULT_KEK`, move the previous key into `ECLIPSVAULT_KEK_RETIRED` (a `;`-separated list — existing DEKs are still unwrapped with it), restart, then run the rotation from the **Encryption keys** admin page. Once it reports everything on the current KEK, the retired key can be removed.
+
+## The app
+
+- **Overview dashboard** — secret counts by environment, critical-alert count for the last 24 h, a recent-activity feed (admins see everyone; others see their own actions), and **expiry notifications**: a warning banner plus an "Expiring soon" panel listing secrets within 7 days of their TTL (with a per-item countdown and a one-click Rotate link) so they can be renewed before the lifecycle worker shreds them.
+- **Secrets** — searchable list, detail view with one-shot reveal + copy-to-clipboard, guarded delete. Every open/reveal is audited. Admins additionally see a `decoy` badge on honey-tokens with a confirm-gated open.
+- **Secret rotation & version history** — rotate a secret's value (with an optional change note); the value it replaces is kept as its own envelope-encrypted `SecretVersion`. A rotation timeline lets you reveal a prior value (audited, fail-closed, before any decryption) or revert to it (which archives the current value first). Versions hold real key material, so they are purged when the secret is shredded or deleted.
+- **Secret sharing / access grants** — a secret's project members (and admins) can grant a named user access to that specific secret from its **Sharing** panel, optionally with an expiry. The grantee sees it under **Shared with me** (sidebar) and can open it. A grant crosses the **project boundary only** — the ABAC clearance, network, and time rules still apply, so sharing never widens the clearance ceiling. Grants are consulted live by the ABAC handler, every share/revoke is audited, and grants cascade-delete with the secret.
+- **Secret access requests** (sidebar: **Access requests**) — the self-service side of grants. When ABAC denies a secret, its Denied page offers a **Request access** form; the request lands in a review queue for that secret's reviewers (an administrator, or a member of its project). **Approving** creates an ordinary grant for the requester (so the same ABAC rules apply — a grant fixes only a project denial, never clearance/network/time); **rejecting** records the decision. Requesters track their own requests and can withdraw a pending one; the denial reasons are snapshotted onto the request so a reviewer sees exactly what failed. Every transition is audited, and requests cascade-delete with the secret.
+- **Notifications / email delivery** (sidebar: **Notifications**, admin) — domain events now send email: an access request being approved/rejected notifies the requester, a password change sends a security notice, and provisioning a user sends a welcome. The transport is pluggable behind the Core `IEmailSender` port — **SMTP** for production or a dev **Log** transport (`Email:Sender`) — and every message, whatever the transport, is recorded to an **outbox** that admins view on the Notifications page (recipient, subject, event, transport, delivery status). Notifications are **fail-soft**: a delivery failure is captured as a Failed outbox row, never breaking the operation that triggered it.
+- **Profile** (every user, self-service) — editable **display name** and email; **profile picture** upload (JPEG/PNG, validated, re-encoded to a safe 256×256 PNG) with a generated identicon fallback; **change password** (current-password check, breached-password screening, Argon2id re-hash); **reset own authenticator**; **generate MFA recovery codes** (single-use backup codes); **register and remove passkeys** for passwordless sign-in; and **sign out everywhere** (server-side session revocation). The login **username is fixed** — it is the audit-trail anchor.
+- **Passkeys / WebAuthn** — register one or more authenticators (Touch ID, Windows Hello, a security key) from the profile, then sign in with no password or TOTP. Registration and assertion are verified server-side (relying-party id hash, origin, challenge, user-verification flag, and the ECDSA/RSA signature over a stored COSE public key), the ceremony challenge is held in a server-side session, and the signature counter is checked on every assertion for cloned-authenticator detection. Every register / sign-in / removal is audited.
+- **Administration** (TopSecret clearance only):
+  - **Users** — provision accounts (Argon2id + breached-password screening + first-login TOTP enrollment); **edit role** (clearance + project, which revokes the user's sessions so the change applies at next sign-in); **enable/disable** an account (disabling revokes sessions immediately and blocks sign-in); **force logout**; reset a lost authenticator; delete. Guards block disabling/demoting/deleting yourself or the last administrator.
+  - **Networks** — shows *your current address exactly as the vault sees it* (on a VPN that's the VPN egress) with a one-click **Trust this address** button. Manage runtime-trusted CIDR ranges (applied immediately, no restart) and lift intrusion-defence IP blocks. Note: network trust is a property of the request's source address, never of a user account.
+  - **Service accounts** — provision non-interactive identities (name + clearance + project) for applications; issue **API keys** (shown once, stored only as a SHA-256 hash, optional expiry) — each optionally **scoped** to narrow it below the account (clearance ceiling, single project, or metadata-only); revoke keys; and disable/delete accounts. See the **Programmatic API** below.
+  - **Audit log** — filterable viewer over the immutable trail; critical rows highlighted; a **Verify integrity** action re-walks the hash chain and flags any tampering.
+  - **Encryption keys** — shows which master KEK each secret is wrapped under and runs a **rotation** that re-wraps everything under the current KEK. See *KEK rotation* under Security architecture.
+
+The distinction is clean: **profile** actions only ever touch your own account and can never change clearance or project; **clearance and project are administrative** and live in the Users console. Login username (immutable audit anchor) is separate from the editable display name.
+- **UI foundation** — one app shell (`_Layout` sidebar / `_AuthLayout` centered card), a token-based design system in `site.css` with **light and dark themes** (toggle in the sidebar; the choice is persisted in a cookie and applied server-side on `<html data-theme>` for a flash-free first paint), flash notifications (`FlashExtensions` + `_Flash` partial), and data-attribute behaviours in `site.js` (`data-confirm`, `data-copy`, `data-filter`, `data-flash`, `data-theme-toggle`). New features should compose these pieces: add a controller + views using `page-header`/`panel`/`data-table`, a sidebar entry in `_Layout`, and flash feedback on POST-redirect. Because everything references design tokens, both themes come for free.
+
+## Programmatic API
+
+Applications retrieve secrets over a small JSON API using a **service-account API key** — no browser session, no TOTP. The key is presented as a bearer token, and access is governed by the **exact same ABAC policy** as the interactive UI (clearance, project, network range, and time window all apply).
+
+```bash
+# List secret metadata (names only — no values)
+curl -H "Authorization: Bearer evk_…" https://localhost:7443/api/v1/secrets
+
+# Retrieve and decrypt one secret's value (ABAC-gated)
+curl -H "X-Api-Key: evk_…" https://localhost:7443/api/v1/secrets/<id>
+# 200 → { "id": "...", "name": "...", "value": "..." }
+# 403 → { "error": "forbidden", "reasons": ["Clearance 'Standard' is below required sensitivity 'Confidential'."] }
+# 401 → missing / invalid / expired / revoked key, or the account is disabled
+```
+
+Both `Authorization: Bearer <token>` and `X-Api-Key: <token>` are accepted. Every API retrieval is audited against the calling service account, and honey-tokens still trip the intrusion response over the API (returning a bland `404`).
+
+**Per-key scopes** — an individual key can be issued with a scope that narrows it *below* its service account (never above), for least-privilege that is tighter than the account itself:
+
+- **Clearance ceiling** — the key acts with `min(account clearance, ceiling)`, so a TopSecret account can hand out a key that only reaches Internal secrets.
+- **Project scope** — pins the key to a single project. This binds even a TopSecret account (which otherwise crosses project boundaries), and also filters what the metadata list returns.
+- **Metadata-only** — the key may enumerate metadata (`GET /api/v1/secrets`) but every value read (`GET /api/v1/secrets/{id}`) returns `403`.
+
+Scopes are enforced by the **same pure ABAC engine** as everything else — they simply add deny-rules — so a scoped key can only ever see a strict subset of what the account could. Denials name the exact scope that stopped them (e.g. `"This API key is scoped to project 'PHOENIX'."`), and each key's scope is recorded in its issue audit.
+
+## Security architecture
+
+- **Passwords** — Argon2id (Konscious), 64 MiB / 3 iterations / 4 lanes, unique random 16-byte salt per user, constant-time verify, timing-equalised unknown-user path.
+- **Breached-password screening** — every password set (admin provisioning) or changed (self-service) is screened against a compromised-password corpus bundled with the app as an embedded resource and loaded once into a case-folded `HashSet` for O(1) checks. A compromised value is refused with a clear message. The check is fully offline (nothing leaves the process, no HIBP round-trip), and the change-password / create-user forms also run a debounced live check as you type (behind auth + antiforgery; the candidate is only screened in memory, never logged, audited, or stored). Behind the Core `IBreachedPasswordScreen` port, so a full HIBP/SecLists corpus or a k-anonymity range API is a one-class swap. Implements NIST 800-63B §5.1.1.2 and OWASP ASVS 2.1.7.
+- **Passkeys / WebAuthn** — a self-contained relying-party implementation (no third-party FIDO2 dependency): the ceremony logic parses CBOR/COSE with `System.Formats.Cbor` and verifies signatures with the BCL's `ECDsa`/`RSA` primitives (ES256 + RS256). User verification is *required*, so a passkey is a genuine two-factor credential; the random challenge lives only in a server-side session (never trusted from the client); origin, relying-party id hash, ceremony type, and the monotonic signature counter are all checked. The relying-party id/name/origins are config (`WebAuthn` section) and the whole thing sits behind the Core `IPasskeyService` port, so swapping in a cloud FIDO2 service is a one-class change.
+- **MFA recovery codes** — single-use "look-up secrets" (NIST 800-63B) that stand in for the authenticator when it is unavailable. A generation issues ten codes (~50 bits each, from an unambiguous 32-symbol alphabet), invalidates any prior set, and shows the plaintext exactly once; only a **salted Argon2id hash** per code is stored (below 63B's 112-bit bar, so a moderate-work-factor KDF is mandated). Redemption runs on the same MFA-pending gate as TOTP, verifies against *every* unused code (no early-out timing signal), consumes the matched code, and folds into account lockout and the audit trail (`RecoveryCodesGenerated`, `RecoveryCodeUsed`). Both authenticator-reset paths — self-service and admin — purge outstanding codes so they can't outlive the factor they back up. Migration `AddMfaRecoveryCodes`.
+- **Envelope encryption** — every secret gets a fresh single-use 32-byte DEK; payload sealed with AES-256-GCM; DEK wrapped by the master KEK from the environment; both blobs (`nonce|tag|ct`) stored side-by-side with a `KekId`. Plaintext and DEKs are zeroed (`CryptographicOperations.ZeroMemory`) as soon as possible.
+- **KEK rotation & key lifecycle** — the provider holds one *current* KEK plus any number of *retired* KEKs (`ECLIPSVAULT_KEK` + `ECLIPSVAULT_KEK_RETIRED`), each identified by a stable id; a DEK is always unwrapped with whichever KEK sealed it. The admin **Encryption keys** page shows which KEK every secret is on and runs a **rotation** that re-wraps each secret's (and archived version's) DEK under the current KEK — the payload ciphertext is never touched, so no secret is decrypted (honey-tokens included), and shredded tombstones (no key material) are skipped. Aligns with NIST 800-57 cryptoperiods and PCI-DSS 3.6/3.7.
+- **Crypto factory** — `CryptoEngineFactory` resolves the engine named by `Crypto:Engine`. Moving to a cloud KMS = register one class + flip one config value.
+- **ABAC** — `AuthorizationHandler<SecretAccessRequirement, SecretDetailsDto>` extracts subject claims (clearance, project), computes runtime context (a configurable time window for Production secrets — UTC by default, or a real IANA zone via `Abac:TimeZoneId` so "business hours" track the org's locale and DST — and a trusted-network check for Confidential+ against static config **plus** the DB-backed runtime trusted networks), and delegates to the pure rule engine `SecretAccessPolicy` in Core (fully unit-testable, no framework types — see the `EclipsVault.Tests` decision matrix). Denials surface their exact reasons on the Denied page.
+- **Fail-closed audit** — an EF `SaveChangesInterceptor` injects an `AuditLogs` row into the *same transaction* as every secret insert/update/delete; if the audit can't be written the whole transaction rolls back. Reads are audited *before* decryption — no audit row, no plaintext, and the caller gets a 503, never data.
+- **Tamper-evident audit trail** — the same interceptor is the single choke point for every audit insert, so it stamps each row into a **hash chain**: `EntryHash = SHA-256(row content ‖ previous row's hash)`, with a monotonic sequence. Any edit, deletion, insertion, or reorder — even by someone with direct database access — breaks the chain and is caught by the **Verify integrity** action on the Audit page, which pinpoints the exact broken entry. The chain head advances only on commit (a rolled-back write leaves no gap), it is seeded from the persisted tail on restart, and the whole pre-existing history is back-filled into the chain at first startup. Aligns with PCI-DSS 10.5, NIST 800-53 AU-9/AU-10, and SOC 2 CC7.
+- **Honey-tokens** — seeded decoys (`Production_AWS_Root_Key`, `Global_SQL_SA_Password`). Any by-id read bypasses ABAC entirely and: revokes the caller's sessions (server-side kill switch checked on every request), blacklists the source IP range (/24 v4, /64 v6) in middleware, writes a critical audit row, and emits a `Fatal` Serilog alert. The attacker just sees a sign-out. TopSecret administrators see a `decoy` badge and a confirm-gated open on the list so they don't trip their own trap; ordinary users see decoys as indistinguishable from real secrets.
+- **Break-glass recovery** — the block page carries a *Recover access* link to `/Account/Recover`, the one path the IP-blacklist middleware exempts. It demands all factors at once (password + TOTP), is restricted to TopSecret clearance, is rate limited, and audits every attempt (`BreakGlassRecovery`). A verified admin lifts the block on their own range and is signed straight back in; anyone else is refused and the block stands. This means a locked-out administrator always has a way back to the dashboard, without a process restart.
+- **TTL shredder** — a `BackgroundService` sweeps every 60 s, destroys expired key material (row remains as an auditable tombstone), evicts cache entries and logs the event. A 5-minute demo secret is seeded so you can watch it happen.
+- **Caching** — cache-aside via `IMemoryCache`, 5-minute absolute TTL, *encrypted envelopes only* (never plaintext), eagerly evicted on every write/update/delete.
+- **Transport & headers** — CSP, `X-Frame-Options: DENY`, `nosniff`, Referrer-Policy, Permissions-Policy, COOP on every response; HSTS outside dev; `SameSite=Strict` + `HttpOnly` + `Secure` on all cookies; global `AutoValidateAntiforgeryToken`; per-IP fixed-window rate limiting on the auth surface (returns `429`); default-deny fallback authorization policy; no `Server` header.
+- **Real client IP behind a proxy** — `ForwardedHeaders` middleware recovers the true caller address from `X-Forwarded-For`, but **only from proxies you list** in `ForwardedHeaders:KnownProxies` (with none listed, the socket address is used — safe for direct exposure). Every IP-based control — the rate limiter, the intrusion IP-blacklist, the ABAC trusted-network check, and the audit `SourceIp` — depends on this being correct, so it must be configured whenever the app runs behind a load balancer or ingress.
+
+## Extension points
+
+- **Cloud KMS** — implement `ICryptoEngine`, register it in `CryptoEngineFactory`, set `Crypto:Engine`.
+- **Passkey relying party** — the WebAuthn ceremonies live behind the Core `IPasskeyService` port (implemented in `Infrastructure/Security/WebAuthn`); a managed FIDO2 service could replace the built-in verifier without touching the domain, controllers, or views.
+- **Multi-node** — swap `InMemoryIpBlacklist` / `InMemorySessionRevocationService` / `MemorySecretCache` for distributed implementations behind the same Core interfaces.
+- **Migrations** — schema is managed by EF Core Migrations (`Infrastructure/Migrations/`), applied at startup via `MigrateAsync()`. The existing dev database was baselined onto the initial migration, so no data was lost in the switch-over.
+
+## Proposed roadmap
+
+Shipped so far — both built on the existing seams and each verified end-to-end:
+
+- ✅ **Account lockout** — 5 failed password/TOTP attempts lock the account (`FailedAccessCount`/`LockedUntilUtc` on `User`, enforced in `VaultAuthenticationService`), with an admin **Unlock**. Complements the per-IP rate limiter.
+- ✅ **Secret rotation & version history** — prior values kept as envelope-encrypted `SecretVersion` rows; timeline with reveal/revert. First feature delivered through the EF-migration workflow (`AddSecretVersioning`).
+
+- ✅ **Login by username or email + auto-generated unique emails** — `first.last.N@domain`, N per name; email is a unique login identity. Migration `AddUniqueEmailIndex`.
+- ✅ **Expiry notifications** — dashboard banner + "Expiring soon" panel with countdowns and Rotate links, over the existing lifecycle/dashboard infra.
+
+- ✅ **Secret sharing / access grants** — per-user grants (optional expiry) that satisfy the ABAC project rule only; "Shared with me" sidebar page; audited; cascade-deletes. Migration `AddSecretGrants`.
+
+- ✅ **Service accounts & scoped API keys** — non-interactive identities with SHA-256-hashed keys and their own ABAC attributes; `/api/v1/secrets` for programmatic retrieval, governed by the same policy. Migration `AddServiceAccounts`.
+
+- ✅ **Passkeys / WebAuthn** — passwordless MFA: register authenticators from the profile and sign in with no password or TOTP. A self-contained relying-party verifier (CBOR/COSE + BCL crypto, ES256/RS256) behind the `IPasskeyService` port; user-verification required; challenge held server-side; signature-counter clone detection; every ceremony audited. No schema change — the `PasskeyCredentials` table shipped in `InitialCreate`.
+
+- ✅ **Light/dark theme toggle** — the design system is tokenised, so the light theme is a single `:root[data-theme="light"]` token block (surfaces invert to layered whites, hairlines become black-alpha, the amber accent deepens to stay readable). The choice persists in an `EclipsVault.Theme` cookie the server reads to stamp `data-theme` on `<html>`, so the first paint is already correct (no flash) — CSP-safe, no inline script. A sidebar toggle flips it live.
+
+- ✅ **Per-key API scopes** — a key can be issued narrower than its service account: a clearance ceiling, a single permitted project (binding even a TopSecret account), and/or metadata-only. Scope travels as claims and is enforced as extra deny-rules in the same pure ABAC engine, so a scoped key can only ever see a subset of the account. Issue-time UI in the Service accounts console; each key's scope is shown on its row and recorded in its issue audit. Migration `AddApiKeyScopes`.
+
+- ✅ **Secret access requests** — the self-service loop over the existing grants system, surfaced as a new **Access requests** sidebar page. A denied secret's page offers a request form; reviewers (admins or project members) approve (creating a grant) or reject from a queue; approval is governed by the same ABAC engine (a grant only fixes a project denial). Denial reasons are snapshotted for the reviewer, every transition is audited, and requests cascade-delete with the secret. Migration `AddAccessRequests`.
+
+- ✅ **Notifications / email delivery** — a pluggable `IEmailSender` transport (SMTP for prod, a dev Log transport, chosen by `Email:Sender`) with a fail-soft `INotificationService` that composes messages for domain events (access-request decisions, password changes, user provisioning) and records every one to an **outbox**, viewable on a new admin **Notifications** sidebar page. Migration `AddEmailLog`.
+
+- ✅ **Tamper-evident audit log** — hash-chained audit trail (each row commits to the previous), with an admin **Verify integrity** action that detects and pinpoints any modification, deletion, or reorder. Pre-existing history is back-filled into the chain at startup. Migration `AddAuditChain`. Maps to PCI-DSS 10.5, NIST 800-53 AU-9/AU-10, SOC 2 CC7. *(Security-standards hardening track.)*
+
+- ✅ **KEK rotation & key lifecycle** — a multi-KEK provider (current + retired keys, resolvable by id) and an admin **Encryption keys** page that re-wraps every secret's DEK under the current KEK — payload ciphertext untouched, shredded tombstones skipped, every rotation audited (`KekRotated`). No schema change (the `KekId` seam already existed). NIST 800-57, PCI-DSS 3.6/3.7. *(Security-standards hardening track.)*
+
+- ✅ **MFA recovery codes** — single-use backup codes, generated from the profile and shown once, that redeem in place of TOTP when the authenticator is lost. Stored only as salted Argon2id hashes; verified without an early-out timing signal; consumed on use; wired into lockout and the audit trail; and purged whenever the authenticator is reset. Migration `AddMfaRecoveryCodes`. NIST 800-63B "look-up secrets". *(Security-standards hardening track.)*
+
+- ✅ **Breached-password screening** — every password set or changed is refused if it appears in a bundled, offline compromised-password corpus (embedded resource, loaded once into a case-folded `HashSet`), with a debounced live check on the change-password / create-user forms. Behind the `IBreachedPasswordScreen` port. NIST 800-63B §5.1.1.2, OWASP ASVS 2.1.7. *(Security-standards hardening track — this completes the track.)*
+
+**Engineering hardening** (from a security & architecture review — all landed):
+
+- ✅ **Secrets out of source** — the DB connection string left `appsettings.json`; it now comes from the environment/secret store (dev value in git-ignored `appsettings.Development.json`). Least-privilege login + `Encrypt=True` for real deployments.
+- ✅ **Correct client IP behind a proxy** — `ForwardedHeaders` with an explicit known-proxy allowlist, so rate limiting, the IP-blacklist, ABAC trusted-network, and audit `SourceIp` stay accurate behind a load balancer.
+- ✅ **Test suite + CI** — `EclipsVault.Tests` (xUnit) covering the ABAC matrix, audit hash-chain, recovery-code format, and crypto round-trip; a GitHub Actions pipeline that builds, tests, and audits dependencies. It immediately caught a latent bug (the rate limiter set a non-existent HTTP 430 instead of 429).
+- ✅ **Reproducible builds** — central package management with pinned versions + committed lockfiles; warnings-as-errors quality gate.
+- ✅ **Timezone-aware access window**, throttled API-key last-used writes, and a shared audit-writer extension (dedupe).
+
+**Toward production — bigger initiatives** (need infrastructure or are multi-week features, best sequenced one at a time):
+
+- **Distributed state for HA** — swap `InMemoryIpBlacklist` / `InMemorySessionRevocationService` / `MemorySecretCache` / the rate-limiter store for Redis, and give the audit hash-chain a DB-side sequence, so the app can run more than one replica. Today it is single-node by construction.
+- **KMS/HSM-backed KEK** — implement the existing `IKekProvider` against AWS KMS / Azure Key Vault / Vault Transit / PKCS#11 so the master key never lives in process memory in the clear.
+- **Dynamic secrets & leasing** — issue short-lived, auto-revoked backend credentials on demand (the flagship capability of a Vault-class engine), and rotate the *actual* upstream secret, not just re-wrap the DEK.
+- **SSO (OIDC/SAML) + SCIM** — enterprise identity, with clearance/project attributes flowing from the IdP.
+- **Further clean-arch** — move `TrustedNetworkService` / `IntrusionResponseService` off `DbContext` and behind Core repository ports; wire near-TTL secrets through the notification service.
+
+## Notes
+
+- List views show metadata only and are not per-row audited; every by-id metadata view and every reveal is audited (`SecretMetadataViewed`, `SecretRevealed`).
+- Honey-token blacklisting is process-local; tripping it from localhost blocks you until app restart — that's the feature working.
+- The seeded `Seed:AdminPassword` / `Seed:DevPassword` values live only in `appsettings.Development.json`; change them, or remove the section and set them via user-secrets/environment.
