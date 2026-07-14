@@ -232,7 +232,7 @@ public sealed class ProfileController : Controller
     public async Task<IActionResult> SignOutEverywhere(CancellationToken ct)
     {
         // Revoke all sessions issued up to now (this device included), then sign out here.
-        _revocation.Revoke(CurrentUserId(), _clock.GetUtcNow());
+        await _revocation.RevokeAsync(CurrentUserId(), _clock.GetUtcNow(), ct);
         _logger.LogInformation("User {Username} signed out of all sessions", User.Identity?.Name);
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         this.FlashInfo("You have been signed out of all sessions. Sign in again to continue.");

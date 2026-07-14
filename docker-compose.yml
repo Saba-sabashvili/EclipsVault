@@ -8,6 +8,7 @@
 #   dotnet run --project EclipsVault.Web
 #
 # UIs:  Mailpit  http://localhost:8025   ·   Vault  http://localhost:8200 (token: dev-root)
+# Redis (distributed state, opt-in via Redis:Enabled=true):  localhost:6379
 
 services:
   db:
@@ -42,5 +43,18 @@ services:
       - "1025:1025" # SMTP
       - "8025:8025" # web UI
 
+  # Redis — holds the shared distributed state (session revocation, the intrusion IP
+  # blacklist, and the encrypted-envelope cache) when Redis:Enabled=true, so the app can
+  # run as multiple nodes behind a load balancer. AOF persistence keeps blocks across restarts.
+  redis:
+    image: redis:7-alpine
+    container_name: eclipsvault-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - eclipsvault-redis:/data
+
 volumes:
   eclipsvault-db:
+  eclipsvault-redis:

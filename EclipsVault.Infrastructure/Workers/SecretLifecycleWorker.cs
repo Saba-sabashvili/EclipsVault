@@ -79,7 +79,7 @@ public sealed class SecretLifecycleWorker : BackgroundService
         {
             secret.Shred(now);
             await repository.ShredAsync(secret, ct); // purges archived versions + records SecretShredded atomically
-            cache.Evict(secret.Id);
+            await cache.EvictAsync(secret.Id, ct);
 
             _logger.LogInformation(
                 "Shredded expired secret {SecretId} ({SecretName}); TTL elapsed at {ExpiresAtUtc}",

@@ -104,7 +104,7 @@ public sealed class SecretService : ISecretService
         };
 
         await _repository.AddAsync(secret, ct);
-        _cache.Evict(secret.Id);
+        await _cache.EvictAsync(secret.Id, ct);
         return secret.Id;
     }
 
@@ -125,7 +125,7 @@ public sealed class SecretService : ISecretService
 
         // One transaction: the interceptor writes a SecretUpdated audit row atomically.
         await _repository.RotateAsync(entity, archived, ct);
-        _cache.Evict(id);
+        await _cache.EvictAsync(id, ct);
     }
 
     public async Task<IReadOnlyList<SecretVersionDto>> ListVersionsAsync(Guid id, CancellationToken ct)
@@ -179,7 +179,7 @@ public sealed class SecretService : ISecretService
 
         await _repository.RotateAsync(entity, archived, ct);
         await AuditSecretAsync(id, envelope.Name, AuditAction.SecretVersionRestored, ct);
-        _cache.Evict(id);
+        await _cache.EvictAsync(id, ct);
     }
 
     /// <summary>Builds a version snapshot of the secret's CURRENT (about-to-be-replaced) value.</summary>
@@ -205,7 +205,7 @@ public sealed class SecretService : ISecretService
 
         var entity = await _repository.FindAsync(id, ct) ?? throw new SecretNotFoundException(id);
         await _repository.DeleteAsync(entity, ct);
-        _cache.Evict(id);
+        await _cache.EvictAsync(id, ct);
     }
 
     private SealedSecret SealValue(string value)
@@ -223,7 +223,8 @@ public sealed class SecretService : ISecretService
 
     private async Task<EncryptedSecretEnvelope> GetEnvelopeAsync(Guid id, CancellationToken ct)
     {
-        if (_cache.TryGet(id, out var cached) && cached is not null)
+        var cached = await _cache.GetAsync(id, ct);
+        if (cached is not null)
         {
             return cached;
         }
@@ -240,7 +241,7 @@ public sealed class SecretService : ISecretService
             entity.Ciphertext, entity.WrappedDek, entity.KekId, entity.Algorithm,
             entity.IsHoneyToken, entity.CreatedAtUtc, entity.UpdatedAtUtc, entity.ExpiresAtUtc);
 
-        _cache.Set(envelope);
+        await _cache.SetAsync(envelope, ct);
         return envelope;
     }
 

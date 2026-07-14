@@ -178,7 +178,7 @@ public sealed class UserAdminService : IUserAdminService
 
         // A clearance/project change alters what the user may reach, so drop their
         // current sessions; the new attributes take effect at their next sign-in.
-        _revocation.Revoke(user.Id, _clock.GetUtcNow());
+        await _revocation.RevokeAsync(user.Id, _clock.GetUtcNow(), ct);
 
         await AuditUserAsync(
             AuditAction.UserRoleChanged, user.Id, _actor.Username ?? "system",
@@ -215,7 +215,7 @@ public sealed class UserAdminService : IUserAdminService
         if (!enabled)
         {
             // Kill active sessions immediately; new sign-ins are blocked at credential check.
-            _revocation.Revoke(user.Id, _clock.GetUtcNow());
+            await _revocation.RevokeAsync(user.Id, _clock.GetUtcNow(), ct);
         }
 
         await AuditUserAsync(
@@ -233,7 +233,7 @@ public sealed class UserAdminService : IUserAdminService
             return false;
         }
 
-        _revocation.Revoke(user.Id, _clock.GetUtcNow());
+        await _revocation.RevokeAsync(user.Id, _clock.GetUtcNow(), ct);
         await AuditUserAsync(
             AuditAction.UserForceLoggedOut, user.Id, _actor.Username ?? "system",
             $"All sessions for '{user.Username}' revoked by administrator", ct);

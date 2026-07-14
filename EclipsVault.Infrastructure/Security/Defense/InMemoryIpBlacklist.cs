@@ -7,8 +7,8 @@ namespace EclipsVault.Infrastructure.Security;
 /// <summary>
 /// Process-local blacklist of source ranges (/24 for IPv4, /64 for IPv6; loopback is
 /// pinned to its exact address). Administrators can inspect and lift blocks from the
-/// Networks console. Swap for a distributed store behind the same interface when
-/// running multiple nodes.
+/// Networks console. Multi-node deployments use the Redis-backed implementation so a
+/// block raised on one node is enforced by every node.
 /// </summary>
 public sealed class InMemoryIpBlacklist : IIpBlacklist
 {
@@ -24,12 +24,12 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
         _logger = logger;
     }
 
-    public void Block(string sourceIp, string reason)
+    public Task BlockAsync(string sourceIp, string reason, CancellationToken ct = default)
     {
         if (!IPAddress.TryParse(sourceIp, out var address))
         {
             _logger.LogWarning("Cannot blacklist unparseable source address {SourceIp}", sourceIp);
-            return;
+            return Task.CompletedTask;
         }
 
         var network = NetworkRules.ToBlockRange(address);
@@ -40,36 +40,39 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
         {
             _logger.LogCritical("Source range {Network} blacklisted — {Reason}", key, reason);
         }
+
+        return Task.CompletedTask;
     }
 
-    public bool IsBlocked(IPAddress address)
+    public Task<bool> IsBlockedAsync(IPAddress address, CancellationToken ct = default)
     {
         foreach (var entry in _blocked.Values)
         {
             if (NetworkRules.Contains(entry.Network, address))
             {
-                return true;
+                return Task.FromResult(true);
             }
         }
 
-        return false;
+        return Task.FromResult(false);
     }
 
-    public IReadOnlyList<BlockedRangeDto> List()
-        => _blocked.Values.Select(e => e.Dto).OrderByDescending(d => d.BlockedAtUtc).ToList();
+    public Task<IReadOnlyList<BlockedRangeDto>> ListAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<BlockedRangeDto>>(
+            _blocked.Values.Select(e => e.Dto).OrderByDescending(d => d.BlockedAtUtc).ToList());
 
-    public bool Unblock(string network)
+    public Task<bool> UnblockAsync(string network, CancellationToken ct = default)
     {
         if (_blocked.TryRemove(network.Trim(), out _))
         {
             _logger.LogWarning("Blacklisted range {Network} was unblocked by an administrator", network);
-            return true;
+            return Task.FromResult(true);
         }
 
-        return false;
+        return Task.FromResult(false);
     }
 
-    public bool UnblockAddress(IPAddress address)
+    public Task<bool> UnblockAddressAsync(IPAddress address, CancellationToken ct = default)
     {
         var removed = false;
         foreach (var (key, entry) in _blocked)
@@ -81,6 +84,6 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
             }
         }
 
-        return removed;
+        return Task.FromResult(removed);
     }
 }

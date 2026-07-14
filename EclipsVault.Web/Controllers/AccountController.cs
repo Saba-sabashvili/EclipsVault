@@ -271,7 +271,7 @@ public sealed class AccountController : Controller
             return View(model);
         }
 
-        var blockLifted = sourceIp is not null && _blacklist.UnblockAddress(sourceIp);
+        var blockLifted = sourceIp is not null && await _blacklist.UnblockAddressAsync(sourceIp, ct);
         await AuditRecoveryAsync(
             AuditAction.BreakGlassRecovery, user.Id, user.Username,
             $"Break-glass recovery from {sourceIp}; block lifted: {blockLifted}", ct);

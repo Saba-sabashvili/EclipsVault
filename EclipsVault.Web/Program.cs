@@ -62,10 +62,12 @@ try
                     var userIdClaim = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                     var authTimeClaim = context.Principal?.FindFirstValue(VaultClaimTypes.AuthTime);
 
-                    var isValid =
-                        Guid.TryParse(userIdClaim, out var userId) &&
-                        long.TryParse(authTimeClaim, out var authTimeUnix) &&
-                        !revocation.IsRevoked(userId, DateTimeOffset.FromUnixTimeSeconds(authTimeUnix));
+                    var isValid = false;
+                    if (Guid.TryParse(userIdClaim, out var userId) &&
+                        long.TryParse(authTimeClaim, out var authTimeUnix))
+                    {
+                        isValid = !await revocation.IsRevokedAsync(userId, DateTimeOffset.FromUnixTimeSeconds(authTimeUnix));
+                    }
 
                     if (!isValid)
                     {

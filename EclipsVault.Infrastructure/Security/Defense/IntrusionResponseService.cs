@@ -44,12 +44,12 @@ public sealed class IntrusionResponseService : IIntrusionResponseService
 
         if (userId is { } id)
         {
-            _revocation.Revoke(id, now);
+            await _revocation.RevokeAsync(id, now, ct);
         }
 
         if (!string.IsNullOrEmpty(sourceIp))
         {
-            _blacklist.Block(sourceIp, $"Honey-token '{secretName}' tripped");
+            await _blacklist.BlockAsync(sourceIp, $"Honey-token '{secretName}' tripped", ct);
         }
 
         _logger.LogCritical(

@@ -26,12 +26,15 @@ EclipsVault.slnx                  # modern XML solution format
 │   ├── Security/                 #   grouped into subfolders:
 │   │     ├── Cryptography/       #     Argon2id, AES-256-GCM envelope crypto + KEK, TOTP,
 │   │     │                       #       API-key factory, audit checkpoint signer
-│   │     ├── Defense/            #     IP blacklist, session revocation, intrusion response,
-│   │     │                       #       trusted networks, breached-password screen
+│   │     ├── Defense/            #     IP blacklist + session revocation (in-memory AND
+│   │     │                       #       Redis variants), intrusion response, trusted
+│   │     │                       #       networks, breached-password screen
 │   │     └── WebAuthn/           #     the passkey relying-party verifier
 │   ├── Auditing/                 #   audit checkpoint / export service
+│   ├── Distributed/              #   Redis connection options (shared-state switch)
 │   ├── Media/                    #   ImageSharp avatar processor
-│   ├── Caching/ · Logging/ · Workers/
+│   ├── Caching/                  #   envelope cache (in-memory AND Redis variants)
+│   ├── Logging/ · Workers/
 ├── EclipsVault.Web/              # Composition root. Thin controllers, ViewModels,
 │   ├── Authorization/ · Middleware/ · Services/ · Extensions/ · Views/
 ├── EclipsVault.AuditVerifier/    # Standalone console tool. Verifies an exported audit
@@ -68,7 +71,7 @@ The dependencies are all real, open-source (or first-party) services — brought
 command rather than mocked in-process:
 
 ```bash
-docker compose up -d      # SQL Server + Vault + Mailpit
+docker compose up -d      # SQL Server + Vault + Mailpit + Redis
 dotnet run --project EclipsVault.Web
 # → https://localhost:7443
 ```
@@ -78,6 +81,7 @@ dotnet run --project EclipsVault.Web
 | **SQL Server** | persistence | — |
 | **Mailpit** | captures notification emails (real SMTP) | http://localhost:8025 |
 | **HashiCorp Vault** | holds the master key when `Crypto:Engine=VaultTransit` | http://localhost:8200 (`dev-root`) |
+| **Redis** | shared distributed state when `Redis:Enabled=true` (opt-in) | localhost:6379 |
 
 (You can still point the app at your own SQL Server / SMTP / KMS via configuration.)
 
@@ -122,6 +126,17 @@ Crypto__Engine=VaultTransit VAULT_TOKEN=dev-root dotnet run --project EclipsVaul
 ```
 
 New secrets are then sealed with the Vault-held key (visible as `KekId = vault:eclipsvault:v1`). Switching a database that already holds locally-wrapped secrets is a re-encryption migration; the two engines are not interchangeable per-secret.
+
+### Horizontal scale-out (Redis)
+
+By construction the app holds three pieces of shared runtime state — the **session-revocation** kill switch, the intrusion **IP blacklist**, and the encrypted-**envelope cache**. On a single node these live in process memory. Set `Redis:Enabled=true` and they move behind the same Core interfaces into **Redis**, so the app can run as multiple replicas behind a load balancer: a revocation or block raised on one node is honoured by all of them, and a write on one node evicts the cached envelope everywhere.
+
+```bash
+docker compose up -d          # includes Redis on :6379
+Redis__Enabled=true dotnet run --project EclipsVault.Web
+```
+
+The design keeps the per-request checks cheap: revocation is a single keyed lookup, and because the blacklist keys each block by the offending address's canonical range (`NetworkRules.ToBlockRange` — /24, /64, or an exact loopback host), "is this IP blocked?" is one O(1) key lookup rather than a scan of every block. Verified end-to-end against a real Redis: a revoked session's cookie is rejected across a **full app restart** (in-process state would forget it), and an independent Redis client sees the shared envelope appear on reveal and disappear on rotate. Blocks persist (AOF) across restarts; revocation markers self-expire after `Redis:RevocationRetentionHours` (longer than any session). With `Redis:Enabled=false` (the default) nothing changes and no Redis is required.
 
 ## The app
 
@@ -195,7 +210,7 @@ Scopes are enforced by the **same pure ABAC engine** as everything else — they
 
 - **Cloud KMS** — implement `ICryptoEngine`, register it in `CryptoEngineFactory`, set `Crypto:Engine`. The `VaultTransit` engine is the reference implementation; an AWS KMS or Azure Key Vault engine follows the same shape (wrap/unwrap the DEK via the provider's SDK).
 - **Passkey relying party** — the WebAuthn ceremonies live behind the Core `IPasskeyService` port (implemented in `Infrastructure/Security/WebAuthn`); a managed FIDO2 service could replace the built-in verifier without touching the domain, controllers, or views.
-- **Multi-node** — swap `InMemoryIpBlacklist` / `InMemorySessionRevocationService` / `MemorySecretCache` for distributed implementations behind the same Core interfaces.
+- **Multi-node** — set `Redis:Enabled=true` to back the IP blacklist, session revocation, and envelope cache with Redis (see [Horizontal scale-out](#horizontal-scale-out-redis)); the `Redis*`/`InMemory*` pairs implement the same Core interfaces, so adding another distributed store (e.g. the rate-limiter partition) is the same swap.
 - **Migrations** — schema is managed by EF Core Migrations (`Infrastructure/Migrations/`), applied at startup via `MigrateAsync()`. The existing dev database was baselined onto the initial migration, so no data was lost in the switch-over.
 
 ## Proposed roadmap
@@ -243,10 +258,11 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 - ✅ **Test suite + CI** — `EclipsVault.Tests` (xUnit) covering the ABAC matrix, audit hash-chain, recovery-code format, and crypto round-trip; a GitHub Actions pipeline that builds, tests, and audits dependencies. It immediately caught a latent bug (the rate limiter set a non-existent HTTP 430 instead of 429).
 - ✅ **Reproducible builds** — central package management with pinned versions + committed lockfiles; warnings-as-errors quality gate.
 - ✅ **Timezone-aware access window**, throttled API-key last-used writes, and a shared audit-writer extension (dedupe).
+- ✅ **Distributed state for horizontal scale-out (Redis)** — the three pieces of shared runtime state (session revocation, the intrusion IP blacklist, the encrypted-envelope cache) can now live in **Redis** behind their existing Core interfaces, so the app runs as multiple replicas: a revocation or block on one node is enforced on all, and a write evicts the cached envelope everywhere. The async interfaces are backed by either `Redis*` or `InMemory*` implementations selected by `Redis:Enabled`; the blacklist keys each block by its canonical range so the hot-path check stays a single O(1) lookup. Verified end-to-end against a real Redis, including a revoked cookie staying dead across a full app restart. See [Horizontal scale-out](#horizontal-scale-out-redis).
 
 **Toward production — bigger initiatives** (need infrastructure or are multi-week features, best sequenced one at a time):
 
-- **Distributed state for HA** — swap `InMemoryIpBlacklist` / `InMemorySessionRevocationService` / `MemorySecretCache` / the rate-limiter store for Redis, and give the audit hash-chain a DB-side sequence, so the app can run more than one replica. Today it is single-node by construction.
+- **Remaining HA state** — the last two pieces of single-node state: move the auth **rate-limiter** partitions to a Redis-backed store (the built-in `System.Threading.RateLimiting` partitions are per-process), and give the audit hash-chain a **DB-side sequence** so concurrent writers on different replicas can't race the chain head. The three security/cache stores above are already distributed.
 - ✅ **KMS-backed KEK (HashiCorp Vault Transit)** — the master key can now live in Vault instead of an environment variable: the `VaultTransit` crypto engine wraps/unwraps each DEK via Vault's Transit API, so the KEK never enters process memory. Opt-in via `Crypto:Engine=VaultTransit`; verified end-to-end against a local dev Vault (a secret created and revealed through the app, stored with `KekId=vault:eclipsvault:v1` and a `vault:v1:` wrapped DEK). An AWS KMS / Azure Key Vault engine would follow the same `ICryptoEngine` shape (needs the respective cloud credentials).
 - **Dynamic secrets & leasing** — issue short-lived, auto-revoked backend credentials on demand (the flagship capability of a Vault-class engine), and rotate the *actual* upstream secret, not just re-wrap the DEK.
 - **SSO (OIDC/SAML) + SCIM** — enterprise identity, with clearance/project attributes flowing from the IdP.
@@ -255,5 +271,5 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 ## Notes
 
 - List views show metadata only and are not per-row audited; every by-id metadata view and every reveal is audited (`SecretMetadataViewed`, `SecretRevealed`).
-- Honey-token blacklisting is process-local; tripping it from localhost blocks you until app restart — that's the feature working.
+- Honey-token blacklisting defaults to process-local (in-memory); tripping it from localhost blocks you until app restart — that's the feature working. With `Redis:Enabled=true` the block instead persists in Redis (and across restarts) and is shared by every node — lift it from the **Networks** console or via break-glass recovery.
 - The seeded `Seed:AdminPassword` / `Seed:DevPassword` values live only in `appsettings.Development.json`; change them, or remove the section and set them via user-secrets/environment.

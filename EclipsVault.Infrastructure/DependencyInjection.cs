@@ -1,6 +1,7 @@
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Auditing;
 using EclipsVault.Infrastructure.Caching;
+using EclipsVault.Infrastructure.Distributed;
 using EclipsVault.Infrastructure.Media;
 using EclipsVault.Infrastructure.Notifications;
 using EclipsVault.Infrastructure.Persistence;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 namespace EclipsVault.Infrastructure;
 
@@ -95,10 +97,27 @@ public static class DependencyInjection
         services.AddSingleton<ICryptoEngineFactory, CryptoEngineFactory>();
         services.AddScoped<IKekRotationService, KekRotationService>();
 
-        // Resilience & active defence.
-        services.AddSingleton<ISecretCache, MemorySecretCache>();
-        services.AddSingleton<IIpBlacklist, InMemoryIpBlacklist>();
-        services.AddSingleton<ISessionRevocationService, InMemorySessionRevocationService>();
+        // Resilience & active defence. Session revocation, the intrusion IP blacklist, and the
+        // encrypted-envelope cache all hold shared runtime state. Back them with Redis when it is
+        // configured — mandatory for multi-node scale-out so a revocation or block on one node is
+        // honoured by every node — or with the in-process stores for a zero-infrastructure single node.
+        services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
+        var redisOptions = configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
+        if (redisOptions.Enabled)
+        {
+            // One multiplexer per process (the expensive, thread-safe singleton). Connecting here
+            // fails fast at startup if the shared store is unreachable — it now holds security state.
+            services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisOptions.Configuration));
+            services.AddSingleton<ISecretCache, RedisSecretCache>();
+            services.AddSingleton<IIpBlacklist, RedisIpBlacklist>();
+            services.AddSingleton<ISessionRevocationService, RedisSessionRevocationService>();
+        }
+        else
+        {
+            services.AddSingleton<ISecretCache, MemorySecretCache>();
+            services.AddSingleton<IIpBlacklist, InMemoryIpBlacklist>();
+            services.AddSingleton<ISessionRevocationService, InMemorySessionRevocationService>();
+        }
         services.AddScoped<IIntrusionResponseService, IntrusionResponseService>();
 
         // Runtime-managed trusted networks + audit reading.

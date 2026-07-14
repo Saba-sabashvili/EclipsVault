@@ -187,6 +187,11 @@
         "resolved": "6.0.0",
         "contentHash": "hqTM5628jSsQiv+HGpiq3WKBl2c8v1KZfby2J6Pr7pEPlK9waPdgEO6b8A/+/xn/yZ9ulv8HuqK71ONy2tg67A=="
       },
+      "Pipelines.Sockets.Unofficial": {
+        "type": "Transitive",
+        "resolved": "2.2.16",
+        "contentHash": "nonu9l0YrZH6krVYbskBjE7uG0VMAnvOQ9PU+RmzUsy+++vHkqzzCkHRoP877OiA3iRTxJyNDLfpcU8hrJ3/YQ=="
+      },
       "Serilog": {
         "type": "Transitive",
         "resolved": "4.2.0",
@@ -250,6 +255,11 @@
           "Microsoft.IdentityModel.Tokens": "7.7.1"
         }
       },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.2",
+        "contentHash": "AKJknIFi9O3+rGExxTry188JPvUoZAPcCtS2qdqyFhIzsxQ1Ap94BeGDG0VzVEHakhmRxmJtVih6TsHoghIt/g=="
+      },
       "System.Memory.Data": {
         "type": "Transitive",
         "resolved": "8.0.1",
@@ -278,7 +288,8 @@
           "Serilog.Formatting.Compact": "[3.0.0, )",
           "Serilog.Sinks.Console": "[6.1.1, )",
           "Serilog.Sinks.File": "[6.0.0, )",
-          "SixLabors.ImageSharp": "[3.1.12, )"
+          "SixLabors.ImageSharp": "[3.1.12, )",
+          "StackExchange.Redis": "[2.13.17, )"
         }
       },
       "Konscious.Security.Cryptography.Argon2": {
@@ -342,6 +353,16 @@
         "requested": "[3.1.12, )",
         "resolved": "3.1.12",
         "contentHash": "iAg6zifihXEFS/t7fiHhZBGAdCp3FavsF4i2ZIDp0JfeYeDVzvmlbY1CNhhIKimaIzrzSi5M/NBFcWvZT2rB/A=="
+      },
+      "StackExchange.Redis": {
+        "type": "CentralTransitive",
+        "requested": "[2.13.17, )",
+        "resolved": "2.13.17",
+        "contentHash": "P7o7ZDBAmBrOLQEw8Pt44iIA08ioj48smRxn4Jp6yzCu6P3DOSU6lj7f+IOtN3pPvSgC9YufvM92ycukEEBCYQ==",
+        "dependencies": {
+          "Pipelines.Sockets.Unofficial": "2.2.16",
+          "System.IO.Hashing": "10.0.2"
+        }
       }
     }
   }

@@ -284,7 +284,7 @@ public sealed class AdminController : Controller
     [HttpPost]
     public async Task<IActionResult> Unblock(string network, CancellationToken ct)
     {
-        if (_blacklist.Unblock(network))
+        if (await _blacklist.UnblockAsync(network, ct))
         {
             await _trustedNetworks.RecordUnblockedAsync(network, ct);
             _logger.LogWarning("Administrator {Username} lifted the intrusion-defence block on {Network}", User.Identity?.Name, network);
@@ -315,7 +315,7 @@ public sealed class AdminController : Controller
             CurrentIpTrusted = trusted,
             ConfiguredCidrs = _abacOptions.TrustedIpCidrs,
             DynamicNetworks = await _trustedNetworks.ListAsync(ct),
-            BlockedRanges = _blacklist.List()
+            BlockedRanges = await _blacklist.ListAsync(ct)
         };
     }
 

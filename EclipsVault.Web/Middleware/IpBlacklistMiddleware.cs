@@ -66,7 +66,7 @@ public sealed class IpBlacklistMiddleware
         var sourceIp = context.Connection.RemoteIpAddress;
         if (sourceIp is not null
             && !context.Request.Path.StartsWithSegments(RecoveryPath)
-            && _blacklist.IsBlocked(sourceIp))
+            && await _blacklist.IsBlockedAsync(sourceIp, context.RequestAborted))
         {
             _logger.LogWarning("Rejected request to {Path} from blacklisted source {SourceIp}", context.Request.Path, sourceIp);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
