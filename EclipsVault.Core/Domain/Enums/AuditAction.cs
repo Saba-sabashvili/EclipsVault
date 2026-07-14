@@ -70,5 +70,9 @@ public enum AuditAction
 
     // Audit attestation (signed checkpoints / export).
     AuditCheckpointCreated = 110,
-    AuditBundleExported = 111
+    AuditBundleExported = 111,
+
+    // Step-up re-authentication for sensitive reveals.
+    StepUpVerified = 120,
+    StepUpFailed = 121
 }

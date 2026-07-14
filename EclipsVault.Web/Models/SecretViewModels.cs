@@ -50,6 +50,18 @@ public sealed class SecretDetailsViewModel
 
     /// <summary>Active access grants on this secret (populated only when <see cref="CanShare"/>).</summary>
     public IReadOnlyList<SecretGrantDto> Grants { get; init; } = [];
+
+    /// <summary>True when a reveal was attempted but a fresh re-authentication is required first.</summary>
+    public bool StepUpRequired { get; init; }
+
+    /// <summary>Set when a submitted step-up code was wrong.</summary>
+    public string? StepUpError { get; init; }
+
+    /// <summary>Carries the archived version being revealed through the step-up round-trip (null for the current value).</summary>
+    public Guid? StepUpVersionId { get; init; }
+
+    /// <summary>The configured freshness window, for the step-up prompt's explanation.</summary>
+    public int StepUpMaxAgeMinutes { get; init; }
 }
 
 public sealed class ShareSecretViewModel

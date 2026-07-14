@@ -6,6 +6,9 @@ public static class VaultClaimTypes
     public const string Project = "vault:project";
     public const string AuthTime = "vault:auth_time";
 
+    /// <summary>Unix-seconds timestamp of the last step-up re-authentication; refreshes the strong-auth clock for sensitive reveals.</summary>
+    public const string StepUpTime = "vault:stepup_time";
+
     /// <summary>User-editable display name shown in the UI. The immutable login username stays in ClaimTypes.Name (the audit anchor).</summary>
     public const string Display = "vault:display";
 

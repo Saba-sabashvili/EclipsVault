@@ -1,3 +1,4 @@
+using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Auditing;
 using EclipsVault.Infrastructure.Caching;
 using EclipsVault.Infrastructure.Media;
@@ -36,6 +37,15 @@ public static class DependencyInjection
         services.AddSingleton(new LockoutPolicy(
             lockout.GetValue<int?>("MaxFailedAttempts") ?? LockoutPolicy.Default.MaxFailedAttempts,
             TimeSpan.FromMinutes(lockout.GetValue<int?>("LockoutMinutes") ?? LockoutPolicy.Default.LockoutDuration.TotalMinutes)));
+
+        // Step-up re-authentication policy (Core options, bound from configuration).
+        var stepUp = configuration.GetSection(StepUpOptions.SectionName);
+        services.AddSingleton(new StepUpOptions
+        {
+            MinimumSensitivity = stepUp.GetValue<SensitivityLevel?>("MinimumSensitivity") ?? new StepUpOptions().MinimumSensitivity,
+            MaxAuthAgeMinutes = stepUp.GetValue<int?>("MaxAuthAgeMinutes") ?? new StepUpOptions().MaxAuthAgeMinutes
+        });
+        services.AddScoped<IStepUpService, StepUpService>();
 
         // Email domain used when auto-generating account emails.
         services.AddSingleton(new UserDirectoryOptions(

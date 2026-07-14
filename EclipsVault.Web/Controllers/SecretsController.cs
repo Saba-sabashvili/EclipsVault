@@ -5,6 +5,8 @@ using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,12 +22,21 @@ public sealed class SecretsController : Controller
     private readonly ISecretService _secrets;
     private readonly ISecretGrantService _grants;
     private readonly IAuthorizationService _authorization;
+    private readonly IStepUpService _stepUp;
+    private readonly TimeProvider _clock;
 
-    public SecretsController(ISecretService secrets, ISecretGrantService grants, IAuthorizationService authorization)
+    public SecretsController(
+        ISecretService secrets,
+        ISecretGrantService grants,
+        IAuthorizationService authorization,
+        IStepUpService stepUp,
+        TimeProvider clock)
     {
         _secrets = secrets;
         _grants = grants;
         _authorization = authorization;
+        _stepUp = stepUp;
+        _clock = clock;
     }
 
     [HttpGet]
@@ -66,6 +77,45 @@ public sealed class SecretsController : Controller
             return denied;
         }
 
+        if (StepUpNeeded(details.Sensitivity))
+        {
+            return View("Details", await BuildViewModelAsync(details, ct, stepUpRequired: true));
+        }
+
+        var revealed = await _secrets.RevealAsync(id, ct);
+        return View("Details", await BuildViewModelAsync(details, ct, revealed.Value, "current value"));
+    }
+
+    /// <summary>
+    /// Completes a reveal that required step-up: verifies a fresh authenticator code, refreshes
+    /// the strong-auth clock, then decrypts. Handles both the current value and an archived version.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> StepUpReveal(Guid id, string? code, Guid? versionId, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        if (string.IsNullOrWhiteSpace(code) || !await _stepUp.VerifyAsync(CurrentUserId(), code, ct))
+        {
+            return View("Details", await BuildViewModelAsync(details, ct,
+                stepUpRequired: true, stepUpVersionId: versionId,
+                stepUpError: "That authenticator code is not valid. Try again."));
+        }
+
+        await StampStepUpAsync();
+
+        if (versionId is { } vid)
+        {
+            var revealedVersion = await _secrets.RevealVersionAsync(id, vid, ct);
+            var versions = await _secrets.ListVersionsAsync(id, ct);
+            var number = versions.FirstOrDefault(v => v.Id == vid)?.VersionNumber;
+            return View("Details", await BuildViewModelAsync(details, ct, revealedVersion.Value, number is int n ? $"version {n}" : "archived version"));
+        }
+
         var revealed = await _secrets.RevealAsync(id, ct);
         return View("Details", await BuildViewModelAsync(details, ct, revealed.Value, "current value"));
     }
@@ -97,6 +147,11 @@ public sealed class SecretsController : Controller
         if (await CheckAccessAsync(details) is { } denied)
         {
             return denied;
+        }
+
+        if (StepUpNeeded(details.Sensitivity))
+        {
+            return View("Details", await BuildViewModelAsync(details, ct, stepUpRequired: true, stepUpVersionId: versionId));
         }
 
         var revealed = await _secrets.RevealVersionAsync(id, versionId, ct);
@@ -250,7 +305,8 @@ public sealed class SecretsController : Controller
     }
 
     private async Task<SecretDetailsViewModel> BuildViewModelAsync(
-        SecretDetailsDto dto, CancellationToken ct, string? revealedValue = null, string? revealedLabel = null)
+        SecretDetailsDto dto, CancellationToken ct, string? revealedValue = null, string? revealedLabel = null,
+        bool stepUpRequired = false, string? stepUpError = null, Guid? stepUpVersionId = null)
     {
         var canShare = CanShare(dto);
         return new()
@@ -268,8 +324,37 @@ public sealed class SecretsController : Controller
             RevealedLabel = revealedLabel,
             Versions = await _secrets.ListVersionsAsync(dto.Id, ct),
             CanShare = canShare,
-            Grants = canShare ? await _grants.ListForSecretAsync(dto.Id, ct) : []
+            Grants = canShare ? await _grants.ListForSecretAsync(dto.Id, ct) : [],
+            StepUpRequired = stepUpRequired,
+            StepUpError = stepUpError,
+            StepUpVersionId = stepUpVersionId,
+            StepUpMaxAgeMinutes = _stepUp.MaxAuthAgeMinutes
         };
+    }
+
+    /// <summary>Whether revealing a secret of this sensitivity needs a fresh re-authentication right now.</summary>
+    private bool StepUpNeeded(SensitivityLevel sensitivity)
+        => _stepUp.IsRequired(sensitivity, LastStrongAuthUtc(), _clock.GetUtcNow());
+
+    /// <summary>The more recent of the original sign-in and the last step-up — the strong-auth clock.</summary>
+    private DateTimeOffset LastStrongAuthUtc()
+    {
+        long Read(string claimType) => long.TryParse(User.FindFirstValue(claimType), out var seconds) ? seconds : 0;
+        return DateTimeOffset.FromUnixTimeSeconds(Math.Max(Read(VaultClaimTypes.AuthTime), Read(VaultClaimTypes.StepUpTime)));
+    }
+
+    /// <summary>Re-issues the auth cookie with a fresh step-up timestamp, preserving every other claim.</summary>
+    private async Task StampStepUpAsync()
+    {
+        var now = _clock.GetUtcNow().ToUnixTimeSeconds().ToString();
+        var claims = User.Claims.Where(c => c.Type != VaultClaimTypes.StepUpTime).ToList();
+        claims.Add(new Claim(VaultClaimTypes.StepUpTime, now));
+
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            principal,
+            new AuthenticationProperties { IsPersistent = false });
     }
 
     /// <summary>Sharing is managed by administrators and by members of the secret's own project.</summary>
