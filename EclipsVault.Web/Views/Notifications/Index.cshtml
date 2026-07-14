@@ -1,4 +1,4 @@
-@model IReadOnlyList<EmailLogDto>
+@model NotificationsViewModel
 @{
     ViewData["Title"] = "Notifications";
 
@@ -17,15 +17,36 @@
     </div>
 </div>
 
+<div class="notice @(!Model.Enabled ? "notice-warn" : Model.IsSmtp ? "notice-ok" : "notice-warn")">
+    @if (!Model.Enabled)
+    {
+        <strong>⚠ Delivery is off.</strong>
+        <span>Notifications are recorded as <em>suppressed</em> and never sent. Set <code>Email:Enabled=true</code> to dispatch them.</span>
+    }
+    else if (Model.IsSmtp)
+    {
+        <strong>✓ Delivering via SMTP → <span class="mono">@Model.SmtpTarget</span>.</strong>
+        <span>Composed emails are sent to your mail server and recorded below.</span>
+    }
+    else
+    {
+        <strong>Development log transport.</strong>
+        <span>Emails are composed and recorded below but <strong>not actually sent</strong>. Point <code>Email:Sender=Smtp</code> at an SMTP server (e.g. the bundled Mailpit) to deliver them.</span>
+    }
+</div>
+
 <section class="panel">
     <div class="panel-header">
         <h2>Outbox</h2>
         <input type="search" class="table-search" placeholder="Filter by recipient, subject, event…" data-filter="#outbox" aria-label="Filter notifications" />
     </div>
 
-    @if (Model.Count == 0)
+    @if (Model.Outbox.Count == 0)
     {
-        <p class="muted">No notifications yet. Approving an access request, changing a password, or provisioning a user will send one.</p>
+        <partial name="_EmptyState" model="@(new EmptyState {
+            Icon = "mail",
+            Title = "No notifications sent yet",
+            Message = "Domain events send email automatically — approving or rejecting an access request, a password change, or provisioning a user. Each one is recorded here with its delivery outcome." })" />
     }
     else
     {
@@ -35,7 +56,7 @@
                     <tr><th>Sent (UTC)</th><th>To</th><th>Subject</th><th>Event</th><th>Transport</th><th>Status</th></tr>
                 </thead>
                 <tbody>
-                    @foreach (var e in Model)
+                    @foreach (var e in Model.Outbox)
                     {
                         var badge = StatusBadge(e.Status);
                         <tr>

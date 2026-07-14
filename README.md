@@ -59,15 +59,27 @@ A design-time `IDesignTimeDbContextFactory` lets the tooling build the context w
 ## Prerequisites
 
 - .NET 10 SDK
-- SQL Server on `localhost,1433` (e.g. `docker start sql_server_final`)
+- Docker (for the dependencies below)
 - Trusted dev cert: `dotnet dev-certs https --trust` (recommended)
 
 ## Run it
 
+The dependencies are all real, open-source (or first-party) services — brought up with one
+command rather than mocked in-process:
+
 ```bash
+docker compose up -d      # SQL Server + Vault + Mailpit
 dotnet run --project EclipsVault.Web
 # → https://localhost:7443
 ```
+
+| Service | Purpose | UI |
+|---|---|---|
+| **SQL Server** | persistence | — |
+| **Mailpit** | captures notification emails (real SMTP) | http://localhost:8025 |
+| **HashiCorp Vault** | holds the master key when `Crypto:Engine=VaultTransit` | http://localhost:8200 (`dev-root`) |
+
+(You can still point the app at your own SQL Server / SMTP / KMS via configuration.)
 
 **Configuration & secrets** — the database connection string is deliberately **absent from `appsettings.json`** so credentials are never committed. Local development reads it (plus the dev KEK fallback and seed passwords) from `appsettings.Development.json`, which is git-ignored — copy `appsettings.Development.json.template` to create it. For any real deployment, supply it via the environment (`ConnectionStrings__DefaultConnection`) or a secret store, using a least-privilege SQL login and `Encrypt=True;TrustServerCertificate=False`. Startup fails fast with a clear message if it is missing.
 
@@ -118,7 +130,7 @@ New secrets are then sealed with the Vault-held key (visible as `KekId = vault:e
 - **Secret rotation & version history** — rotate a secret's value (with an optional change note); the value it replaces is kept as its own envelope-encrypted `SecretVersion`. A rotation timeline lets you reveal a prior value (audited, fail-closed, before any decryption) or revert to it (which archives the current value first). Versions hold real key material, so they are purged when the secret is shredded or deleted.
 - **Secret sharing / access grants** — a secret's project members (and admins) can grant a named user access to that specific secret from its **Sharing** panel, optionally with an expiry. The grantee sees it under **Shared with me** (sidebar) and can open it. A grant crosses the **project boundary only** — the ABAC clearance, network, and time rules still apply, so sharing never widens the clearance ceiling. Grants are consulted live by the ABAC handler, every share/revoke is audited, and grants cascade-delete with the secret.
 - **Secret access requests** (sidebar: **Access requests**) — the self-service side of grants. When ABAC denies a secret, its Denied page offers a **Request access** form; the request lands in a review queue for that secret's reviewers (an administrator, or a member of its project). **Approving** creates an ordinary grant for the requester (so the same ABAC rules apply — a grant fixes only a project denial, never clearance/network/time); **rejecting** records the decision. Requesters track their own requests and can withdraw a pending one; the denial reasons are snapshotted onto the request so a reviewer sees exactly what failed. Every transition is audited, and requests cascade-delete with the secret.
-- **Notifications / email delivery** (sidebar: **Notifications**, admin) — domain events now send email: an access request being approved/rejected notifies the requester, a password change sends a security notice, and provisioning a user sends a welcome. The transport is pluggable behind the Core `IEmailSender` port — **SMTP** for production or a dev **Log** transport (`Email:Sender`) — and every message, whatever the transport, is recorded to an **outbox** that admins view on the Notifications page (recipient, subject, event, transport, delivery status). Notifications are **fail-soft**: a delivery failure is captured as a Failed outbox row, never breaking the operation that triggered it.
+- **Notifications / email delivery** (sidebar: **Notifications**, admin) — domain events send email: an access request being approved/rejected notifies the requester, a password change sends a security notice, and provisioning a user sends a welcome. The transport is pluggable behind the Core `IEmailSender` port — **SMTP** for real delivery or a **Log** transport (`Email:Sender`) — and every message is recorded to an **outbox** admins view on the Notifications page (recipient, subject, event, transport, delivery status), which also shows a **delivery-status banner** so it's obvious at a glance whether email is actually being sent and where. In development, `docker compose up` includes **Mailpit** (an open-source SMTP server + web UI), so notifications genuinely deliver — view them at http://localhost:8025. Notifications are **fail-soft**: a delivery failure is captured as a Failed outbox row, never breaking the operation that triggered it.
 - **Profile** (every user, self-service) — editable **display name** and email; **profile picture** upload (JPEG/PNG, validated, re-encoded to a safe 256×256 PNG) with a generated identicon fallback; **change password** (current-password check, breached-password screening, Argon2id re-hash); **reset own authenticator**; **generate MFA recovery codes** (single-use backup codes); **register and remove passkeys** for passwordless sign-in; and **sign out everywhere** (server-side session revocation). The login **username is fixed** — it is the audit-trail anchor.
 - **Passkeys / WebAuthn** — register one or more authenticators (Touch ID, Windows Hello, a security key) from the profile, then sign in with no password or TOTP. Registration and assertion are verified server-side (relying-party id hash, origin, challenge, user-verification flag, and the ECDSA/RSA signature over a stored COSE public key), the ceremony challenge is held in a server-side session, and the signature counter is checked on every assertion for cloned-authenticator detection. Every register / sign-in / removal is audited.
 - **Administration** (TopSecret clearance only):
@@ -129,6 +141,7 @@ New secrets are then sealed with the Vault-held key (visible as `KekId = vault:e
   - **Encryption keys** — shows which master KEK each secret is wrapped under and runs a **rotation** that re-wraps everything under the current KEK. See *KEK rotation* under Security architecture.
 
 The distinction is clean: **profile** actions only ever touch your own account and can never change clearance or project; **clearance and project are administrative** and live in the Users console. Login username (immutable audit anchor) is separate from the editable display name.
+- **Designed empty states** — every list page that can be empty (Shared with me, Access requests, Notifications, Secrets…) renders a reusable `_EmptyState` component — an icon, a heading, a plain explanation of what the page is for, and a call-to-action where one makes sense — so a page with no rows reads as "nothing here yet, here's what it's for" instead of a blank, broken-looking screen.
 - **UI foundation** — one app shell (`_Layout` sidebar / `_AuthLayout` centered card), a token-based design system in `site.css` with **light and dark themes** (toggle in the sidebar; the choice is persisted in a cookie and applied server-side on `<html data-theme>` for a flash-free first paint), flash notifications (`FlashExtensions` + `_Flash` partial), and data-attribute behaviours in `site.js` (`data-confirm`, `data-copy`, `data-filter`, `data-flash`, `data-theme-toggle`). New features should compose these pieces: add a controller + views using `page-header`/`panel`/`data-table`, a sidebar entry in `_Layout`, and flash feedback on POST-redirect. Because everything references design tokens, both themes come for free.
 
 ## Programmatic API

@@ -26,7 +26,10 @@
 
     @if (Model.ToReview.Count == 0)
     {
-        <p class="muted">Nothing waiting on you. Requests for secrets you can share will appear here.</p>
+        <partial name="_EmptyState" model="@(new EmptyState {
+            Icon = "clipboard",
+            Title = "Nothing waiting on you",
+            Message = "When someone requests access to a secret you can share, it lands here for you to approve or reject." })" />
     }
     else
     {
@@ -67,7 +70,11 @@
 
     @if (Model.Mine.Count == 0)
     {
-        <p class="muted">You haven't filed any access requests. When a secret is denied, its page offers a request form.</p>
+        <partial name="_EmptyState" model="@(new EmptyState {
+            Icon = "inbox",
+            Title = "You haven't requested any access",
+            Message = "If you're denied a secret outside your clearance or project, its page offers a \"Request access\" button — your requests and their decisions then show up here.",
+            ActionText = "Browse secrets", ActionController = "Secrets", ActionAction = "Index" })" />
     }
     else
     {

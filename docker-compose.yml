@@ -1,0 +1,46 @@
+# Local development dependencies — all real, open-source (or first-party) services, so the
+# project runs the way it would in production rather than against hand-rolled local mocks.
+#
+#   docker compose up -d
+#   # one-time: enable Vault's Transit engine + create the master key (only if using VaultTransit)
+#   curl -s -H "X-Vault-Token: dev-root" -X POST -d '{"type":"transit"}' http://127.0.0.1:8200/v1/sys/mounts/transit
+#   curl -s -H "X-Vault-Token: dev-root" -X POST http://127.0.0.1:8200/v1/transit/keys/eclipsvault
+#   dotnet run --project EclipsVault.Web
+#
+# UIs:  Mailpit  http://localhost:8025   ·   Vault  http://localhost:8200 (token: dev-root)
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: eclipsvault-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Vision1889Academy"
+    ports:
+      - "1433:1433"
+    volumes:
+      - eclipsvault-db:/var/opt/mssql
+
+  # HashiCorp Vault (dev mode) — holds the master key when Crypto:Engine=VaultTransit,
+  # so the KEK never lives in the app process.
+  vault:
+    image: hashicorp/vault:latest
+    container_name: eclipsvault-vault
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "dev-root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    ports:
+      - "8200:8200"
+
+  # Mailpit — an SMTP server with a web UI that captures every outbound notification email,
+  # so the Notifications feature delivers for real in development.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: eclipsvault-mailpit
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
+
+volumes:
+  eclipsvault-db:

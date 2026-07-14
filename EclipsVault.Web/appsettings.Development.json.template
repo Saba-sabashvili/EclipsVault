@@ -11,6 +11,12 @@
   "AuditSigning": {
     "AllowDevelopmentEphemeralKey": true
   },
+  "Email": {
+    "//": "Deliver notifications to the Mailpit container from docker-compose. View them at http://localhost:8025.",
+    "Sender": "Smtp",
+    "Enabled": true,
+    "Smtp": { "Host": "localhost", "Port": 1025, "UseSsl": false }
+  },
   "Seed": {
     "AdminPassword": "<local dev admin password>",
     "DevPassword": "<local dev user password>"
