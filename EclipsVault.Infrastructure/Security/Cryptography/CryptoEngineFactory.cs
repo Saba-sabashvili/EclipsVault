@@ -23,7 +23,7 @@ public sealed class CryptoEngineFactory : ICryptoEngineFactory
     public ICryptoEngine Create() => _options.Engine switch
     {
         AesGcmCryptoEngine.EngineName => _services.GetRequiredService<AesGcmCryptoEngine>(),
-        // e.g. "AwsKms" => _services.GetRequiredService<AwsKmsCryptoEngine>(),
+        VaultTransitCryptoEngine.EngineName => _services.GetRequiredService<VaultTransitCryptoEngine>(),
         _ => throw new CryptoConfigurationException(
             $"Unknown crypto engine '{_options.Engine}'. Register the engine in {nameof(CryptoEngineFactory)} " +
             "and select it via the 'Crypto:Engine' configuration key.")
