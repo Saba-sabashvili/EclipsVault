@@ -140,6 +140,7 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IMfaRecoveryService, MfaRecoveryService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IPasskeyService, PasskeyService>();
 
         // Notifications: pick the email transport by config, mirror Email:Enabled into the

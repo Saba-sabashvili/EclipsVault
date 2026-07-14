@@ -65,6 +65,18 @@ public static class AuditDisplay
         AuditAction.ApiKeyRevoked => ("API key revoked", "warn"),
         AuditAction.AuditCheckpointCreated => ("Checkpoint signed", "ok"),
         AuditAction.AuditBundleExported => ("Audit exported", "muted"),
+        AuditAction.PasskeyRegistered => ("Passkey added", "ok"),
+        AuditAction.PasskeyRemoved => ("Passkey removed", "warn"),
+        AuditAction.PasskeyLogin => ("Passkey sign-in", "ok"),
+        AuditAction.AccessRequested => ("Access requested", "muted"),
+        AuditAction.AccessRequestApproved => ("Access approved", "ok"),
+        AuditAction.AccessRequestRejected => ("Access rejected", "warn"),
+        AuditAction.AccessRequestCancelled => ("Access cancelled", "muted"),
+        AuditAction.KekRotated => ("KEK rotated", "warn"),
+        AuditAction.RecoveryCodesGenerated => ("Recovery codes issued", "ok"),
+        AuditAction.RecoveryCodeUsed => ("Recovery code used", "warn"),
+        AuditAction.StepUpVerified => ("Step-up verified", "ok"),
+        AuditAction.StepUpFailed => ("Step-up failed", "warn"),
         _ => (action.ToString(), "muted")
     };
 

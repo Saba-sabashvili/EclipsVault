@@ -3,6 +3,7 @@
 global using EclipsVault.Core.Application.Abstractions;
 global using EclipsVault.Core.Application.Abac;
 global using EclipsVault.Core.Application.AccessRequests;
+global using EclipsVault.Core.Application.Activity;
 global using EclipsVault.Core.Application.Auditing;
 global using EclipsVault.Core.Application.Authentication;
 global using EclipsVault.Core.Application.Dashboard;

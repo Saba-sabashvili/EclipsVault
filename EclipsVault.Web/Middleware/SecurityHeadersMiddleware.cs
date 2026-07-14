@@ -9,7 +9,10 @@ public sealed class SecurityHeadersMiddleware
         "style-src 'self'; " +
         "img-src 'self' data:; " +
         "font-src 'self'; " +
-        "frame-ancestors 'none'; " +
+        "connect-src 'self'; " +
+        "object-src 'none'; " +      // no <object>/<embed>/<applet> plugin vectors
+        "frame-src 'none'; " +       // the app embeds no iframes
+        "frame-ancestors 'none'; " + // and refuses to be embedded (clickjacking)
         "form-action 'self'; " +
         "base-uri 'self'";
 
@@ -28,6 +31,11 @@ public sealed class SecurityHeadersMiddleware
             "camera=(), geolocation=(), microphone=(), payment=(), " +
             "publickey-credentials-get=(self), publickey-credentials-create=(self)";
         headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        // Our resources (avatars, static assets) are only ever loaded same-origin behind auth,
+        // so refuse to be pulled into any other site's document.
+        headers["Cross-Origin-Resource-Policy"] = "same-origin";
+        // No legacy Flash/PDF cross-domain policy files are honoured.
+        headers["X-Permitted-Cross-Domain-Policies"] = "none";
 
         return _next(context);
     }

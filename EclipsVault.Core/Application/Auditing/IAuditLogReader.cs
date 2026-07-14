@@ -22,6 +22,12 @@ public interface IAuditLogReader
     /// <summary>Latest entries, newest first; optionally restricted to one actor.</summary>
     Task<IReadOnlyList<AuditEntryDto>> ListRecentAsync(int count, string? username, CancellationToken ct);
 
+    /// <summary>
+    /// A page of one actor's own entries, newest first, keyed by user id — the source for the
+    /// personal activity feed. Filtering by id (not the mutable username) keeps the feed exact.
+    /// </summary>
+    Task<IReadOnlyList<AuditEntryDto>> ListForActorAsync(Guid actorUserId, int skip, int take, CancellationToken ct);
+
     Task<int> CountCriticalSinceAsync(DateTimeOffset sinceUtc, CancellationToken ct);
 
     /// <summary>Re-walks the hash chain and reports whether it is intact, pinpointing the first broken row.</summary>

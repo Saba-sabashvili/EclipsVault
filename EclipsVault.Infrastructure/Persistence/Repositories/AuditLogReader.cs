@@ -25,6 +25,20 @@ public sealed class AuditLogReader : IAuditLogReader
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<AuditEntryDto>> ListForActorAsync(Guid actorUserId, int skip, int take, CancellationToken ct)
+        => await _db.AuditLogs.AsNoTracking()
+            .Where(a => a.UserId == actorUserId)
+            // TimestampUtc first for the human ordering; Sequence breaks ties within the same
+            // instant so paging is stable and never repeats or skips a row across pages.
+            .OrderByDescending(a => a.TimestampUtc)
+            .ThenByDescending(a => a.Sequence)
+            .Skip(skip)
+            .Take(take)
+            .Select(a => new AuditEntryDto(
+                a.Id, a.TimestampUtc, a.Username, a.SourceIp, a.Action,
+                a.ResourceType, a.ResourceName, a.Details, a.IsCritical))
+            .ToListAsync(ct);
+
     public Task<int> CountCriticalSinceAsync(DateTimeOffset sinceUtc, CancellationToken ct)
         => _db.AuditLogs.AsNoTracking().CountAsync(a => a.IsCritical && a.TimestampUtc >= sinceUtc, ct);
 

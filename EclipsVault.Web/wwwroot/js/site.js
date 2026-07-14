@@ -2,12 +2,14 @@
 // wired here through data attributes:
 //   form[data-confirm] / a[data-confirm]  → custom confirm dialog before proceeding
 //   [data-copy="#selector"]               → copy target's text to the clipboard
+//   [data-print]                          → print the current page (CSP forbids inline onclick)
 //   [data-flash]                          → dismissible, auto-hiding toast
 //   input[data-filter="#id"]              → live row filter for the referenced table
 //   tr[data-href]                         → make a whole table row clickable
 document.addEventListener('DOMContentLoaded', () => {
     wireConfirms();
     wireCopyButtons();
+    wirePrintButtons();
     wireFlashes();
     wireTableFilters();
     wireRowLinks();
@@ -94,6 +96,12 @@ function wireCopyButtons() {
                 button.textContent = 'Copy failed';
             }
         });
+    });
+}
+
+function wirePrintButtons() {
+    document.querySelectorAll('[data-print]').forEach((button) => {
+        button.addEventListener('click', () => window.print());
     });
 }
 
