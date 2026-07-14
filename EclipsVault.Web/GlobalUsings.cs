@@ -15,5 +15,6 @@ global using EclipsVault.Core.Application.Passkeys;
 global using EclipsVault.Core.Application.Profile;
 global using EclipsVault.Core.Application.Secrets;
 global using EclipsVault.Core.Application.ServiceAccounts;
+global using EclipsVault.Core.Application.Sessions;
 global using EclipsVault.Core.Application.StepUp;
 global using EclipsVault.Core.Application.Users;

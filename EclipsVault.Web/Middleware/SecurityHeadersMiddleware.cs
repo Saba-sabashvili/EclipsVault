@@ -22,6 +22,22 @@ public sealed class SecurityHeadersMiddleware
 
     public Task InvokeAsync(HttpContext context)
     {
+        // Keep authenticated vault pages out of the browser's disk cache — and off the back button
+        // after sign-out. Only HTML is marked no-store; static assets and images (served with their
+        // own caching) are untouched. Content-Type is only known once the response starts, so this
+        // is deferred to OnStarting.
+        context.Response.OnStarting(static state =>
+        {
+            var ctx = (HttpContext)state;
+            var contentType = ctx.Response.ContentType;
+            if (contentType is not null && contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+                ctx.Response.Headers.Pragma = "no-cache";
+            }
+            return Task.CompletedTask;
+        }, context);
+
         var headers = context.Response.Headers;
         headers["Content-Security-Policy"] = ContentSecurityPolicy;
         headers["X-Frame-Options"] = "DENY";

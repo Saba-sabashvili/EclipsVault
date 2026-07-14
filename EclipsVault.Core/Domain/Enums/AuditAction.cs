@@ -47,6 +47,9 @@ public enum AuditAction
     UserEnabled = 62,
     UserForceLoggedOut = 63,
 
+    /// <summary>Self-service revocation of one of your own active sessions ("signed-in devices").</summary>
+    SessionRevokedByUser = 64,
+
     // Service accounts & API keys.
     ServiceAccountCreated = 70,
     ServiceAccountDeleted = 71,

@@ -23,6 +23,16 @@ public static class VaultClaimTypes
 
     /// <summary>API-key scope: "true" when the key may read metadata but never a secret value.</summary>
     public const string ScopeMetadataOnly = "vault:scope_metadata_only";
+
+    /// <summary>Unique id of this interactive session, so a single "signed-in device" can be revoked on its own.</summary>
+    public const string SessionId = "vault:sid";
+}
+
+/// <summary>Shared interactive-session settings, so the cookie lifetime has one source of truth.</summary>
+public static class SessionDefaults
+{
+    /// <summary>How long an interactive session cookie (and its registry record) lives.</summary>
+    public static readonly TimeSpan InteractiveLifetime = TimeSpan.FromHours(9);
 }
 
 public static class AuthSchemes

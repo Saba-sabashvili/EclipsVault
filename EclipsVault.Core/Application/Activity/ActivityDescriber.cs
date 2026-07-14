@@ -53,6 +53,7 @@ public static class ActivityDescriber
 
         // --- Security events (high signal) ------------------------------------------
         AuditAction.SessionsRevokedSelf => new(ActivityCategory.Security, "Signed out of all sessions", ActivitySeverity.Notable),
+        AuditAction.SessionRevokedByUser => new(ActivityCategory.Security, "Signed out one of your devices", ActivitySeverity.Notable),
         AuditAction.StepUpVerified => new(ActivityCategory.Security, "Passed step-up verification", ActivitySeverity.Routine),
         AuditAction.StepUpFailed => new(ActivityCategory.Security, "Step-up verification failed", ActivitySeverity.Notable),
         AuditAction.AccountUnlocked => new(ActivityCategory.Security, "Your account was unlocked", ActivitySeverity.Notable),

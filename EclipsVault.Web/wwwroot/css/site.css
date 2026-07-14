@@ -632,6 +632,11 @@ input.code-input {
 .pager-side:last-child { justify-content: flex-end; }
 .pager-page { color: var(--text-muted); font-size: 0.82rem; }
 
+/* Right-aligned action on a feed row (signed-in devices). */
+.feed-action { flex-shrink: 0; align-self: center; }
+.feed-item.session-current .feed-icon { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
+.current-pill { font-size: 0.78rem; }
+
 /* ---- Quick actions ----------------------------------------------------- */
 .quick-actions { display: flex; flex-direction: column; gap: 0.6rem; }
 

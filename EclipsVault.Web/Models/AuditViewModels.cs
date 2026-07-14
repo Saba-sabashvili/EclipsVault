@@ -53,6 +53,7 @@ public static class AuditDisplay
         AuditAction.PasswordChanged => ("Password changed", "ok"),
         AuditAction.SelfMfaReset => ("MFA reset (self)", "warn"),
         AuditAction.SessionsRevokedSelf => ("Signed out everywhere", "muted"),
+        AuditAction.SessionRevokedByUser => ("Device signed out", "warn"),
         AuditAction.UserRoleChanged => ("Role changed", "warn"),
         AuditAction.UserDisabled => ("Account disabled", "danger"),
         AuditAction.UserEnabled => ("Account enabled", "ok"),

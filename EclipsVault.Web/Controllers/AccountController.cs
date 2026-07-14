@@ -26,6 +26,7 @@ public sealed class AccountController : Controller
     private readonly IVaultAuthenticationService _auth;
     private readonly IPasskeyService _passkeys;
     private readonly IIpBlacklist _blacklist;
+    private readonly ISessionRegistry _sessions;
     private readonly IAuditSink _audit;
     private readonly ILogger<AccountController> _logger;
 
@@ -33,12 +34,14 @@ public sealed class AccountController : Controller
         IVaultAuthenticationService auth,
         IPasskeyService passkeys,
         IIpBlacklist blacklist,
+        ISessionRegistry sessions,
         IAuditSink audit,
         ILogger<AccountController> logger)
     {
         _auth = auth;
         _passkeys = passkeys;
         _blacklist = blacklist;
+        _sessions = sessions;
         _audit = audit;
         _logger = logger;
     }
@@ -318,6 +321,9 @@ public sealed class AccountController : Controller
     {
         await HttpContext.SignOutAsync(AuthSchemes.MfaPending);
 
+        // A fresh per-session id lets this device be revoked on its own, distinct from the
+        // account-wide "sign out everywhere" kill switch. It rides in the cookie as a claim.
+        var sessionId = Guid.NewGuid();
         var authTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         var identity = new ClaimsIdentity(
             [
@@ -327,7 +333,8 @@ public sealed class AccountController : Controller
                 new Claim(VaultClaimTypes.AvatarVersion, DateTimeOffset.UtcNow.Ticks.ToString()),
                 new Claim(VaultClaimTypes.Clearance, ((int)user.Clearance).ToString()),
                 new Claim(VaultClaimTypes.Project, user.ProjectKey),
-                new Claim(VaultClaimTypes.AuthTime, authTime)
+                new Claim(VaultClaimTypes.AuthTime, authTime),
+                new Claim(VaultClaimTypes.SessionId, sessionId.ToString())
             ],
             CookieAuthenticationDefaults.AuthenticationScheme);
 
@@ -335,6 +342,15 @@ public sealed class AccountController : Controller
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity),
             new AuthenticationProperties { IsPersistent = false });
+
+        var now = DateTimeOffset.UtcNow;
+        await _sessions.RecordSeenAsync(new SessionObservation(
+            user.Id,
+            sessionId,
+            UserAgentSummary.Describe(Request.Headers.UserAgent.ToString()),
+            HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            now,
+            now + SessionDefaults.InteractiveLifetime), HttpContext.RequestAborted);
 
         _logger.LogInformation("User {Username} ({UserId}) completed multi-factor sign-in from {SourceIp}",
             user.Username, user.Id, HttpContext.Connection.RemoteIpAddress);

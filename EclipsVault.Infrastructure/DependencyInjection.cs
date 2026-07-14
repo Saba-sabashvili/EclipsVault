@@ -111,12 +111,14 @@ public static class DependencyInjection
             services.AddSingleton<ISecretCache, RedisSecretCache>();
             services.AddSingleton<IIpBlacklist, RedisIpBlacklist>();
             services.AddSingleton<ISessionRevocationService, RedisSessionRevocationService>();
+            services.AddSingleton<ISessionRegistry, RedisSessionRegistry>();
         }
         else
         {
             services.AddSingleton<ISecretCache, MemorySecretCache>();
             services.AddSingleton<IIpBlacklist, InMemoryIpBlacklist>();
             services.AddSingleton<ISessionRevocationService, InMemorySessionRevocationService>();
+            services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
         }
         services.AddScoped<IIntrusionResponseService, IntrusionResponseService>();
 

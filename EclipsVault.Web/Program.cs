@@ -49,7 +49,7 @@ try
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
             options.LoginPath = "/Account/Login";
             options.AccessDeniedPath = "/Account/Denied";
-            options.ExpireTimeSpan = TimeSpan.FromHours(9);
+            options.ExpireTimeSpan = SessionDefaults.InteractiveLifetime;
             options.SlidingExpiration = true;
             options.Events = new CookieAuthenticationEvents
             {
@@ -66,7 +66,39 @@ try
                     if (Guid.TryParse(userIdClaim, out var userId) &&
                         long.TryParse(authTimeClaim, out var authTimeUnix))
                     {
+                        // Account-wide kill switch: sessions issued at or before a revocation instant die.
                         isValid = !await revocation.IsRevokedAsync(userId, DateTimeOffset.FromUnixTimeSeconds(authTimeUnix));
+
+                        // Per-session kill switch + activity tracking, for sessions that carry a session id.
+                        if (isValid && Guid.TryParse(context.Principal?.FindFirstValue(VaultClaimTypes.SessionId), out var sessionId))
+                        {
+                            var registry = context.HttpContext.RequestServices.GetRequiredService<ISessionRegistry>();
+                            if (await registry.IsRevokedAsync(userId, sessionId))
+                            {
+                                isValid = false;
+                            }
+                            else
+                            {
+                                // Last-seen is best-effort metadata — never fail a valid session over it.
+                                try
+                                {
+                                    var now = DateTimeOffset.UtcNow;
+                                    await registry.RecordSeenAsync(new SessionObservation(
+                                        userId,
+                                        sessionId,
+                                        UserAgentSummary.Describe(context.Request.Headers.UserAgent.ToString()),
+                                        context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                                        now,
+                                        now + SessionDefaults.InteractiveLifetime));
+                                }
+                                catch (Exception ex)
+                                {
+                                    context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                                        .CreateLogger("SessionRegistry")
+                                        .LogDebug(ex, "Non-fatal: could not record session activity");
+                                }
+                            }
+                        }
                     }
 
                     if (!isValid)
