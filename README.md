@@ -142,6 +142,7 @@ Both `Authorization: Bearer <token>` and `X-Api-Key: <token>` are accepted. Ever
 - **Clearance ceiling** — the key acts with `min(account clearance, ceiling)`, so a TopSecret account can hand out a key that only reaches Internal secrets.
 - **Project scope** — pins the key to a single project. This binds even a TopSecret account (which otherwise crosses project boundaries), and also filters what the metadata list returns.
 - **Metadata-only** — the key may enumerate metadata (`GET /api/v1/secrets`) but every value read (`GET /api/v1/secrets/{id}`) returns `403`.
+- **Network binding (IP allow-list)** — the key may carry a list of source CIDR ranges (e.g. `10.8.0.0/24, 203.0.113.7`); presented from any other address it is rejected outright at authentication with `401`, before the account is even resolved. A leaked key is useless off-network. Enforced against the *real* client IP (see forwarded-headers handling), so it holds behind a load balancer.
 
 Scopes are enforced by the **same pure ABAC engine** as everything else — they simply add deny-rules — so a scoped key can only ever see a strict subset of what the account could. Denials name the exact scope that stopped them (e.g. `"This API key is scoped to project 'PHOENIX'."`), and each key's scope is recorded in its issue audit.
 
@@ -205,6 +206,8 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 - ✅ **Breached-password screening** — every password set or changed is refused if it appears in a bundled, offline compromised-password corpus (embedded resource, loaded once into a case-folded `HashSet`), with a debounced live check on the change-password / create-user forms. Behind the `IBreachedPasswordScreen` port. NIST 800-63B §5.1.1.2, OWASP ASVS 2.1.7. *(Security-standards hardening track — this completes the track.)*
 
 - ✅ **Signed audit checkpoints & offline verification** — the hash-chained audit trail can now be signed (ECDSA P-256) at its head and exported as a self-contained bundle, verifiable *offline* by the new standalone `EclipsVault.AuditVerifier` project with no access to the app, its database, or its private key. This lifts tamper-evidence from "provable to anyone with the DB" to "provable to anyone with the public key," defeating even an insider who rewrites the whole chain. Migration `AddAuditCheckpoints`; new `Infrastructure/Auditing` + reorganised `Infrastructure/Security` (Cryptography/ · Defense/ · WebAuthn/). RFC 6962-style transparency; NIST 800-53 AU-9.
+
+- ✅ **API-key network binding (IP allow-listing)** — a service-account key can be pinned to source CIDR ranges; presented from anywhere else it is rejected at authentication (`401`). Enforced against the real client IP, so a leaked key is useless off-network. Migration `AddApiKeyIpAllowlist`. Shipped alongside an architecture cleanup: all IP/CIDR logic (address normalisation, range matching, block-range derivation) consolidated from three duplicated copies (Web + two Infra services) into one canonical `NetworkRules` in Core, now reused by ABAC, the trusted-network store, the intrusion blacklist, and key binding.
 
 **Engineering hardening** (from a security & architecture review — all landed):
 

@@ -70,15 +70,30 @@ public sealed class ServiceAccountsController : Controller
 
     [HttpPost]
     public async Task<IActionResult> IssueKey(
-        Guid id, int ttlDays, int? clearanceCeiling, string? projectScope, bool metadataOnly, CancellationToken ct)
+        Guid id, int ttlDays, int? clearanceCeiling, string? projectScope, bool metadataOnly, string? allowedCidrs, CancellationToken ct)
     {
         // A ceiling of 0/blank means "no clearance limit"; otherwise map the enum value.
         var ceiling = clearanceCeiling is > 0 && Enum.IsDefined((ClearanceLevel)clearanceCeiling.Value)
             ? (ClearanceLevel)clearanceCeiling.Value
             : (ClearanceLevel?)null;
 
-        var request = new IssueApiKeyRequest(ttlDays, ceiling, projectScope, metadataOnly);
-        var issued = await _accounts.IssueKeyAsync(id, request, ct);
+        // Accept ranges separated by comma, semicolon, whitespace, or newlines.
+        var cidrs = string.IsNullOrWhiteSpace(allowedCidrs)
+            ? null
+            : allowedCidrs.Split([',', ';', '\n', '\r', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        IssuedApiKeyDto? issued;
+        try
+        {
+            var request = new IssueApiKeyRequest(ttlDays, ceiling, projectScope, metadataOnly, cidrs);
+            issued = await _accounts.IssueKeyAsync(id, request, ct);
+        }
+        catch (VaultAdminException ex)
+        {
+            this.FlashError(ex.Message);
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
         if (issued is null)
         {
             this.FlashError("Service account not found.");

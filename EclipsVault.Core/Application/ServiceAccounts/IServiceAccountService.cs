@@ -25,5 +25,9 @@ public interface IServiceAccountService
 /// <summary>Resolves and validates a presented API key into a service-account identity (used by the API auth handler).</summary>
 public interface IApiKeyAuthenticator
 {
-    Task<AuthenticatedServiceAccount?> AuthenticateAsync(string presentedToken, CancellationToken ct);
+    /// <summary>
+    /// Resolves the service account behind a presented token. <paramref name="sourceIp"/> is the
+    /// caller's address; a key with a network binding is rejected when it falls outside its allow-list.
+    /// </summary>
+    Task<AuthenticatedServiceAccount?> AuthenticateAsync(string presentedToken, System.Net.IPAddress? sourceIp, CancellationToken ct);
 }

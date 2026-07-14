@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 
 namespace EclipsVault.Infrastructure.Security;
@@ -33,7 +32,7 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
             return;
         }
 
-        var network = ToRange(Normalize(address));
+        var network = NetworkRules.ToBlockRange(address);
         var key = network.ToString();
         var entry = new Entry(network, new BlockedRangeDto(key, reason, _clock.GetUtcNow()));
 
@@ -45,10 +44,9 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
 
     public bool IsBlocked(IPAddress address)
     {
-        var normalized = Normalize(address);
         foreach (var entry in _blocked.Values)
         {
-            if (entry.Network.Contains(normalized))
+            if (NetworkRules.Contains(entry.Network, address))
             {
                 return true;
             }
@@ -73,43 +71,16 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
 
     public bool UnblockAddress(IPAddress address)
     {
-        var normalized = Normalize(address);
         var removed = false;
         foreach (var (key, entry) in _blocked)
         {
-            if (entry.Network.Contains(normalized) && _blocked.TryRemove(key, out _))
+            if (NetworkRules.Contains(entry.Network, address) && _blocked.TryRemove(key, out _))
             {
                 removed = true;
-                _logger.LogWarning("Blacklisted range {Network} lifted via break-glass recovery from {SourceIp}", key, normalized);
+                _logger.LogWarning("Blacklisted range {Network} lifted via break-glass recovery from {SourceIp}", key, address);
             }
         }
 
         return removed;
-    }
-
-    private static IPAddress Normalize(IPAddress address)
-        => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
-
-    private static IPNetwork ToRange(IPAddress address)
-    {
-        if (IPAddress.IsLoopback(address))
-        {
-            var fullPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
-            return new IPNetwork(address, fullPrefix);
-        }
-
-        var bytes = address.GetAddressBytes();
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            bytes[3] = 0;
-            return new IPNetwork(new IPAddress(bytes), 24);
-        }
-
-        for (var i = 8; i < bytes.Length; i++)
-        {
-            bytes[i] = 0;
-        }
-
-        return new IPNetwork(new IPAddress(bytes), 64);
     }
 }

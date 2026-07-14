@@ -42,10 +42,7 @@ public sealed class TrustedNetworkService : ITrustedNetworkService
 
     public async Task<bool> IsTrustedAsync(IPAddress address, CancellationToken ct)
     {
-        if (address.IsIPv4MappedToIPv6)
-        {
-            address = address.MapToIPv4();
-        }
+        var normalized = NetworkRules.Normalize(address);
 
         var networks = await _cache.GetOrCreateAsync(CacheKey, async entry =>
         {
@@ -63,7 +60,7 @@ public sealed class TrustedNetworkService : ITrustedNetworkService
             return parsed;
         });
 
-        return networks is not null && networks.Any(n => n.Contains(address));
+        return networks is not null && networks.Any(n => n.Contains(normalized));
     }
 
     public async Task<IReadOnlyList<TrustedNetworkDto>> ListAsync(CancellationToken ct)

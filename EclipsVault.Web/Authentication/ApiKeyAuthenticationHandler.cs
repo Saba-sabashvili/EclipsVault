@@ -36,7 +36,7 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
             return AuthenticateResult.NoResult(); // no credentials presented
         }
 
-        var account = await _authenticator.AuthenticateAsync(token, Context.RequestAborted);
+        var account = await _authenticator.AuthenticateAsync(token, Context.Connection.RemoteIpAddress, Context.RequestAborted);
         if (account is null)
         {
             return AuthenticateResult.Fail("Invalid, expired, revoked, or disabled API key.");

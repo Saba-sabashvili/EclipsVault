@@ -1,3 +1,4 @@
+using System.Net;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
@@ -57,7 +58,7 @@ public sealed class ServiceAccountService : IServiceAccountService, IApiKeyAuthe
         var keys = await _repository.ListKeysAsync(id, ct);
         var keyDtos = keys
             .Select(k => new ApiKeyDto(k.Id, k.Prefix, k.CreatedAtUtc, k.ExpiresAtUtc, k.RevokedAtUtc, k.LastUsedAtUtc,
-                k.ClearanceCeiling, k.ProjectScope, k.MetadataOnly))
+                k.ClearanceCeiling, k.ProjectScope, k.MetadataOnly, k.AllowedCidrList()))
             .ToList();
 
         return new ServiceAccountDetailsDto(account.Id, account.Name, account.Clearance, account.ProjectKey,
@@ -139,6 +140,7 @@ public sealed class ServiceAccountService : IServiceAccountService, IApiKeyAuthe
         var projectScope = string.IsNullOrWhiteSpace(request.ProjectScope)
             ? null
             : request.ProjectScope.Trim().ToUpperInvariant();
+        var allowedCidrs = NormalizeCidrs(request.AllowedCidrs);
 
         var generated = _keys.Generate();
         var now = _clock.GetUtcNow();
@@ -152,7 +154,8 @@ public sealed class ServiceAccountService : IServiceAccountService, IApiKeyAuthe
             ExpiresAtUtc = request.TtlDays is > 0 ? now.AddDays(request.TtlDays.Value) : null,
             ClearanceCeiling = ceiling,
             ProjectScope = projectScope,
-            MetadataOnly = request.MetadataOnly
+            MetadataOnly = request.MetadataOnly,
+            AllowedCidrs = allowedCidrs
         };
 
         await _repository.AddKeyAsync(key, ct);
@@ -177,8 +180,42 @@ public sealed class ServiceAccountService : IServiceAccountService, IApiKeyAuthe
         {
             parts.Add("metadata-only");
         }
+        if (key.AllowedCidrList() is { Count: > 0 } cidrs)
+        {
+            parts.Add($"from {string.Join("/", cidrs)}");
+        }
 
         return parts.Count == 0 ? " (unscoped)" : $" scoped to {string.Join(", ", parts)}";
+    }
+
+    /// <summary>Validates and canonicalises the operator-supplied ranges; throws on any bad entry.</summary>
+    private static string? NormalizeCidrs(IReadOnlyList<string>? cidrs)
+    {
+        if (cidrs is null || cidrs.Count == 0)
+        {
+            return null;
+        }
+
+        var canonical = new List<string>();
+        foreach (var raw in cidrs)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            if (!NetworkRules.TryParseCidr(raw, out var normalized))
+            {
+                throw new VaultAdminException($"'{raw.Trim()}' is not a valid IP address or CIDR range (e.g. 203.0.113.7 or 10.8.0.0/24).");
+            }
+
+            if (!canonical.Contains(normalized))
+            {
+                canonical.Add(normalized);
+            }
+        }
+
+        return canonical.Count == 0 ? null : string.Join(';', canonical);
     }
 
     public async Task<bool> RevokeKeyAsync(Guid keyId, CancellationToken ct)
@@ -203,7 +240,7 @@ public sealed class ServiceAccountService : IServiceAccountService, IApiKeyAuthe
         return true;
     }
 
-    public async Task<AuthenticatedServiceAccount?> AuthenticateAsync(string presentedToken, CancellationToken ct)
+    public async Task<AuthenticatedServiceAccount?> AuthenticateAsync(string presentedToken, IPAddress? sourceIp, CancellationToken ct)
     {
         presentedToken = presentedToken.Trim();
         if (!presentedToken.StartsWith(ApiKeyPrefix, StringComparison.Ordinal))
@@ -214,6 +251,14 @@ public sealed class ServiceAccountService : IServiceAccountService, IApiKeyAuthe
         var key = await _repository.FindKeyByHashAsync(_keys.Hash(presentedToken), ct);
         var now = _clock.GetUtcNow();
         if (key?.ServiceAccount is null || !key.IsActive(now) || key.ServiceAccount.IsDisabled)
+        {
+            return null;
+        }
+
+        // Network binding: a key with an allow-list is usable only from those ranges. Rejected
+        // silently (as with any other invalid key) so the caller learns nothing about why.
+        var allowedCidrs = key.AllowedCidrList();
+        if (allowedCidrs.Count > 0 && !NetworkRules.IsInAnyCidr(sourceIp, allowedCidrs))
         {
             return null;
         }

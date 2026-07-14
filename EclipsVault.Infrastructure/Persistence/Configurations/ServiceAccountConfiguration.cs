@@ -40,5 +40,6 @@ public sealed class ApiKeyConfiguration : IEntityTypeConfiguration<ApiKey>
         builder.Property(k => k.ClearanceCeiling).HasConversion<int?>();
         builder.Property(k => k.ProjectScope).HasMaxLength(64);
         builder.Property(k => k.MetadataOnly).HasDefaultValue(false);
+        builder.Property(k => k.AllowedCidrs).HasMaxLength(512);
     }
 }

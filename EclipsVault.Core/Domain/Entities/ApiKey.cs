@@ -43,8 +43,20 @@ public class ApiKey
     /// <summary>When true, the key may list secret metadata but never read (decrypt) a value.</summary>
     public bool MetadataOnly { get; set; }
 
+    /// <summary>
+    /// Optional network binding: a ';'-separated list of CIDR ranges the key may be presented
+    /// from. Null or empty means no restriction. A leaked key is useless off these ranges.
+    /// </summary>
+    public string? AllowedCidrs { get; set; }
+
     public bool IsActive(DateTimeOffset nowUtc)
         => RevokedAtUtc is null && (ExpiresAtUtc is null || ExpiresAtUtc > nowUtc);
+
+    /// <summary>The network binding split into individual CIDR ranges (empty when unrestricted).</summary>
+    public IReadOnlyList<string> AllowedCidrList()
+        => string.IsNullOrEmpty(AllowedCidrs)
+            ? []
+            : AllowedCidrs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>The clearance this key actually acts with: the account's, capped by any ceiling.</summary>
     public ClearanceLevel EffectiveClearance(ClearanceLevel accountClearance)

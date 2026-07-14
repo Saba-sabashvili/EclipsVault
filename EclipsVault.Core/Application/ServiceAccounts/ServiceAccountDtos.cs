@@ -20,10 +20,11 @@ public sealed record ApiKeyDto(
     DateTimeOffset? LastUsedAtUtc,
     ClearanceLevel? ClearanceCeiling,
     string? ProjectScope,
-    bool MetadataOnly)
+    bool MetadataOnly,
+    IReadOnlyList<string> AllowedCidrs)
 {
     /// <summary>True when the key narrows access below its service account in any dimension.</summary>
-    public bool IsScoped => ClearanceCeiling is not null || !string.IsNullOrEmpty(ProjectScope) || MetadataOnly;
+    public bool IsScoped => ClearanceCeiling is not null || !string.IsNullOrEmpty(ProjectScope) || MetadataOnly || AllowedCidrs.Count > 0;
 }
 
 public sealed record ServiceAccountDetailsDto(
@@ -45,7 +46,8 @@ public sealed record IssueApiKeyRequest(
     int? TtlDays,
     ClearanceLevel? ClearanceCeiling,
     string? ProjectScope,
-    bool MetadataOnly);
+    bool MetadataOnly,
+    IReadOnlyList<string>? AllowedCidrs = null);
 
 /// <summary>Returned once, at issue time — carries the raw token, which is never persisted or shown again.</summary>
 public sealed record IssuedApiKeyDto(Guid Id, string RawToken, string Prefix);
