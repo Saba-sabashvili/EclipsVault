@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EclipsVault.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +10,7 @@ namespace EclipsVault.Web.Controllers;
 /// and strictly self-scoped: it reads only the caller's own posture and discloses nothing about
 /// anyone else. Read-only — every remediation link points at an existing self-service page.
 /// </summary>
-public sealed class SecurityController : Controller
+public sealed class SecurityController : VaultController
 {
     private readonly ISecurityCheckupService _checkup;
 
@@ -30,6 +29,4 @@ public sealed class SecurityController : Controller
         return View(new SecurityCheckupViewModel { Checkup = checkup });
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

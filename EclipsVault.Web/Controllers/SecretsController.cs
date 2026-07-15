@@ -17,7 +17,7 @@ namespace EclipsVault.Web.Controllers;
 /// against the resource's attributes before anything sensitive happens; the service
 /// layer independently enforces honey-token traps and fail-closed auditing.
 /// </summary>
-public sealed class SecretsController : Controller
+public sealed class SecretsController : VaultController
 {
     private readonly ISecretService _secrets;
     private readonly ISecretGrantService _grants;
@@ -393,6 +393,4 @@ public sealed class SecretsController : Controller
         return isAdmin || string.Equals(project, dto.ProjectKey, StringComparison.OrdinalIgnoreCase);
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

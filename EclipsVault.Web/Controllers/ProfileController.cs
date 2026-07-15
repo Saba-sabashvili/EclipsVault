@@ -16,7 +16,7 @@ namespace EclipsVault.Web.Controllers;
 /// password, personal MFA, and session control. Anything here acts only on the
 /// caller's own account.
 /// </summary>
-public sealed class ProfileController : Controller
+public sealed class ProfileController : VaultController
 {
     /// <summary>Session key holding the challenge issued for an in-flight passkey registration.</summary>
     private const string PasskeyRegistrationChallengeKey = "passkey:registration:challenge";
@@ -303,6 +303,4 @@ public sealed class ProfileController : Controller
             new AuthenticationProperties { IsPersistent = false });
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

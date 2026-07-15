@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
@@ -13,7 +12,7 @@ namespace EclipsVault.Web.Controllers;
 /// everywhere". Strictly self-scoped — every registry call is keyed by the caller's own user id,
 /// so a user can only ever see and revoke their own sessions, never anyone else's.
 /// </summary>
-public sealed class SessionsController : Controller
+public sealed class SessionsController : VaultController
 {
     private readonly ISessionRegistry _sessions;
     private readonly IAuditSink _audit;
@@ -92,9 +91,4 @@ public sealed class SessionsController : Controller
             Details = $"Revoked session {sessionId:N}"
         }, ct);
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
-
-    private Guid? CurrentSessionId()
-        => Guid.TryParse(User.FindFirstValue(VaultClaimTypes.SessionId), out var id) ? id : null;
 }

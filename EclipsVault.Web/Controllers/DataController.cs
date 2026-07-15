@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using EclipsVault.Core.Domain.Enums;
@@ -15,7 +14,7 @@ namespace EclipsVault.Web.Controllers;
 /// included. Downloading is a deliberate, antiforgery-protected POST (so it can't be triggered by a
 /// cross-site request or a drive-by prefetch) and is recorded in the audit trail.
 /// </summary>
-public sealed class DataController : Controller
+public sealed class DataController : VaultController
 {
     // Indented for humans; default (HTML-safe) escaping since the payload carries user-controlled
     // strings and is served for download rather than embedded anywhere.
@@ -88,6 +87,4 @@ public sealed class DataController : Controller
         return slug.Length == 0 ? "account" : slug;
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

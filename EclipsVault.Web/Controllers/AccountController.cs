@@ -1,5 +1,5 @@
-using System.Security.Claims;
 using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Web.Authentication;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
@@ -74,13 +74,8 @@ public sealed class AccountController : Controller
             return View(model);
         }
 
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, result.User.Id.ToString()),
-                new Claim(ClaimTypes.Name, result.User.Username)
-            ],
-            AuthSchemes.MfaPending);
-        await HttpContext.SignInAsync(AuthSchemes.MfaPending, new ClaimsPrincipal(identity));
+        var principal = VaultClaimsFactory.CreatePendingMfaPrincipal(result.User);
+        await HttpContext.SignInAsync(AuthSchemes.MfaPending, principal);
 
         return RedirectToAction(result.Status == CredentialStatus.RequiresTotpEnrollment
             ? nameof(EnrollTotp)
@@ -324,23 +319,11 @@ public sealed class AccountController : Controller
         // A fresh per-session id lets this device be revoked on its own, distinct from the
         // account-wide "sign out everywhere" kill switch. It rides in the cookie as a claim.
         var sessionId = Guid.NewGuid();
-        var authTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(VaultClaimTypes.Display, string.IsNullOrWhiteSpace(user.DisplayName) ? user.Username : user.DisplayName),
-                new Claim(VaultClaimTypes.AvatarVersion, DateTimeOffset.UtcNow.Ticks.ToString()),
-                new Claim(VaultClaimTypes.Clearance, ((int)user.Clearance).ToString()),
-                new Claim(VaultClaimTypes.Project, user.ProjectKey),
-                new Claim(VaultClaimTypes.AuthTime, authTime),
-                new Claim(VaultClaimTypes.SessionId, sessionId.ToString())
-            ],
-            CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = VaultClaimsFactory.CreateSessionPrincipal(user, sessionId, DateTimeOffset.UtcNow);
 
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity),
+            principal,
             new AuthenticationProperties { IsPersistent = false });
 
         var now = DateTimeOffset.UtcNow;
@@ -356,6 +339,5 @@ public sealed class AccountController : Controller
             user.Username, user.Id, HttpContext.Connection.RemoteIpAddress);
     }
 
-    private Guid? GetMfaPendingUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+    private Guid? GetMfaPendingUserId() => User.GetUserIdOrNull();
 }

@@ -12,13 +12,6 @@ public sealed record UserDto(
     bool TotpEnabled,
     bool IsDisabled);
 
-public enum CredentialStatus
-{
-    Invalid = 0,
-    RequiresTotp = 1,
-    RequiresTotpEnrollment = 2
-}
-
 public sealed record CredentialCheckResult(CredentialStatus Status, UserDto? User)
 {
     public static readonly CredentialCheckResult Invalid = new(CredentialStatus.Invalid, null);

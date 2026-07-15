@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 
 namespace EclipsVault.Web.Authorization;
@@ -58,7 +59,7 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
 
         // An explicit grant lets a user outside the secret's project reach it.
         var isGranted = false;
-        if (Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        if (context.User.GetUserIdOrNull() is { } userId)
         {
             isGranted = await _grants.HasActiveGrantAsync(userId, resource.Id, ct);
         }

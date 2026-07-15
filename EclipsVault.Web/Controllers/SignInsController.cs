@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EclipsVault.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +10,7 @@ namespace EclipsVault.Web.Controllers;
 /// so anyone can spot an attempt they didn't make, especially one from a location they've never
 /// signed in from. Read-only; it discloses nothing about any other user.
 /// </summary>
-public sealed class SignInsController : Controller
+public sealed class SignInsController : VaultController
 {
     private readonly ISignInHistoryService _history;
 
@@ -24,6 +23,4 @@ public sealed class SignInsController : Controller
         return View(new SignInHistoryViewModel { History = history });
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
@@ -14,7 +13,7 @@ namespace EclipsVault.Web.Controllers;
 /// resets, runtime trusted networks, and intrusion-defence block management.
 /// </summary>
 [Authorize(Policy = VaultPolicies.AdminOnly)]
-public sealed class AdminController : Controller
+public sealed class AdminController : VaultController
 {
     private readonly IUserAdminService _userAdmin;
     private readonly ITrustedNetworkService _trustedNetworks;
@@ -319,6 +318,4 @@ public sealed class AdminController : Controller
         };
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

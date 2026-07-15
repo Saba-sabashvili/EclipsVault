@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EclipsVault.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +9,7 @@ namespace EclipsVault.Web.Controllers;
 /// (not just admins) so anyone can review their own sign-ins, reveals, and account changes and
 /// spot anything they didn't do. Read-only; it discloses nothing about other users.
 /// </summary>
-public sealed class ActivityController : Controller
+public sealed class ActivityController : VaultController
 {
     private readonly IActivityService _activity;
 
@@ -23,6 +22,4 @@ public sealed class ActivityController : Controller
         return View(new ActivityIndexViewModel { Feed = feed });
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

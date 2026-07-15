@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using EclipsVault.Web.Extensions;
 
 namespace EclipsVault.Web.Services;
 
@@ -13,10 +13,7 @@ public sealed class HttpAuditContext : IAuditContext
 
     public HttpAuditContext(IHttpContextAccessor accessor) => _accessor = accessor;
 
-    public Guid? UserId
-        => Guid.TryParse(_accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-            ? id
-            : null;
+    public Guid? UserId => _accessor.HttpContext?.User.GetUserIdOrNull();
 
     public string? Username => _accessor.HttpContext?.User.Identity?.Name;
 
