@@ -1,0 +1,127 @@
+@model MyAccessViewModel
+@{
+    ViewData["Title"] = "My access";
+}
+
+<div class="page-header">
+    <div>
+        <h1>My access</h1>
+        <p class="page-sub">
+            What you can open right now, and — where you can't — exactly why. This is computed from
+            the same rules that actually guard every secret, so it always matches what you'll see.
+        </p>
+    </div>
+</div>
+
+<div class="two-col">
+    <section class="panel">
+        <div class="panel-header"><h2>You</h2></div>
+        <dl class="detail-grid">
+            <dt>Clearance</dt>
+            <dd><span class="badge sens-@((int)Model.Clearance)">@Model.Clearance</span> &mdash; you can open secrets classified up to <strong>@Model.Clearance</strong>.</dd>
+            <dt>Project</dt>
+            <dd><span class="mono">@Model.ProjectKey</span></dd>
+            <dt>Other projects</dt>
+            <dd>
+                @if (Model.CrossesProjects)
+                {
+                    <text>Your TopSecret clearance lets you reach secrets in <strong>any</strong> project.</text>
+                }
+                else
+                {
+                    <text>You can only reach secrets in <span class="mono">@Model.ProjectKey</span>, unless a secret is explicitly shared with you.</text>
+                }
+            </dd>
+        </dl>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header"><h2>Right now</h2></div>
+        <dl class="detail-grid">
+            <dt>Your network</dt>
+            <dd>
+                <span class="mono">@Model.SourceIp</span>
+                @if (Model.IsTrustedNetwork)
+                {
+                    <span class="badge tone-ok">Trusted</span>
+                }
+                else
+                {
+                    <span class="badge tone-warn">Not trusted</span>
+                }
+            </dd>
+            <dt>Production window</dt>
+            <dd>
+                @if (Model.IsProductionWindowOpen)
+                {
+                    <span class="badge tone-ok">Open now</span>
+                }
+                else
+                {
+                    <span class="badge tone-warn">Closed</span>
+                }
+                <span class="muted">@Model.WindowRange</span>
+            </dd>
+        </dl>
+        <p class="muted access-hint">
+            Confidential secrets and above can only be opened from a trusted network; production
+            secrets only during the window. These apply to everyone — clearance doesn't override them.
+        </p>
+    </section>
+</div>
+
+<section class="panel">
+    <div class="panel-header"><h2>What you can open right now</h2></div>
+    <div class="table-scroll">
+        <table class="access-matrix">
+            <thead>
+                <tr>
+                    <th>Sensitivity</th>
+                    @foreach (var env in Model.Environments)
+                    {
+                        <th>@env</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <th><span class="badge sens-@((int)row.Sensitivity)">@row.Sensitivity</span></th>
+                        @foreach (var cell in row.Cells)
+                        {
+                            <td class="@(cell.Allowed ? "cell-allow" : "cell-deny")">
+                                @if (cell.Allowed)
+                                {
+                                    <svg class="cell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+                                    <span>Can open</span>
+                                }
+                                else
+                                {
+                                    <svg class="cell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                                    <span>@cell.Reason</span>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="muted access-hint">
+        The grid assumes a secret in your own project. A denial you can act on is
+        <em>Untrusted network</em> (sign in from a trusted range) or <em>Outside access hours</em>
+        (production, outside the window). <em>Clearance too low</em> is fixed by an administrator.
+    </p>
+</section>
+
+<section class="panel callout-warn">
+    <div class="panel-header"><h2>One exception: decoys</h2></div>
+    <p class="muted">
+        Some entries are <strong>intrusion-detection decoys</strong> (honey-tokens). These rules do
+        <em>not</em> apply to them: opening a decoy always trips the trap — your session is revoked
+        and your network is blocked — no matter your clearance or project. In the secrets list they
+        carry a red <span class="badge tone-critical">decoy</span> badge for authorised staff, so
+        you can steer clear.
+    </p>
+</section>

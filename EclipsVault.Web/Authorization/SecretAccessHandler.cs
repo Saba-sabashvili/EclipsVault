@@ -1,59 +1,35 @@
 using System.Security.Claims;
 using EclipsVault.Core.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Options;
 
 namespace EclipsVault.Web.Authorization;
 
 /// <summary>
-/// Resource-based ABAC handler. Extracts subject attributes from claims, computes
-/// the environmental context (time window, network trust from static configuration
-/// plus the runtime-managed trusted networks), and delegates the actual decision to
-/// the pure rule engine in Core.
+/// Resource-based ABAC handler. Extracts subject attributes from claims, reads the environmental
+/// context (production window, network trust) from the shared <see cref="IAccessContextProvider"/>
+/// — the same snapshot the self-service "My access" page shows — resolves any explicit grant, and
+/// delegates the actual decision to the pure rule engine in Core.
 /// </summary>
 public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequirement, SecretDetailsDto>
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ITrustedNetworkService _trustedNetworks;
+    private readonly IAccessContextProvider _accessContext;
     private readonly ISecretGrantService _grants;
-    private readonly AbacOptions _options;
-    private readonly TimeZoneInfo? _windowZone;
     private readonly TimeProvider _clock;
     private readonly ILogger<SecretAccessHandler> _logger;
 
     public SecretAccessHandler(
         IHttpContextAccessor httpContextAccessor,
-        ITrustedNetworkService trustedNetworks,
+        IAccessContextProvider accessContext,
         ISecretGrantService grants,
-        IOptions<AbacOptions> options,
         TimeProvider clock,
         ILogger<SecretAccessHandler> logger)
     {
         _httpContextAccessor = httpContextAccessor;
-        _trustedNetworks = trustedNetworks;
+        _accessContext = accessContext;
         _grants = grants;
-        _options = options.Value;
-        _windowZone = ResolveWindowZone(_options.TimeZoneId, logger);
         _clock = clock;
         _logger = logger;
-    }
-
-    private static TimeZoneInfo? ResolveWindowZone(string? timeZoneId, ILogger logger)
-    {
-        if (string.IsNullOrWhiteSpace(timeZoneId))
-        {
-            return null; // interpret the window in UTC (historical behaviour)
-        }
-
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-        {
-            logger.LogWarning(ex, "Abac:TimeZoneId '{TimeZoneId}' could not be resolved; falling back to UTC for the production window", timeZoneId);
-            return null;
-        }
     }
 
     protected override async Task HandleRequirementAsync(
@@ -75,17 +51,10 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
         var subject = new SubjectAttributes((ClearanceLevel)clearanceValue, projectClaim);
         var resourceAttributes = new ResourceAttributes(resource.Environment, resource.Sensitivity, resource.ProjectKey);
 
-        var httpContext = _httpContextAccessor.HttpContext;
-        var now = _clock.GetUtcNow();
-        var sourceIp = httpContext?.Connection.RemoteIpAddress;
+        var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
 
-        var ct = httpContext?.RequestAborted ?? CancellationToken.None;
-
-        var isTrusted = NetworkRules.IsInAnyCidr(sourceIp, _options.TrustedIpCidrs);
-        if (!isTrusted && sourceIp is not null)
-        {
-            isTrusted = await _trustedNetworks.IsTrustedAsync(sourceIp, ct);
-        }
+        // Shared with the "My access" page: network trust + production-window state.
+        var accessContext = await _accessContext.CurrentAsync(ct);
 
         // An explicit grant lets a user outside the secret's project reach it.
         var isGranted = false;
@@ -95,10 +64,10 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
         }
 
         var requestContext = new RequestContext(
-            now,
-            sourceIp?.ToString(),
-            IsWithinProductionWindow(now),
-            isTrusted,
+            _clock.GetUtcNow(),
+            accessContext.SourceIp?.ToString(),
+            accessContext.IsWithinProductionWindow,
+            accessContext.IsTrustedNetwork,
             isGranted);
 
         // Per-key scope (present only for scoped API keys; interactive users carry none).
@@ -123,14 +92,5 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
                 context.Fail(new AuthorizationFailureReason(this, reason));
             }
         }
-    }
-
-    private bool IsWithinProductionWindow(DateTimeOffset nowUtc)
-    {
-        var hour = _windowZone is null
-            ? nowUtc.UtcDateTime.Hour
-            : TimeZoneInfo.ConvertTime(nowUtc, _windowZone).Hour;
-        return hour >= _options.ProductionWindowStartUtcHour
-               && hour < _options.ProductionWindowEndUtcHour;
     }
 }

@@ -666,6 +666,20 @@ input.code-input {
 .feed-item.check-fail .feed-icon { color: #fff; border-color: transparent; background: var(--danger); }
 .check-rec { margin-top: 0.3rem; font-size: 0.82rem; color: var(--text-secondary); }
 
+/* ---- My access (permission matrix) ------------------------------------ */
+.access-matrix { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 520px; }
+.access-matrix th, .access-matrix td { padding: 0.6rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.access-matrix tr:last-child th, .access-matrix tr:last-child td { border-bottom: none; }
+.access-matrix thead th { color: var(--text-muted); font-weight: 600; font-size: 0.8rem; }
+.access-matrix tbody th { font-weight: 500; }
+.cell-icon { width: 15px; height: 15px; vertical-align: middle; margin-right: 0.35rem; }
+.access-matrix td span { vertical-align: middle; }
+.cell-allow { color: var(--ok); background: var(--ok-soft); }
+.cell-deny { color: var(--text-muted); }
+.access-hint { margin: 0.9rem 0 0; font-size: 0.82rem; line-height: 1.5; }
+
+.panel.callout-warn { border-left: 3px solid var(--warn); }
+
 /* ---- Quick actions ----------------------------------------------------- */
 .quick-actions { display: flex; flex-direction: column; gap: 0.6rem; }
 

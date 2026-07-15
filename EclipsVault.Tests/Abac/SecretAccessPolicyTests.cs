@@ -87,6 +87,30 @@ public class SecretAccessPolicyTests
     }
 
     [Fact]
+    public void TopSecret_clearance_is_still_bound_by_the_production_window()
+    {
+        // The point that surprises admins: clearance dominates *sensitivity*, but the environmental
+        // rules (time window, network trust) apply to everyone — TopSecret is not a super-bypass.
+        var subject = new SubjectAttributes(ClearanceLevel.TopSecret, "GLOBAL");
+        var decision = SecretAccessPolicy.Evaluate(
+            subject,
+            Resource(env: SecretEnvironment.Production, sensitivity: SensitivityLevel.TopSecret, project: "GLOBAL"),
+            Context(window: false));
+        Assert.False(decision.IsAllowed);
+    }
+
+    [Fact]
+    public void TopSecret_clearance_is_still_bound_by_the_trusted_network_rule()
+    {
+        var subject = new SubjectAttributes(ClearanceLevel.TopSecret, "GLOBAL");
+        var decision = SecretAccessPolicy.Evaluate(
+            subject,
+            Resource(sensitivity: SensitivityLevel.TopSecret, project: "GLOBAL"),
+            Context(trusted: false));
+        Assert.False(decision.IsAllowed);
+    }
+
+    [Fact]
     public void Metadata_only_key_cannot_read_a_value_even_when_otherwise_allowed()
     {
         var subject = new SubjectAttributes(ClearanceLevel.Secret, "PHOENIX");

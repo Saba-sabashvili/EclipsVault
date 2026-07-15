@@ -37,6 +37,7 @@ try
 
     // ABAC: policy-based authorization with a resource-aware handler.
     builder.Services.Configure<AbacOptions>(builder.Configuration.GetSection(AbacOptions.SectionName));
+    builder.Services.AddScoped<IAccessContextProvider, AccessContextProvider>();
     builder.Services.AddScoped<IAuthorizationHandler, SecretAccessHandler>();
 
     builder.Services
