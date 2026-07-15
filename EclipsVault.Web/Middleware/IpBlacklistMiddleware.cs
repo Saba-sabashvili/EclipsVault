@@ -25,7 +25,7 @@ public sealed class IpBlacklistMiddleware
         </head>
         <body class="auth-body">
             <main class="auth-wrap">
-                <span class="brand auth-brand"><span class="brand-mark">🌒</span><span class="brand-name">EclipsVault</span></span>
+                <span class="brand auth-brand"><span class="brand-name">EclipsVault</span></span>
                 <section class="auth-card">
                     <h1>Access blocked</h1>
                     <p class="muted">

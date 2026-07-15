@@ -33,7 +33,6 @@
 <div class="shell">
     <aside class="sidebar">
         <a class="brand" asp-controller="Home" asp-action="Index">
-            <span class="brand-mark">🌒</span>
             <span class="brand-name">EclipsVault</span>
         </a>
 
@@ -78,6 +77,10 @@
                 <a class="@Nav("Sessions")" asp-controller="Sessions" asp-action="Index">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="10" rx="1.6"/><path d="M6 18h6M9 14v4"/><rect x="17" y="9" width="5" height="11" rx="1.4"/></svg>
                     Signed-in devices
+                </a>
+                <a class="@Nav("Data")" asp-controller="Data" asp-action="Index">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5 12 17l2.5-2.5"/></svg>
+                    Your data
                 </a>
 
                 @if (isAdmin)

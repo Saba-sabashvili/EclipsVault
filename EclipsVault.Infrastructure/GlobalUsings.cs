@@ -7,6 +7,7 @@ global using EclipsVault.Core.Application.Activity;
 global using EclipsVault.Core.Application.Auditing;
 global using EclipsVault.Core.Application.Authentication;
 global using EclipsVault.Core.Application.Dashboard;
+global using EclipsVault.Core.Application.DataExport;
 global using EclipsVault.Core.Application.KeyManagement;
 global using EclipsVault.Core.Application.Mfa;
 global using EclipsVault.Core.Application.Networks;

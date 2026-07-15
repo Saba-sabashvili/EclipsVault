@@ -177,7 +177,6 @@ button { font-family: inherit; }
     letter-spacing: -0.02em;
 }
 .brand:hover { color: var(--text); }
-.brand-mark { font-size: 1.3rem; }
 
 .sidenav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
 

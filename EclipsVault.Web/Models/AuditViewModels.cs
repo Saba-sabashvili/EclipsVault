@@ -66,6 +66,7 @@ public static class AuditDisplay
         AuditAction.ApiKeyRevoked => ("API key revoked", "warn"),
         AuditAction.AuditCheckpointCreated => ("Checkpoint signed", "ok"),
         AuditAction.AuditBundleExported => ("Audit exported", "muted"),
+        AuditAction.PersonalDataExported => ("Data exported", "muted"),
         AuditAction.PasskeyRegistered => ("Passkey added", "ok"),
         AuditAction.PasskeyRemoved => ("Passkey removed", "warn"),
         AuditAction.PasskeyLogin => ("Passkey sign-in", "ok"),

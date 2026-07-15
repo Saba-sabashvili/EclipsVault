@@ -50,6 +50,7 @@ public static class ActivityDescriber
         AuditAction.PasskeyRegistered => new(ActivityCategory.Account, "Added a passkey", ActivitySeverity.Notable),
         AuditAction.PasskeyRemoved => new(ActivityCategory.Account, "Removed a passkey", ActivitySeverity.Notable),
         AuditAction.RecoveryCodesGenerated => new(ActivityCategory.Account, "Generated new recovery codes", ActivitySeverity.Notable),
+        AuditAction.PersonalDataExported => new(ActivityCategory.Account, "Downloaded a copy of your data", ActivitySeverity.Notable),
 
         // --- Security events (high signal) ------------------------------------------
         AuditAction.SessionsRevokedSelf => new(ActivityCategory.Security, "Signed out of all sessions", ActivitySeverity.Notable),

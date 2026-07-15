@@ -75,6 +75,9 @@ public enum AuditAction
     AuditCheckpointCreated = 110,
     AuditBundleExported = 111,
 
+    /// <summary>A user downloaded a copy of their own account data (personal-data export).</summary>
+    PersonalDataExported = 112,
+
     // Step-up re-authentication for sensitive reveals.
     StepUpVerified = 120,
     StepUpFailed = 121
