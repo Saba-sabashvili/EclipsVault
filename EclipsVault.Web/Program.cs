@@ -189,6 +189,17 @@ try
         options.HeaderName = "RequestVerificationToken";
     });
 
+    // HSTS: pin browsers to HTTPS for a credentials product. The framework default is a
+    // 30-day max-age with no subdomain coverage; we harden it to a year, extend it to every
+    // subdomain, and opt into the browser preload list so the very first request is already
+    // forced onto TLS. Emitted by UseHsts() below (production only, never on localhost).
+    builder.Services.AddHsts(options =>
+    {
+        options.MaxAge = TimeSpan.FromDays(365);
+        options.IncludeSubDomains = true;
+        options.Preload = true;
+    });
+
     // Server-side ceremony state for WebAuthn: the issued challenge is held here between the
     // "begin" and "complete" calls, so it can never be tampered with by the client.
     builder.Services.AddSession(options =>
