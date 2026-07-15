@@ -205,6 +205,18 @@ button { font-family: inherit; }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); }
 .nav-item.active svg { opacity: 1; }
 
+/* Collapsible nav groups (native <details>, no script). A group opens itself and tints its
+   header when one of its children is the active page. */
+.nav-group { display: flex; flex-direction: column; }
+.nav-group-summary { cursor: pointer; list-style: none; }
+.nav-group-summary::-webkit-details-marker { display: none; }
+.nav-group-summary .nav-chevron { width: 14px; height: 14px; margin-left: auto; opacity: 0.55; transition: transform var(--dur) var(--ease); }
+.nav-group[open] > .nav-group-summary .nav-chevron { transform: rotate(90deg); }
+.nav-group-summary.has-active { color: var(--accent); }
+.nav-group-summary.has-active svg { opacity: 1; }
+/* Children indented under the header, with a guide line so the grouping reads at a glance. */
+.nav-group-items { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 2px 1.45rem; padding-left: 0.4rem; border-left: 1px solid var(--border); }
+
 .sidebar-footer {
     border-top: 1px solid var(--border);
     padding-top: 0.85rem;
