@@ -28,6 +28,15 @@ public interface IAuditLogReader
     /// </summary>
     Task<IReadOnlyList<AuditEntryDto>> ListForActorAsync(Guid actorUserId, int skip, int take, CancellationToken ct);
 
+    /// <summary>
+    /// The most recent entries for one actor whose action is in <paramref name="actions"/>, newest
+    /// first, keyed by user id. The action filter is applied in the database so we never pull the
+    /// whole feed to surface a narrow slice (e.g. just the sign-in events). Returns an empty list
+    /// for an empty actor or an empty action set.
+    /// </summary>
+    Task<IReadOnlyList<AuditEntryDto>> ListForActorByActionsAsync(
+        Guid actorUserId, IReadOnlyCollection<AuditAction> actions, int take, CancellationToken ct);
+
     Task<int> CountCriticalSinceAsync(DateTimeOffset sinceUtc, CancellationToken ct);
 
     /// <summary>Re-walks the hash chain and reports whether it is intact, pinpointing the first broken row.</summary>

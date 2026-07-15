@@ -28,7 +28,7 @@
 
     var shareActive = GroupActive(("Secrets", "SharedWithMe"), ("Secrets", "SharedByMe"));
     var accessActive = GroupActive(("Access", null), ("AccessRequests", null));
-    var securityActive = GroupActive(("Security", null), ("Sessions", null), ("Activity", null));
+    var securityActive = GroupActive(("Security", null), ("SignIns", null), ("Sessions", null), ("Activity", null));
 }
 <!DOCTYPE html>
 <html lang="en" data-theme="@theme">
@@ -112,6 +112,10 @@
                         <a class="@Nav("Security")" asp-controller="Security" asp-action="Index">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
                             Security checkup
+                        </a>
+                        <a class="@Nav("SignIns")" asp-controller="SignIns" asp-action="Index">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M8 7l5 5-5 5M13 12H3"/></svg>
+                            Sign-in history
                         </a>
                         <a class="@Nav("Sessions")" asp-controller="Sessions" asp-action="Index">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="10" rx="1.6"/><path d="M6 18h6M9 14v4"/><rect x="17" y="9" width="5" height="11" rx="1.4"/></svg>

@@ -143,6 +143,7 @@ public static class DependencyInjection
         services.AddScoped<IMfaRecoveryService, MfaRecoveryService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<ISignInHistoryService, SignInHistoryService>();
         services.AddScoped<ISecurityCheckupService, SecurityCheckupService>();
         services.AddScoped<IPersonalDataExportService, PersonalDataExportService>();
         services.AddScoped<IPasskeyService, PasskeyService>();

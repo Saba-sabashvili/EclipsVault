@@ -18,5 +18,6 @@ global using EclipsVault.Core.Application.Secrets;
 global using EclipsVault.Core.Application.SecurityCheckup;
 global using EclipsVault.Core.Application.ServiceAccounts;
 global using EclipsVault.Core.Application.Sessions;
+global using EclipsVault.Core.Application.SignInHistory;
 global using EclipsVault.Core.Application.StepUp;
 global using EclipsVault.Core.Application.Users;

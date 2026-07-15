@@ -37,6 +37,9 @@ public class ActivityServiceTests
 
         public Task<IReadOnlyList<AuditEntryDto>> ListRecentAsync(int count, string? username, CancellationToken ct)
             => throw new NotSupportedException();
+        public Task<IReadOnlyList<AuditEntryDto>> ListForActorByActionsAsync(
+            Guid actorUserId, IReadOnlyCollection<AuditAction> actions, int take, CancellationToken ct)
+            => throw new NotSupportedException();
         public Task<int> CountCriticalSinceAsync(DateTimeOffset sinceUtc, CancellationToken ct)
             => throw new NotSupportedException();
         public Task<AuditIntegrityReport> VerifyIntegrityAsync(CancellationToken ct)
