@@ -22,6 +22,14 @@ public interface ISecretService
     /// </summary>
     Task RotateAsync(Guid id, string newValue, string? changeNote, int? renewTtlDays, CancellationToken ct);
 
+    /// <summary>
+    /// Rotates a <b>managed</b> secret: the vault picks a new password, changes the real principal
+    /// on its backend, and stores the result — so the stored value and the live credential move
+    /// together instead of an operator changing one and pasting the other. Throws
+    /// <c>VaultAdminException</c> if the secret is not bound to a backend principal.
+    /// </summary>
+    Task RotateManagedAsync(Guid id, int? renewTtlDays, CancellationToken ct);
+
     /// <summary>Lists the archived (superseded) values of a secret, newest first. Metadata only.</summary>
     Task<IReadOnlyList<SecretVersionDto>> ListVersionsAsync(Guid id, CancellationToken ct);
 

@@ -129,7 +129,9 @@ public static class DependencyInjection
         services.AddScoped<IIntrusionResponseService, IntrusionResponseService>();
 
         // Dynamic secrets: one backend per DynamicSecretBackend value; the service picks by role.
-        services.AddScoped<IDynamicSecretBackend, SqlServerDynamicSecretBackend>();
+        services.AddScoped<SqlServerBackend>();
+        services.AddScoped<IDynamicSecretBackend>(sp => sp.GetRequiredService<SqlServerBackend>());
+        services.AddScoped<IManagedSecretBackend>(sp => sp.GetRequiredService<SqlServerBackend>());
         services.AddScoped<IDynamicSecretService, DynamicSecretService>();
 
         // Runtime-managed trusted networks + audit reading.

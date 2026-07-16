@@ -25,7 +25,9 @@ public sealed record SecretDetailsDto(
     string Algorithm,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
-    DateTimeOffset? ExpiresAtUtc) : IAbacResource;
+    DateTimeOffset? ExpiresAtUtc,
+    bool IsManaged = false,
+    string? RotationPrincipal = null) : IAbacResource;
 
 /// <summary>A decrypted payload. Exists only for the duration of a single authorized response.</summary>
 public sealed record RevealedSecretDto(Guid Id, string Name, string Value);

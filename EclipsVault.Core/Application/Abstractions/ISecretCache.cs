@@ -19,7 +19,9 @@ public sealed record EncryptedSecretEnvelope(
     bool IsHoneyToken,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
-    DateTimeOffset? ExpiresAtUtc);
+    DateTimeOffset? ExpiresAtUtc,
+    bool IsManaged = false,
+    string? RotationPrincipal = null);
 
 /// <summary>
 /// Cache-aside store for encrypted envelopes. Entries carry a short absolute TTL and

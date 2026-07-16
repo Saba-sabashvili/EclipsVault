@@ -24,19 +24,22 @@ public sealed class SecretsController : VaultController
     private readonly IAuthorizationService _authorization;
     private readonly IStepUpService _stepUp;
     private readonly TimeProvider _clock;
+    private readonly ILogger<SecretsController> _logger;
 
     public SecretsController(
         ISecretService secrets,
         ISecretGrantService grants,
         IAuthorizationService authorization,
         IStepUpService stepUp,
-        TimeProvider clock)
+        TimeProvider clock,
+        ILogger<SecretsController> logger)
     {
         _secrets = secrets;
         _grants = grants;
         _authorization = authorization;
         _stepUp = stepUp;
         _clock = clock;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -146,6 +149,40 @@ public sealed class SecretsController : VaultController
             ? $"Secret rotated and renewed for {model.RenewTtlDays} more day(s). The previous value was archived to version history."
             : "Secret rotated. The previous value was archived to version history.");
         return RedirectToAction(nameof(Details), new { id = model.Id });
+    }
+
+    /// <summary>
+    /// Rotates a managed secret: the vault changes the real principal's password upstream and stores
+    /// the result. No new value is submitted — the whole point is that a human never handles it.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> RotateManaged(Guid id, int? renewTtlDays, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        try
+        {
+            await _secrets.RotateManagedAsync(id, renewTtlDays, ct);
+            this.FlashSuccess(
+                "Rotated upstream. The vault generated a new password, changed the real credential, and stored it — " +
+                "the previous value was archived to version history.");
+        }
+        catch (VaultAdminException ex)
+        {
+            this.FlashError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Don't leak the backend's message onto the page; the audit trail and logs have it.
+            _logger.LogError(ex, "Upstream rotation of secret {SecretId} failed", id);
+            this.FlashError("The backend refused the rotation. The credential is unchanged — check the audit trail.");
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
     }
 
     [HttpPost]
@@ -356,6 +393,8 @@ public sealed class SecretsController : VaultController
             CreatedAtUtc = dto.CreatedAtUtc,
             UpdatedAtUtc = dto.UpdatedAtUtc,
             ExpiresAtUtc = dto.ExpiresAtUtc,
+            IsManaged = dto.IsManaged,
+            RotationPrincipal = dto.RotationPrincipal,
             RevealedValue = revealedValue,
             RevealedLabel = revealedLabel,
             Versions = await _secrets.ListVersionsAsync(dto.Id, ct),

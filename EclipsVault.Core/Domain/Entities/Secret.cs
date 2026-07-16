@@ -56,6 +56,20 @@ public class Secret
 
     public Guid CreatedByUserId { get; set; }
 
+    /// <summary>
+    /// Set when this secret <i>is</i> a real principal's password on a backend, and the vault is
+    /// trusted to change it. Rotation then means the vault picks a new password, applies it
+    /// upstream, and stores it — so the stored value and the live credential cannot drift apart.
+    /// Null for an ordinary stored value, whose rotation is just re-encryption of what you paste in.
+    /// </summary>
+    public DynamicSecretBackend? RotationBackend { get; set; }
+
+    /// <summary>The principal whose password this is — the handle rotation needs upstream.</summary>
+    public string? RotationPrincipal { get; set; }
+
+    /// <summary>True when the vault can rotate the real credential, not just the copy it holds.</summary>
+    public bool IsManaged => RotationBackend is not null && !string.IsNullOrWhiteSpace(RotationPrincipal);
+
     /// <summary>Destroys the key material while keeping the row as an auditable tombstone.</summary>
     public void Shred(DateTimeOffset nowUtc)
     {

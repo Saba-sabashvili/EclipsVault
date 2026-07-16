@@ -36,6 +36,12 @@ public sealed class SecretDetailsViewModel
 
     public DateTimeOffset? ExpiresAtUtc { get; init; }
 
+    /// <summary>True when the vault can change the real credential, not just the copy it stores.</summary>
+    public bool IsManaged { get; init; }
+
+    /// <summary>The backend principal this secret is the password for, when managed.</summary>
+    public string? RotationPrincipal { get; init; }
+
     /// <summary>Populated only for the single response following an authorized reveal.</summary>
     public string? RevealedValue { get; init; }
 

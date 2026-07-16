@@ -88,5 +88,14 @@ public enum AuditAction
     DynamicCredentialExpired = 132,
 
     /// <summary>The backend refused to destroy a credential — it may still be live. Critical.</summary>
-    DynamicCredentialRevocationFailed = 133
+    DynamicCredentialRevocationFailed = 133,
+
+    /// <summary>The vault changed a real upstream credential and stored the new value.</summary>
+    SecretUpstreamRotated = 134,
+
+    /// <summary>
+    /// An upstream rotation left the stored value and the live credential out of step, and the
+    /// vault could not put it back. Someone has to reconcile it by hand. Critical.
+    /// </summary>
+    SecretUpstreamRotationDrifted = 135
 }

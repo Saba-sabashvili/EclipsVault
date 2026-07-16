@@ -8,19 +8,30 @@ using Microsoft.Extensions.Logging;
 namespace EclipsVault.Infrastructure.Security;
 
 /// <summary>
-/// Mints real SQL Server principals: the role's statements run against the live server, so an
-/// issued credential is a genuine login that can connect, and revoking it genuinely drops it.
+/// The SQL Server backend, for both kinds of credential the vault owns:
+/// <list type="bullet">
+/// <item><see cref="IDynamicSecretBackend"/> — mints and destroys short-lived principals of its own.</item>
+/// <item><see cref="IManagedSecretBackend"/> — re-passwords a principal that already exists.</item>
+/// </list>
+/// One class because it is one connection to one server; the two ports stay separate because a
+/// backend could plausibly do one and not the other.
 ///
-/// The statements are DDL and cannot be parameterised, so the credential is rendered in as text —
+/// Everything here is DDL, which cannot be parameterised, so credentials are rendered in as text —
 /// safe only because <see cref="CredentialStatementTemplate"/> refuses to render anything that is
-/// not strictly alphanumeric. Nothing here interpolates operator-supplied text.
+/// not strictly alphanumeric. No operator-supplied text is ever interpolated.
 /// </summary>
-public sealed class SqlServerDynamicSecretBackend : IDynamicSecretBackend
+public sealed class SqlServerBackend : IDynamicSecretBackend, IManagedSecretBackend
 {
-    private readonly EclipsVaultDbContext _context;
-    private readonly ILogger<SqlServerDynamicSecretBackend> _logger;
+    /// <summary>
+    /// Fixed, not operator-supplied: rotating a managed secret must only ever change a password.
+    /// A per-secret statement would make every managed secret a place to hide arbitrary SQL.
+    /// </summary>
+    private const string RotateStatement = "ALTER LOGIN [{{name}}] WITH PASSWORD = '{{password}}';";
 
-    public SqlServerDynamicSecretBackend(EclipsVaultDbContext context, ILogger<SqlServerDynamicSecretBackend> logger)
+    private readonly EclipsVaultDbContext _context;
+    private readonly ILogger<SqlServerBackend> _logger;
+
+    public SqlServerBackend(EclipsVaultDbContext context, ILogger<SqlServerBackend> logger)
     {
         _context = context;
         _logger = logger;
@@ -47,5 +58,14 @@ public sealed class SqlServerDynamicSecretBackend : IDynamicSecretBackend
         await _context.Database.ExecuteSqlRawAsync(sql, ct);
 
         _logger.LogInformation("Dropped SQL Server login {Identity} for role {RoleName}", identity, role.Name);
+    }
+
+    public async Task RotatePrincipalAsync(string principal, string newPassword, CancellationToken ct)
+    {
+        var sql = CredentialStatementTemplate.Render(RotateStatement, principal, newPassword, DateTimeOffset.UnixEpoch);
+        await _context.Database.ExecuteSqlRawAsync(sql, ct);
+
+        // Never log the password — only that the principal moved.
+        _logger.LogInformation("Rotated the password of SQL Server login {Principal}", principal);
     }
 }
