@@ -301,7 +301,7 @@ try
         _ = scope.ServiceProvider.GetRequiredService<ICryptoEngineFactory>().Create();
     }
 
-    await DatabaseMigrator.MigrateAsync(app.Services);
+    await DatabaseMigrator.MigrateAsync(app.Services, app.Environment);
     await DbSeeder.SeedAsync(app.Services, app.Environment);
 
     // Adopt the payload-to-row binding on a vault written before it existed. A no-op with nothing

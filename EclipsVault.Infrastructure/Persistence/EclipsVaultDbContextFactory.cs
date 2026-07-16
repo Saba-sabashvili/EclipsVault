@@ -6,8 +6,16 @@ namespace EclipsVault.Infrastructure.Persistence;
 /// <summary>
 /// Design-time factory used only by the EF Core tools (<c>dotnet ef migrations …</c>).
 /// It lets the tooling construct the DbContext without booting the web host, so
-/// migrations can be generated offline. The connection string here is for design
-/// time only — the running application always uses the one from configuration.
+/// migrations can be generated offline.
+///
+/// <para>The connection is resolved in this order, and the order is the point:
+/// <c>ECLIPSVAULT_DESIGN_CONNECTION</c> when you are deliberately pointing the tools somewhere;
+/// then <c>ConnectionStrings__DefaultConnection</c>, which is how the application itself is
+/// configured and therefore what a deploy job applying migrations will have set; and only then the
+/// local development database below. Without the middle step, <c>dotnet ef database update</c> in a
+/// deploy job reads none of the environment it was given and quietly targets whatever is on
+/// localhost — reporting "already up to date" about a database nobody asked about while the real
+/// one stays empty.</para>
 ///
 /// <para>Which engine the tools target comes from <c>ECLIPSVAULT_DESIGN_PROVIDER</c>, because
 /// migrations are generated per provider and each engine's set lives in its own assembly:
@@ -32,6 +40,7 @@ public sealed class EclipsVaultDbContextFactory : IDesignTimeDbContextFactory<Ec
         var isPostgres = DatabaseProvider.IsPostgres(provider);
 
         var connection = Environment.GetEnvironmentVariable("ECLIPSVAULT_DESIGN_CONNECTION")
+                         ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
                          ?? (isPostgres ? DesignTimePostgresConnection : DesignTimeSqlServerConnection);
 
         var builder = new DbContextOptionsBuilder<EclipsVaultDbContext>();

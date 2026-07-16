@@ -61,13 +61,22 @@ Dependency rule: `Web → Infrastructure → Core`. Nothing ever points outward.
 
 The interceptor is also the choke point through which **every** row passes on its way to the database (whether injected there or added by the sink), so it stamps each one into the tamper-evidence hash chain just before persistence. Repositories persist their own aggregate only; a service never borrows another aggregate's repository — or a `DbContext` — just to record an event.
 
-**Schema is owned by EF Core Migrations** (`Infrastructure/Migrations/`). Startup runs `Database.MigrateAsync()`; there is no `EnsureCreated` and no hand-written DDL. Add a schema change with:
+**Schema is owned by EF Core Migrations** (`Infrastructure/Migrations/`); there is no `EnsureCreated` and no hand-written DDL. Add a schema change with:
 
 ```bash
 dotnet ef migrations add <Name> --project EclipsVault.Infrastructure --startup-project EclipsVault.Infrastructure
 ```
 
 A design-time `IDesignTimeDbContextFactory` lets the tooling build the context without booting the web host.
+
+**Applying them is a deploy job's work, not the vault's.** Development migrates itself on startup. Anywhere else the running service will not change the schema: a service that migrates on boot holds rights to drop and rewrite every table — the audit trail included — for its entire life, having needed them for a few seconds, and anyone who reaches its connection string inherits them. Run this from your deploy job, with a login the vault itself does not have:
+
+```bash
+ConnectionStrings__DefaultConnection="…" \
+dotnet ef database update --project EclipsVault.Infrastructure --startup-project EclipsVault.Web
+```
+
+Checking is not applying, so the app still verifies: a schema behind the code **fails startup** rather than serving against it. For a single-node install with no deploy pipeline, `Database:MigrateOnStartup=true` restores the old behaviour — and the trade is explicit, since the app's login then needs DDL rights.
 
 ## Prerequisites
 
