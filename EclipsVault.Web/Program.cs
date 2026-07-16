@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Threading.RateLimiting;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure;
 using EclipsVault.Infrastructure.Logging;
@@ -140,20 +139,10 @@ try
             .Build();
     });
 
-    // Brute-force damping on the authentication surface, partitioned per source IP.
-    builder.Services.AddRateLimiter(limiter =>
-    {
-        limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        limiter.AddPolicy(RateLimitPolicies.Authentication, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 11,
-                    Window = TimeSpan.FromMinutes(2),
-                    QueueLimit = 1
-                }));
-    });
+    // Brute-force damping on the authentication surface, partitioned per source IP. Applied by
+    // AuthThrottleFilter on AccountController; the budget itself lives behind IAuthThrottle so it
+    // can be shared by every replica (Redis) instead of granting each one its own (in-process).
+    builder.Services.AddScoped<AuthThrottleFilter>();
 
     // Recover the real client IP behind a reverse proxy / load balancer. Without this,
     // every IP-based control — the auth rate limiter, the intrusion IP-blacklist, the
@@ -234,7 +223,6 @@ try
     app.UseStaticFiles();
     app.UseMiddleware<IpBlacklistMiddleware>();
     app.UseRouting();
-    app.UseRateLimiter();
     app.UseSession();
     app.UseAuthentication();
     app.UseAuthorization();

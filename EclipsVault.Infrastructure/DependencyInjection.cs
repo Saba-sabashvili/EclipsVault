@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
         services.Configure<LifecycleOptions>(configuration.GetSection(LifecycleOptions.SectionName));
         services.Configure<DynamicLeaseOptions>(configuration.GetSection(DynamicLeaseOptions.SectionName));
+        services.Configure<AuthThrottleOptions>(configuration.GetSection(AuthThrottleOptions.SectionName));
         services.Configure<WebAuthnOptions>(configuration.GetSection(WebAuthnOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
@@ -115,6 +116,7 @@ public static class DependencyInjection
             services.AddSingleton<IIpBlacklist, RedisIpBlacklist>();
             services.AddSingleton<ISessionRevocationService, RedisSessionRevocationService>();
             services.AddSingleton<ISessionRegistry, RedisSessionRegistry>();
+            services.AddSingleton<IAuthThrottle, RedisAuthThrottle>();
         }
         else
         {
@@ -122,6 +124,7 @@ public static class DependencyInjection
             services.AddSingleton<IIpBlacklist, InMemoryIpBlacklist>();
             services.AddSingleton<ISessionRevocationService, InMemorySessionRevocationService>();
             services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
+            services.AddSingleton<IAuthThrottle, InMemoryAuthThrottle>();
         }
         services.AddScoped<IIntrusionResponseService, IntrusionResponseService>();
 

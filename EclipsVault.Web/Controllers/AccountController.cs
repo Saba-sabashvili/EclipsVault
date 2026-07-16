@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 
 namespace EclipsVault.Web.Controllers;
 
@@ -17,7 +16,7 @@ namespace EclipsVault.Web.Controllers;
 /// cookie; the full session principal (with ABAC attribute claims) is granted after
 /// TOTP verification or first-time TOTP enrollment.
 /// </summary>
-[EnableRateLimiting(RateLimitPolicies.Authentication)]
+[ServiceFilter(typeof(AuthThrottleFilter))]
 public sealed class AccountController : Controller
 {
     /// <summary>Session key holding the challenge issued for an in-flight passkey sign-in.</summary>

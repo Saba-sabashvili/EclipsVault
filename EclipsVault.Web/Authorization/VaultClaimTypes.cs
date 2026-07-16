@@ -51,8 +51,3 @@ public static class VaultPolicies
     /// <summary>Requires TopSecret clearance; gates the administration area.</summary>
     public const string AdminOnly = "AdminOnly";
 }
-
-public static class RateLimitPolicies
-{
-    public const string Authentication = "auth";
-}
