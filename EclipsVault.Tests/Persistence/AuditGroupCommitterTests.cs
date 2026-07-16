@@ -30,19 +30,57 @@ public class AuditGroupCommitterTests : IAsyncLifetime
     private AuditGroupCommitter _committer = null!;
     private CountingInterceptor _saves = null!;
 
-    /// <summary>Counts SaveChanges calls, and can stall the first one so a batch has time to form.</summary>
+    /// <summary>
+    /// Holds one SaveChanges open inside the interceptor until the test lets it go.
+    ///
+    /// These tests need the flush loop to be <em>provably</em> mid-save while more rows are queued
+    /// behind it. Stalling it for 300ms and queueing 50ms later only assumed that, and on a loaded
+    /// CI runner the assumption lost: the queueing outran the stall, the rows drained across many
+    /// batches, and a test that asserts batching failed for reasons that had nothing to do with
+    /// batching. Waiting on the save to actually begin, rather than on a clock, removes the race
+    /// instead of making it rarer.
+    /// </summary>
+    private sealed class SaveGate
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes once the flush loop is inside SaveChanges and cannot drain anything else.</summary>
+        public Task Entered => _entered.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        internal Task Reached()
+        {
+            _entered.TrySetResult();
+            return _released.Task;
+        }
+    }
+
+    /// <summary>Counts SaveChanges calls, and can hold one open on request.</summary>
     private sealed class CountingInterceptor : SaveChangesInterceptor
     {
         private int _saves;
+        private SaveGate? _gate;
+
         public int Saves => Volatile.Read(ref _saves);
-        public TimeSpan FirstSaveDelay { get; set; } = TimeSpan.Zero;
+
+        /// <summary>Arms a one-shot gate on whichever save begins next.</summary>
+        public SaveGate HoldNextSave()
+        {
+            var gate = new SaveGate();
+            Volatile.Write(ref _gate, gate);
+            return gate;
+        }
 
         public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
             DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (Interlocked.Increment(ref _saves) == 1 && FirstSaveDelay > TimeSpan.Zero)
+            Interlocked.Increment(ref _saves);
+
+            if (Interlocked.Exchange(ref _gate, null) is { } gate)
             {
-                await Task.Delay(FirstSaveDelay, cancellationToken);
+                await gate.Reached();
             }
 
             return await base.SavingChangesAsync(eventData, result, cancellationToken);
@@ -125,16 +163,17 @@ public class AuditGroupCommitterTests : IAsyncLifetime
         var poison = Row();
         await _committer.CommitAsync(poison, CancellationToken.None);
 
-        _saves.FirstSaveDelay = TimeSpan.FromMilliseconds(300); // hold the loop so a batch forms
-
+        var gate = _saves.HoldNextSave();
         var blocker = _committer.CommitAsync(Row(), CancellationToken.None);
-        await Task.Delay(50);
+        await gate.Entered;
 
-        // These pile up behind the stalled save and are drained together — with the duplicate.
+        // CommitAsync queues synchronously, so all three are waiting before the gate opens and are
+        // drained into one batch — with the duplicate.
         var batched = new[] { Row(), Row(poison.Id), Row() }
             .Select(r => _committer.CommitAsync(r, CancellationToken.None))
             .ToArray();
 
+        gate.Release();
         await blocker;
         var failures = await Task.WhenAll(batched.Select(async t =>
         {
@@ -170,21 +209,26 @@ public class AuditGroupCommitterTests : IAsyncLifetime
     {
         // The point of the exercise: the chain lock is taken once per SaveChanges, so batching is
         // what turns one lock per reveal into one lock per group.
-        _saves.FirstSaveDelay = TimeSpan.FromMilliseconds(300);
+        var gate = _saves.HoldNextSave();
 
         var blocker = _committer.CommitAsync(Row(), CancellationToken.None);
-        await Task.Delay(50);
+        await gate.Entered; // the loop is inside SaveChanges and can drain nothing until released
 
+        // CommitAsync writes to the channel synchronously, so once this returns all 100 are queued.
         var queued = Enumerable.Range(0, 100)
             .Select(_ => _committer.CommitAsync(Row(), CancellationToken.None))
             .ToArray();
 
+        gate.Release();
         await blocker;
         await Task.WhenAll(queued);
 
         Assert.Equal(101, await CountAsync());
-        // 101 rows, but nothing like 101 lock cycles: the stalled first save let the rest pile up.
-        Assert.InRange(_saves.Saves, 2, 10);
+
+        // 101 rows, two lock cycles: the held save, then every row that accumulated behind it in a
+        // single batch. Exactly two, not "somewhere under ten" — the batch is whatever was waiting,
+        // so with all 100 provably waiting there is nothing left to need a third.
+        Assert.Equal(2, _saves.Saves);
     }
 
     [Fact]
