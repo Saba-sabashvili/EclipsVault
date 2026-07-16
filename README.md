@@ -98,10 +98,14 @@ dotnet run --project EclipsVault.Web
 | Service | Purpose | UI |
 |---|---|---|
 | **SQL Server** | persistence (or PostgreSQL — see below) | — |
-| **Mailpit** | captures notification emails (real SMTP) | http://localhost:8025 |
-| **HashiCorp Vault** | holds the master key when `Crypto:Engine=VaultTransit` | http://localhost:8200 (`dev-root`) |
-| **Redis** | shared distributed state when `Redis:Enabled=true` (opt-in) | localhost:6379 |
-| **Keycloak** | a real OpenID Connect provider for SSO | http://localhost:8081 (`admin` / `dev-admin`) |
+| **Mailpit** | captures notification emails (real SMTP) | http://127.0.0.1:8025 |
+| **HashiCorp Vault** | holds the master key when `Crypto:Engine=VaultTransit` | http://127.0.0.1:8200 (`dev-root`) |
+| **Redis** | shared distributed state when `Redis:Enabled=true` (opt-in) | 127.0.0.1:6379 (`dev-redis-password`) |
+| **Keycloak** | a real OpenID Connect provider for SSO | http://127.0.0.1:8081 (`admin` / `dev-admin`) |
+
+**`docker-compose.yml` is a developer's laptop, not a deployment.** The passwords are in the file and therefore public, Vault runs in dev mode (in-memory, unsealed, known root token), and nothing speaks TLS. Two things it does do properly, because they are free: every port is published to **`127.0.0.1`** rather than Docker's default of every interface — otherwise a laptop on a café or office network hands SQL Server, Vault and Redis to that network, silently, with the credentials above — and every image is pinned to an exact version, since a floating `:latest` means what starts tomorrow is not what you tested and a supply-chain compromise arrives with nothing in the diff.
+
+**Redis requires a password even locally.** It holds the answers to "is this session revoked?" and "is this address blocked?", so anyone who can write it can restore a session its owner signed out of and lift an intrusion block — the vault's kill switches become advisory to whoever reaches port 6379. Startup refuses a passwordless connection string (`Redis:AllowUnauthenticated=true` to override, for an instance genuinely unreachable by anything else). Developing against an authenticated Redis also means the production configuration is the one that has been exercised.
 
 (You can still point the app at your own SQL Server / PostgreSQL / SMTP / KMS / IdP via configuration.)
 

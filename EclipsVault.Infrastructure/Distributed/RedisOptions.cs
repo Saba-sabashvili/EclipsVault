@@ -24,4 +24,13 @@ public sealed class RedisOptions
     /// lifetime so a revoked-but-idle session can never outlive its marker.
     /// </summary>
     public int RevocationRetentionHours { get; set; } = 24;
+
+    /// <summary>
+    /// Permits connecting to a Redis with no password. Off, because this store holds the answers to
+    /// "is this session revoked?" and "is this address blocked?" — so anyone who can write it can
+    /// restore a session its owner signed out of and lift an intrusion block, and the vault's kill
+    /// switches become advisory to whoever can reach the port. Redis binds to every interface and
+    /// requires no password by default, which is a combination worth having to opt into out loud.
+    /// </summary>
+    public bool AllowUnauthenticated { get; set; }
 }

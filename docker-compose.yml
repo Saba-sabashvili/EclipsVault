@@ -1,5 +1,19 @@
-# Local development dependencies — all real, open-source (or first-party) services, so the
-# project runs the way it would in production rather than against hand-rolled local mocks.
+# LOCAL DEVELOPMENT ONLY. This file is not a deployment.
+#
+# Everything here is real, open-source (or first-party) software, so the project runs the way it
+# would in production rather than against hand-rolled mocks — but it is configured for a laptop:
+# the passwords are in this file and therefore public, Vault runs in dev mode (in-memory, unsealed,
+# with a known root token), and nothing speaks TLS. That is fine for a developer machine and
+# indefensible anywhere else.
+#
+# Every port is published to 127.0.0.1 rather than 0.0.0.0. Docker publishes to all interfaces by
+# default, which on a laptop on a café or office network hands SQL Server, Vault and Redis — with
+# the credentials written below — to everyone on that network, and does it silently. Binding to
+# loopback keeps these reachable from this machine only.
+#
+# Images are pinned to exact versions, not :latest. A floating tag means the thing you tested is
+# not necessarily the thing that starts tomorrow, and a supply-chain compromise arrives on the next
+# `docker compose pull` with nothing in the diff to show for it.
 #
 #   docker compose up -d
 #   # one-time: enable Vault's Transit engine + create the master key (only if using VaultTransit)
@@ -7,51 +21,60 @@
 #   curl -s -H "X-Vault-Token: dev-root" -X POST http://127.0.0.1:8200/v1/transit/keys/eclipsvault
 #   dotnet run --project EclipsVault.Web
 #
-# UIs:  Mailpit  http://localhost:8025   ·   Vault  http://localhost:8200 (token: dev-root)
-# Redis (distributed state, opt-in via Redis:Enabled=true):  localhost:6379
+# UIs:  Mailpit  http://127.0.0.1:8025   ·   Vault  http://127.0.0.1:8200 (token: dev-root)
 
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2022-CU26-ubuntu-22.04
     container_name: eclipsvault-db
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Vision1889Academy"
     ports:
-      - "1433:1433"
+      - "127.0.0.1:1433:1433"
     volumes:
       - eclipsvault-db:/var/opt/mssql
 
   # HashiCorp Vault (dev mode) — holds the master key when Crypto:Engine=VaultTransit,
   # so the KEK never lives in the app process.
+  #
+  # Dev mode keeps everything in memory and auto-unseals with a known root token: it exists to
+  # exercise the Transit code path, and loses every key on restart. A real deployment runs Vault
+  # with storage, a seal, and tokens that are not printed in a compose file.
   vault:
-    image: hashicorp/vault:latest
+    image: hashicorp/vault:1.18.5
     container_name: eclipsvault-vault
     cap_add: [IPC_LOCK]
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: "dev-root"
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"   # inside the container; published to loopback only
     ports:
-      - "8200:8200"
+      - "127.0.0.1:8200:8200"
 
   # Mailpit — an SMTP server with a web UI that captures every outbound notification email,
   # so the Notifications feature delivers for real in development.
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.27.11
     container_name: eclipsvault-mailpit
     ports:
-      - "1025:1025" # SMTP
-      - "8025:8025" # web UI
+      - "127.0.0.1:1025:1025" # SMTP
+      - "127.0.0.1:8025:8025" # web UI
 
-  # Redis — holds the shared distributed state (session revocation, the intrusion IP
-  # blacklist, and the encrypted-envelope cache) when Redis:Enabled=true, so the app can
-  # run as multiple nodes behind a load balancer. AOF persistence keeps blocks across restarts.
+  # Redis — holds the shared distributed state (session revocation, the intrusion IP blacklist, and
+  # the encrypted-envelope cache) when Redis:Enabled=true, so the app can run as multiple nodes
+  # behind a load balancer. AOF persistence keeps blocks across restarts.
+  #
+  # It requires a password even here. Redis holds the answers to "is this session revoked?" and "is
+  # this address blocked?", so anyone who can write it can un-revoke a session someone signed out of
+  # and lift an intrusion block — no password meant the vault's kill switches were advisory to
+  # anyone who could reach port 6379. Developing against an authenticated Redis also means the
+  # production configuration is the one that has been exercised.
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: eclipsvault-redis
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "dev-redis-password"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - eclipsvault-redis:/data
 
@@ -73,7 +96,7 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: "dev-admin"
       KC_HEALTH_ENABLED: "true"
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - ./keycloak/eclipsvault-realm.json:/opt/keycloak/data/import/eclipsvault-realm.json:ro
 
