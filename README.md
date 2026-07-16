@@ -88,12 +88,15 @@ dotnet run --project EclipsVault.Web
 
 | Service | Purpose | UI |
 |---|---|---|
-| **SQL Server** | persistence | — |
+| **SQL Server** | persistence (or PostgreSQL — see below) | — |
 | **Mailpit** | captures notification emails (real SMTP) | http://localhost:8025 |
 | **HashiCorp Vault** | holds the master key when `Crypto:Engine=VaultTransit` | http://localhost:8200 (`dev-root`) |
 | **Redis** | shared distributed state when `Redis:Enabled=true` (opt-in) | localhost:6379 |
+| **Keycloak** | a real OpenID Connect provider for SSO | http://localhost:8081 (`admin` / `dev-admin`) |
 
-(You can still point the app at your own SQL Server / SMTP / KMS via configuration.)
+(You can still point the app at your own SQL Server / PostgreSQL / SMTP / KMS / IdP via configuration.)
+
+The Keycloak realm is **imported from `keycloak/eclipsvault-realm.json`**, not clicked together in a UI, so every developer gets the same IdP. It ships two users, both with the dev-user password: `dev-user@eclipsvault.local`, which matches a seeded vault account and signs in; and `idp-only-user@eclipsvault.local`, which is genuine to the IdP and unknown to the vault — it exists to prove the vault refuses it. **The IdP proves who you are; it does not decide whether you are allowed in.**
 
 **Configuration & secrets** — the database connection string is deliberately **absent from `appsettings.json`** so credentials are never committed. Local development reads it (plus the dev KEK fallback and seed passwords) from `appsettings.Development.json`, which is git-ignored — copy `appsettings.Development.json.template` to create it. For any real deployment, supply it via the environment (`ConnectionStrings__DefaultConnection`) or a secret store, using a least-privilege login and TLS enforced (`Encrypt=True;TrustServerCertificate=False` on SQL Server, `SSL Mode=Require` on PostgreSQL). Startup fails fast with a clear message if it is missing.
 

@@ -55,6 +55,28 @@ services:
     volumes:
       - eclipsvault-redis:/data
 
+  # Keycloak — a real OpenID Connect provider, so SSO is exercised against an actual IdP
+  # (authorization code flow, discovery document, JWKS, real tokens) rather than a stub that
+  # agrees with whatever the vault expects. The realm is imported from source, not clicked
+  # together in the UI, so everyone gets the same IdP.
+  #
+  # Realm 'eclipsvault' ships two users, both with the dev-user password:
+  #   dev-user@eclipsvault.local      — matches a seeded vault account, so sign-in succeeds
+  #   idp-only-user@eclipsvault.local — genuine to the IdP, unknown to the vault, so it is refused
+  #                                     (the vault decides who may in, not the IdP)
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: eclipsvault-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "dev-admin"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./keycloak/eclipsvault-realm.json:/opt/keycloak/data/import/eclipsvault-realm.json:ro
+
 volumes:
   eclipsvault-db:
   eclipsvault-redis:
