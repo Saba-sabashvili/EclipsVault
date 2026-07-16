@@ -4,6 +4,7 @@ using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
+using EclipsVault.Tests.Fakes;
 using Xunit;
 
 namespace EclipsVault.Tests.Secrets;
@@ -41,24 +42,6 @@ public class ManagedRotationTests
             Rotations.Add(newPassword);
             return Task.CompletedTask;
         }
-    }
-
-    /// <summary>
-    /// Seals by copying the plaintext through, so a test can read the stored value back. The copies
-    /// matter: the service zeroes the buffers it hands over and the ones it gets back, and an engine
-    /// that aliased them would blank the entity instead.
-    /// </summary>
-    private sealed class FakeCryptoEngine : ICryptoEngine, ICryptoEngineFactory
-    {
-        public string EngineId => "fake";
-
-        public ICryptoEngine Create() => this;
-
-        public SealedSecret Seal(byte[] plaintext) => new([.. plaintext], [], "test-kek", "FAKE");
-
-        public byte[] Unseal(SealedSecret sealedSecret) => [.. sealedSecret.Ciphertext];
-
-        public SealedSecret Rewrap(SealedSecret sealedSecret) => sealedSecret;
     }
 
     private sealed class FakeRepository : ISecretRepository
@@ -149,27 +132,35 @@ public class ManagedRotationTests
         public string? SourceIp => "::1";
     }
 
-    private static Secret ManagedSecret(bool bound = true) => new()
+    private static Secret ManagedSecret(bool bound = true)
     {
-        Id = SecretId,
-        Name = "app_probe_password",
-        ProjectKey = "PHOENIX",
-        Environment = SecretEnvironment.Production,
-        Sensitivity = SensitivityLevel.Secret,
-        Ciphertext = Encoding.UTF8.GetBytes(OriginalPassword),
-        WrappedDek = [],
-        KekId = "test-kek",
-        Algorithm = "FAKE",
-        CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(-30),
-        RotationBackend = bound ? DynamicSecretBackend.SqlServer : null,
-        RotationPrincipal = bound ? Principal : null
-    };
+        // Sealed the way the service would seal it: bound to this secret's own id.
+        var sealedSecret = new FakeCryptoEngine().Seal(
+            Encoding.UTF8.GetBytes(OriginalPassword), SecretBinding.ForCurrentValue(SecretId));
+
+        return new Secret
+        {
+            Id = SecretId,
+            Name = "app_probe_password",
+            ProjectKey = "PHOENIX",
+            Environment = SecretEnvironment.Production,
+            Sensitivity = SensitivityLevel.Secret,
+            Ciphertext = sealedSecret.Ciphertext,
+            WrappedDek = [],
+            KekId = "test-kek",
+            Algorithm = "FAKE",
+            CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(-30),
+            RotationBackend = bound ? DynamicSecretBackend.SqlServer : null,
+            RotationPrincipal = bound ? Principal : null
+        };
+    }
 
     private static SecretService Build(FakeRepository repository, RecordingAuditSink audit, params IManagedSecretBackend[] backends)
         => new(repository, new FakeCryptoEngine(), new NullCache(), new UnusedIntrusionResponse(),
                audit, new StubActor(), backends, TimeProvider.System);
 
-    private static string StoredValue(Secret secret) => Encoding.UTF8.GetString(secret.Ciphertext);
+    private static string StoredValue(Secret secret)
+        => Encoding.UTF8.GetString(FakeCryptoEngine.ValueOf(secret.Ciphertext));
 
     [Fact]
     public async Task Rotating_sets_a_new_password_upstream_and_stores_that_same_password()
@@ -195,7 +186,7 @@ public class ManagedRotationTests
         await Build(repository, new RecordingAuditSink(), new FakeBackend()).RotateManagedAsync(SecretId, null, CancellationToken.None);
 
         var archived = Assert.Single(repository.Versions);
-        Assert.Equal(OriginalPassword, Encoding.UTF8.GetString(archived.Ciphertext));
+        Assert.Equal(OriginalPassword, Encoding.UTF8.GetString(FakeCryptoEngine.ValueOf(archived.Ciphertext)));
         Assert.Contains(Principal, archived.ChangeNote);
     }
 

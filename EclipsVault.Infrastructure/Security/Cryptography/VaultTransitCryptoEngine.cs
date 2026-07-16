@@ -42,16 +42,14 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
 {
     public const string EngineName = "VaultTransit";
 
-    private const int NonceSize = 12;
-    private const int TagSize = 16;
-    private const int DekSize = 32;
-
     private readonly HttpClient _http;
     private readonly VaultOptions _options;
+    private readonly CryptoOptions _crypto;
 
-    public VaultTransitCryptoEngine(HttpClient http, IOptions<VaultOptions> options)
+    public VaultTransitCryptoEngine(HttpClient http, IOptions<VaultOptions> options, IOptions<CryptoOptions> crypto)
     {
         _options = options.Value;
+        _crypto = crypto.Value;
         _http = http;
         _http.BaseAddress = new Uri(_options.Address);
 
@@ -73,15 +71,16 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
 
     public string EngineId => EngineName;
 
-    public SealedSecret Seal(byte[] plaintext)
+    public SealedSecret Seal(byte[] plaintext, byte[] associatedData)
     {
-        var dek = RandomNumberGenerator.GetBytes(DekSize);
+        var dek = RandomNumberGenerator.GetBytes(GcmBlob.DekSize);
         try
         {
-            var ciphertext = EncryptBlob(dek, plaintext);
+            var ciphertext = GcmBlob.Encrypt(dek, plaintext, associatedData);
             // Vault wraps the DEK; the KEK that does it never leaves Vault.
             var wrappedDek = TransitCall("encrypt", new { plaintext = Convert.ToBase64String(dek) }, "ciphertext");
-            return new SealedSecret(ciphertext, Encoding.UTF8.GetBytes(wrappedDek), KekId(wrappedDek), "AES-256-GCM+VaultTransit");
+            return new SealedSecret(
+                ciphertext, Encoding.UTF8.GetBytes(wrappedDek), KekId(wrappedDek), SealAlgorithms.AesGcmVaultTransit);
         }
         finally
         {
@@ -89,14 +88,16 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
         }
     }
 
-    public byte[] Unseal(SealedSecret sealedSecret)
+    public byte[] Unseal(SealedSecret sealedSecret, byte[] associatedData)
     {
+        var binding = LegacyBlobPolicy.BindingFor(sealedSecret.Algorithm, associatedData, _crypto);
+
         var wrappedDek = Encoding.UTF8.GetString(sealedSecret.WrappedDek); // "vault:v1:…"
         var dekBase64 = TransitCall("decrypt", new { ciphertext = wrappedDek }, "plaintext");
         var dek = Convert.FromBase64String(dekBase64);
         try
         {
-            return DecryptBlob(dek, sealedSecret.Ciphertext);
+            return GcmBlob.Decrypt(dek, sealedSecret.Ciphertext, binding);
         }
         finally
         {
@@ -149,33 +150,6 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
                ?? throw new CryptoConfigurationException($"Vault Transit '{operation}' response missing '{dataField}'.");
     }
 
-    private static byte[] EncryptBlob(byte[] key, byte[] plaintext)
-    {
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
-        var tag = new byte[TagSize];
-        var ciphertext = new byte[plaintext.Length];
-
-        using var gcm = new AesGcm(key, TagSize);
-        gcm.Encrypt(nonce, plaintext, ciphertext, tag);
-
-        var blob = new byte[NonceSize + TagSize + ciphertext.Length];
-        nonce.CopyTo(blob, 0);
-        tag.CopyTo(blob, NonceSize);
-        ciphertext.CopyTo(blob, NonceSize + TagSize);
-        return blob;
-    }
-
-    private static byte[] DecryptBlob(byte[] key, byte[] blob)
-    {
-        var nonce = blob.AsSpan(0, NonceSize);
-        var tag = blob.AsSpan(NonceSize, TagSize);
-        var ciphertext = blob.AsSpan(NonceSize + TagSize);
-        var plaintext = new byte[ciphertext.Length];
-
-        using var gcm = new AesGcm(key, TagSize);
-        gcm.Decrypt(nonce, ciphertext, tag, plaintext);
-        return plaintext;
-    }
 }
 
 /// <summary>Pure parsing of Vault Transit ciphertext, split out so it can be unit-tested without a server.</summary>

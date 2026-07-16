@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using EclipsVault.Core.Domain.Exceptions;
+using Microsoft.Extensions.Options;
 
 namespace EclipsVault.Infrastructure.Security;
 
@@ -7,29 +9,36 @@ namespace EclipsVault.Infrastructure.Security;
 /// 32-byte DEK, encrypts the payload with it, then wraps the DEK with the master
 /// KEK. Blob layout for both fields: nonce(12) | tag(16) | ciphertext.
 /// DEK material is zeroed from memory the moment it is no longer required.
+///
+/// The payload is bound to the row it belongs in (see <see cref="SecretBinding"/>), so an envelope
+/// lifted into a different row will not decrypt there. The binding is on the payload rather than
+/// the wrapped DEK because that is sufficient: an envelope moved wholesale still fails its payload
+/// tag under the new row's binding, and leaving the DEK unbound keeps KEK rotation a pure re-wrap
+/// that never touches plaintext.
 /// </summary>
 public sealed class AesGcmCryptoEngine : ICryptoEngine
 {
     public const string EngineName = "AesGcmLocal";
 
-    private const int NonceSize = 12;
-    private const int TagSize = 16;
-    private const int DekSize = 32;
-
     private readonly IKekProvider _kekProvider;
+    private readonly CryptoOptions _options;
 
-    public AesGcmCryptoEngine(IKekProvider kekProvider) => _kekProvider = kekProvider;
+    public AesGcmCryptoEngine(IKekProvider kekProvider, IOptions<CryptoOptions> options)
+    {
+        _kekProvider = kekProvider;
+        _options = options.Value;
+    }
 
     public string EngineId => EngineName;
 
-    public SealedSecret Seal(byte[] plaintext)
+    public SealedSecret Seal(byte[] plaintext, byte[] associatedData)
     {
-        var dek = RandomNumberGenerator.GetBytes(DekSize);
+        var dek = RandomNumberGenerator.GetBytes(GcmBlob.DekSize);
         try
         {
-            var ciphertext = EncryptBlob(dek, plaintext);
-            var wrappedDek = EncryptBlob(_kekProvider.CurrentKek, dek);
-            return new SealedSecret(ciphertext, wrappedDek, _kekProvider.CurrentKekId, "AES-256-GCM");
+            var ciphertext = GcmBlob.Encrypt(dek, plaintext, associatedData);
+            var wrappedDek = GcmBlob.Encrypt(_kekProvider.CurrentKek, dek, default);
+            return new SealedSecret(ciphertext, wrappedDek, _kekProvider.CurrentKekId, SealAlgorithms.AesGcmLocal);
         }
         finally
         {
@@ -37,13 +46,15 @@ public sealed class AesGcmCryptoEngine : ICryptoEngine
         }
     }
 
-    public byte[] Unseal(SealedSecret sealedSecret)
+    public byte[] Unseal(SealedSecret sealedSecret, byte[] associatedData)
     {
+        var binding = LegacyBlobPolicy.BindingFor(sealedSecret.Algorithm, associatedData, _options);
+
         // Unwrap the DEK with whichever KEK sealed it (current or a retired one), not just the current.
-        var dek = DecryptBlob(_kekProvider.ResolveKek(sealedSecret.KekId), sealedSecret.WrappedDek);
+        var dek = GcmBlob.Decrypt(_kekProvider.ResolveKek(sealedSecret.KekId), sealedSecret.WrappedDek, default);
         try
         {
-            return DecryptBlob(dek, sealedSecret.Ciphertext);
+            return GcmBlob.Decrypt(dek, sealedSecret.Ciphertext, binding);
         }
         finally
         {
@@ -58,43 +69,15 @@ public sealed class AesGcmCryptoEngine : ICryptoEngine
             return sealedSecret; // already under the current KEK
         }
 
-        var dek = DecryptBlob(_kekProvider.ResolveKek(sealedSecret.KekId), sealedSecret.WrappedDek);
+        var dek = GcmBlob.Decrypt(_kekProvider.ResolveKek(sealedSecret.KekId), sealedSecret.WrappedDek, default);
         try
         {
-            var rewrappedDek = EncryptBlob(_kekProvider.CurrentKek, dek);
+            var rewrappedDek = GcmBlob.Encrypt(_kekProvider.CurrentKek, dek, default);
             return sealedSecret with { WrappedDek = rewrappedDek, KekId = _kekProvider.CurrentKekId };
         }
         finally
         {
             CryptographicOperations.ZeroMemory(dek);
         }
-    }
-
-    private static byte[] EncryptBlob(byte[] key, byte[] plaintext)
-    {
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
-        var tag = new byte[TagSize];
-        var ciphertext = new byte[plaintext.Length];
-
-        using var gcm = new AesGcm(key, TagSize);
-        gcm.Encrypt(nonce, plaintext, ciphertext, tag);
-
-        var blob = new byte[NonceSize + TagSize + ciphertext.Length];
-        nonce.CopyTo(blob, 0);
-        tag.CopyTo(blob, NonceSize);
-        ciphertext.CopyTo(blob, NonceSize + TagSize);
-        return blob;
-    }
-
-    private static byte[] DecryptBlob(byte[] key, byte[] blob)
-    {
-        var nonce = blob.AsSpan(0, NonceSize);
-        var tag = blob.AsSpan(NonceSize, TagSize);
-        var ciphertext = blob.AsSpan(NonceSize + TagSize);
-        var plaintext = new byte[ciphertext.Length];
-
-        using var gcm = new AesGcm(key, TagSize);
-        gcm.Decrypt(nonce, ciphertext, tag, plaintext);
-        return plaintext;
     }
 }

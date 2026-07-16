@@ -87,7 +87,9 @@ public sealed class SecretService : ISecretService
         await AuditSecretAsync(envelope.Id, envelope.Name, AuditAction.SecretRevealed, ct);
 
         var engine = _cryptoFactory.Create();
-        var plaintext = engine.Unseal(new SealedSecret(envelope.Ciphertext, envelope.WrappedDek, envelope.KekId, envelope.Algorithm));
+        var plaintext = engine.Unseal(
+            new SealedSecret(envelope.Ciphertext, envelope.WrappedDek, envelope.KekId, envelope.Algorithm),
+            SecretBinding.ForCurrentValue(envelope.Id));
         try
         {
             return new RevealedSecretDto(envelope.Id, envelope.Name, Encoding.UTF8.GetString(plaintext));
@@ -100,12 +102,14 @@ public sealed class SecretService : ISecretService
 
     public async Task<Guid> CreateAsync(CreateSecretRequest request, CancellationToken ct)
     {
-        var sealedSecret = SealValue(request.Value);
+        // The id is settled before the value is sealed, because it is what the payload is bound to.
+        var id = Guid.NewGuid();
+        var sealedSecret = SealValue(request.Value, SecretBinding.ForCurrentValue(id));
         var now = _clock.GetUtcNow();
 
         var secret = new Secret
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             Name = request.Name.Trim(),
             ProjectKey = request.ProjectKey.Trim().ToUpperInvariant(),
             Environment = request.Environment,
@@ -144,7 +148,7 @@ public sealed class SecretService : ISecretService
         var archived = await ArchiveCurrentAsync(entity, changeNote, ct);
 
         var now = _clock.GetUtcNow();
-        var sealedSecret = SealValue(newValue);
+        var sealedSecret = SealValue(newValue, SecretBinding.ForCurrentValue(entity.Id));
         entity.Ciphertext = sealedSecret.Ciphertext;
         entity.WrappedDek = sealedSecret.WrappedDek;
         entity.KekId = sealedSecret.KekId;
@@ -187,7 +191,8 @@ public sealed class SecretService : ISecretService
         // Keep the current value so the upstream change can be undone. Held only for this call.
         var engine = _cryptoFactory.Create();
         var previousPassword = engine.Unseal(
-            new SealedSecret(entity.Ciphertext, entity.WrappedDek, entity.KekId, entity.Algorithm));
+            new SealedSecret(entity.Ciphertext, entity.WrappedDek, entity.KekId, entity.Algorithm),
+            SecretBinding.ForCurrentValue(entity.Id));
 
         try
         {
@@ -263,7 +268,9 @@ public sealed class SecretService : ISecretService
         await AuditSecretAsync(id, envelope.Name, AuditAction.SecretVersionRevealed, ct);
 
         var engine = _cryptoFactory.Create();
-        var plaintext = engine.Unseal(new SealedSecret(version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm));
+        var plaintext = engine.Unseal(
+            new SealedSecret(version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm),
+            SecretBinding.ForArchivedVersion(id, version.Id));
         try
         {
             return new RevealedSecretDto(id, envelope.Name, Encoding.UTF8.GetString(plaintext));
@@ -285,11 +292,15 @@ public sealed class SecretService : ISecretService
 
         var archived = await ArchiveCurrentAsync(entity, $"Superseded by restore of version {version.VersionNumber}", ct);
 
-        // Copy the chosen version's envelope back onto the live secret (no re-encryption needed).
-        entity.Ciphertext = version.Ciphertext;
-        entity.WrappedDek = version.WrappedDek;
-        entity.KekId = version.KekId;
-        entity.Algorithm = version.Algorithm;
+        // Re-seal the chosen version into the live secret's binding. Copying the envelope across is
+        // precisely the move the binding exists to stop — an archived value put back as the current
+        // one — and refusing to do it by hand is what leaves that signature meaningful when someone
+        // does it in the database instead. Here it is a real restore: audited, and access-controlled.
+        var restored = ResealForCurrentValue(entity, version);
+        entity.Ciphertext = restored.Ciphertext;
+        entity.WrappedDek = restored.WrappedDek;
+        entity.KekId = restored.KekId;
+        entity.Algorithm = restored.Algorithm;
         entity.UpdatedAtUtc = _clock.GetUtcNow();
 
         await _repository.RotateAsync(entity, archived, ct);
@@ -297,21 +308,62 @@ public sealed class SecretService : ISecretService
         await _cache.EvictAsync(id, ct);
     }
 
-    /// <summary>Builds a version snapshot of the secret's CURRENT (about-to-be-replaced) value.</summary>
+    /// <summary>
+    /// Builds a version snapshot of the secret's CURRENT (about-to-be-replaced) value.
+    ///
+    /// The value is re-sealed onto the new version rather than copied across, because each payload
+    /// is bound to the exact row it lives in: the live value's envelope is not decryptable as a
+    /// version, by us or by anyone who moves it there by hand. That is the property being paid for,
+    /// and it costs one decrypt-and-re-encrypt on an operation that only happens when a secret is
+    /// rotated.
+    /// </summary>
     private async Task<SecretVersion> ArchiveCurrentAsync(Secret entity, string? changeNote, CancellationToken ct)
-        => new()
+    {
+        var versionId = Guid.NewGuid();
+        var resealed = ResealForVersion(entity, versionId);
+
+        return new SecretVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             SecretId = entity.Id,
             VersionNumber = await _repository.CountVersionsAsync(entity.Id, ct) + 1,
-            Ciphertext = entity.Ciphertext,
-            WrappedDek = entity.WrappedDek,
-            KekId = entity.KekId,
-            Algorithm = entity.Algorithm,
+            Ciphertext = resealed.Ciphertext,
+            WrappedDek = resealed.WrappedDek,
+            KekId = resealed.KekId,
+            Algorithm = resealed.Algorithm,
             ArchivedAtUtc = _clock.GetUtcNow(),
             ArchivedBy = _actor.Username ?? "system",
             ChangeNote = changeNote
         };
+    }
+
+    /// <summary>Moves the secret's live value into the binding of an archived version.</summary>
+    private SealedSecret ResealForVersion(Secret entity, Guid versionId)
+        => Reseal(
+            new SealedSecret(entity.Ciphertext, entity.WrappedDek, entity.KekId, entity.Algorithm),
+            SecretBinding.ForCurrentValue(entity.Id),
+            SecretBinding.ForArchivedVersion(entity.Id, versionId));
+
+    /// <summary>Moves an archived version's value back into the secret's live binding.</summary>
+    private SealedSecret ResealForCurrentValue(Secret entity, SecretVersion version)
+        => Reseal(
+            new SealedSecret(version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm),
+            SecretBinding.ForArchivedVersion(entity.Id, version.Id),
+            SecretBinding.ForCurrentValue(entity.Id));
+
+    private SealedSecret Reseal(SealedSecret sealedSecret, byte[] from, byte[] to)
+    {
+        var engine = _cryptoFactory.Create();
+        var plaintext = engine.Unseal(sealedSecret, from);
+        try
+        {
+            return engine.Seal(plaintext, to);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
+    }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct)
     {
@@ -323,12 +375,12 @@ public sealed class SecretService : ISecretService
         await _cache.EvictAsync(id, ct);
     }
 
-    private SealedSecret SealValue(string value)
+    private SealedSecret SealValue(string value, byte[] associatedData)
     {
         var plaintext = Encoding.UTF8.GetBytes(value);
         try
         {
-            return _cryptoFactory.Create().Seal(plaintext);
+            return _cryptoFactory.Create().Seal(plaintext, associatedData);
         }
         finally
         {

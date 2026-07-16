@@ -287,10 +287,11 @@ public static class DbSeeder
         DateTimeOffset? expiresAtUtc = null,
         bool isHoneyToken = false)
     {
-        var sealedSecret = engine.Seal(System.Text.Encoding.UTF8.GetBytes(value));
+        var id = Guid.NewGuid();
+        var sealedSecret = engine.Seal(System.Text.Encoding.UTF8.GetBytes(value), SecretBinding.ForCurrentValue(id));
         return new Secret
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             Name = name,
             ProjectKey = projectKey,
             Environment = environment,

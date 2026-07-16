@@ -299,6 +299,11 @@ try
     await DatabaseMigrator.MigrateAsync(app.Services);
     await DbSeeder.SeedAsync(app.Services, app.Environment);
 
+    // Adopt the payload-to-row binding on a vault written before it existed. A no-op with nothing
+    // to upgrade; otherwise it says what is wrong and how to fix it rather than letting each read
+    // fail on its own.
+    await LegacyBlobUpgrader.UpgradeAsync(app.Services);
+
     // Back-fill + seed the audit hash chain (after migrations + seeding are in place).
     await AuditChainInitializer.InitializeAsync(app.Services);
 

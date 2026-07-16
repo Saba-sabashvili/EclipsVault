@@ -114,7 +114,10 @@ public static class DependencyInjection
         services.AddSingleton<AesGcmCryptoEngine>();
         // Opt-in KMS engine: constructed lazily (and only reaches Vault) when Crypto:Engine=VaultTransit.
         services.Configure<VaultOptions>(configuration.GetSection(VaultOptions.SectionName));
-        services.AddSingleton(sp => new VaultTransitCryptoEngine(new HttpClient(), sp.GetRequiredService<IOptions<VaultOptions>>()));
+        services.AddSingleton(sp => new VaultTransitCryptoEngine(
+            new HttpClient(),
+            sp.GetRequiredService<IOptions<VaultOptions>>(),
+            sp.GetRequiredService<IOptions<CryptoOptions>>()));
         services.AddSingleton<ICryptoEngineFactory, CryptoEngineFactory>();
         services.AddScoped<IKekRotationService, KekRotationService>();
 

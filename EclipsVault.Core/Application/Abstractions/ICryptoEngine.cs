@@ -15,9 +15,18 @@ public interface ICryptoEngine
 {
     string EngineId { get; }
 
-    SealedSecret Seal(byte[] plaintext);
+    /// <param name="associatedData">
+    /// Binds the payload to the row it is being stored in — see <see cref="SecretBinding"/>. It is
+    /// authenticated but not encrypted, and the identical value must be supplied to
+    /// <see cref="Unseal"/> or the read fails.
+    /// </param>
+    SealedSecret Seal(byte[] plaintext, byte[] associatedData);
 
-    byte[] Unseal(SealedSecret sealedSecret);
+    /// <param name="associatedData">
+    /// The binding this payload was sealed with. If it does not match — because the envelope was
+    /// moved into a different row — the tag check fails and nothing is returned.
+    /// </param>
+    byte[] Unseal(SealedSecret sealedSecret, byte[] associatedData);
 
     /// <summary>
     /// Re-wraps an already-sealed secret's DEK under the <em>current</em> KEK — used by key

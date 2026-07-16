@@ -4,6 +4,7 @@ using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
+using EclipsVault.Tests.Fakes;
 using Xunit;
 
 namespace EclipsVault.Tests.Secrets;
@@ -49,15 +50,6 @@ public class SecretEnumerationTests
             => Task.FromResult<IReadOnlyList<SecretVersion>>([]);
         public Task<SecretVersion?> FindVersionAsync(Guid secretId, Guid versionId, CancellationToken ct)
             => Task.FromResult<SecretVersion?>(null);
-    }
-
-    private sealed class FakeCryptoEngine : ICryptoEngine, ICryptoEngineFactory
-    {
-        public string EngineId => "fake";
-        public ICryptoEngine Create() => this;
-        public SealedSecret Seal(byte[] plaintext) => new([.. plaintext], [], "test-kek", "FAKE");
-        public byte[] Unseal(SealedSecret sealedSecret) => [.. sealedSecret.Ciphertext];
-        public SealedSecret Rewrap(SealedSecret sealedSecret) => sealedSecret;
     }
 
     private sealed class NullCache : ISecretCache

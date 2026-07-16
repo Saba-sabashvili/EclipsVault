@@ -3,6 +3,7 @@ using EclipsVault.Core.Application.Abstractions;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Persistence;
 using EclipsVault.Infrastructure.Security;
+using EclipsVault.Tests.Fakes;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -65,20 +66,6 @@ public class DbSeederTests : IDisposable
 
         public bool Verify(string password, byte[] hash, byte[] salt)
             => Encoding.UTF8.GetString(hash) == password;
-    }
-
-    /// <summary>Identity seal — the demo secrets only need to round-trip, not to be unreadable.</summary>
-    private sealed class FakeCryptoEngine : ICryptoEngine, ICryptoEngineFactory
-    {
-        public string EngineId => "Fake";
-
-        public ICryptoEngine Create() => this;
-
-        public SealedSecret Seal(byte[] plaintext) => new([.. plaintext], [], "fake-kek", "Fake");
-
-        public byte[] Unseal(SealedSecret sealedSecret) => [.. sealedSecret.Ciphertext];
-
-        public SealedSecret Rewrap(SealedSecret sealedSecret) => sealedSecret;
     }
 
     private IServiceProvider Services(string? adminPassword)
