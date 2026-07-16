@@ -73,7 +73,11 @@ public static class DependencyInjection
             .UseSqlServer(connectionString)
             .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
 
-        // The one place audit rows are written (fail-closed).
+        // The one place standalone audit rows are written (fail-closed). It commits through the
+        // group committer, which is why the same instance is both a singleton and the hosted
+        // service: the queue and the loop draining it are one object.
+        services.AddSingleton<AuditGroupCommitter>();
+        services.AddHostedService(sp => sp.GetRequiredService<AuditGroupCommitter>());
         services.AddScoped<IAuditSink, AuditSink>();
 
         services.AddScoped<ISecretRepository, SecretRepository>();
