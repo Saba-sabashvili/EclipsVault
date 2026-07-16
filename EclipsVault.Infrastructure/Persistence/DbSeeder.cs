@@ -3,18 +3,32 @@ using EclipsVault.Core.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace EclipsVault.Infrastructure.Persistence;
 
 /// <summary>
-/// Creates the schema and seeds development data: two staff accounts, sample project
-/// secrets, one short-TTL secret to demonstrate the lifecycle shredder, and the
-/// honey-token decoys used for intrusion detection.
+/// Seeds data. The schema is <see cref="DatabaseMigrator"/>'s job; this does one of two very
+/// different jobs depending on where it is running.
+///
+/// In Development it seeds the demo world: two staff accounts with the passwords published in this
+/// repository, sample project secrets, one short-TTL secret to demonstrate the lifecycle shredder,
+/// the honey-token decoys, and the dynamic-secret roles.
+///
+/// Anywhere else it seeds none of that. Sample data carries values committed to a public
+/// repository, so every one of them is a credential an attacker already has; a vault that invents
+/// its own administrator on first boot is a vault anyone who has read this source can sign in to.
+/// Production gets the schema and, if the operator supplies a password out-of-band, one
+/// administrator account — and nothing at all if they do not.
 /// </summary>
 public static class DbSeeder
 {
-    public static async Task SeedAsync(IServiceProvider services)
+    /// <param name="environment">
+    /// Decides whether the demo world is seeded. Anything other than Development is treated as
+    /// production: an unset ASPNETCORE_ENVIRONMENT must fail closed, not seed known credentials.
+    /// </param>
+    public static async Task SeedAsync(IServiceProvider services, IHostEnvironment environment)
     {
         using var scope = services.CreateScope();
         var sp = scope.ServiceProvider;
@@ -22,13 +36,98 @@ public static class DbSeeder
         var db = sp.GetRequiredService<EclipsVaultDbContext>();
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("EclipsVault.DbSeeder");
 
-        // Apply any pending EF Core migrations. The schema is owned entirely by the
-        // migration files under Persistence/Migrations — no EnsureCreated, no raw DDL.
-        await db.Database.MigrateAsync();
-
         var clock = sp.GetRequiredService<TimeProvider>();
         var now = clock.GetUtcNow();
 
+        if (!environment.IsDevelopment())
+        {
+            await BootstrapAdministratorAsync(sp, db, logger, now);
+            return;
+        }
+
+        await SeedDevelopmentDataAsync(sp, db, logger, now);
+    }
+
+    /// <summary>
+    /// Creates the first administrator from a password the operator supplies out-of-band, once,
+    /// on an empty vault. There is deliberately no fallback value: a default password in source is
+    /// a published password, and this account holds TopSecret clearance over every project.
+    ///
+    /// Refusing to start is the correct outcome when the password is missing or weak. The
+    /// alternative — booting with an account whose credentials are in this repository — is a vault
+    /// that is already breached at the moment it becomes reachable.
+    /// </summary>
+    private static async Task BootstrapAdministratorAsync(
+        IServiceProvider sp, EclipsVaultDbContext db, ILogger logger, DateTimeOffset now)
+    {
+        if (await db.Users.AnyAsync())
+        {
+            return; // Already bootstrapped. Accounts are managed in the app from here on.
+        }
+
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var password = configuration["Seed:AdminPassword"];
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException(
+                "This vault has no accounts and no bootstrap password, so it will not start. Set " +
+                "Seed:AdminPassword (as the Seed__AdminPassword environment variable, or an entry " +
+                "in your secret manager) to a password you choose, start once to create " +
+                "'vault-admin', then remove the setting — it is only read on an empty vault. " +
+                "Enrol TOTP on the first sign-in.");
+        }
+
+        if (password.Length < MinimumBootstrapPasswordLength)
+        {
+            throw new InvalidOperationException(
+                $"Seed:AdminPassword must be at least {MinimumBootstrapPasswordLength} characters — " +
+                "the same minimum this vault enforces on everyone else's password.");
+        }
+
+        // The same screen every user-set password passes through. The seeder used to skip it
+        // entirely, which is how a published password could become the administrator's.
+        if (sp.GetRequiredService<IBreachedPasswordScreen>().IsCompromised(password))
+        {
+            throw new InvalidOperationException(
+                "Seed:AdminPassword appears in this vault's compromised-password corpus, so it is " +
+                "already known to attackers. If it came from this repository's development " +
+                "configuration, that is exactly the mistake this check exists to catch. Choose a " +
+                "password unique to this deployment.");
+        }
+
+        var hash = sp.GetRequiredService<IPasswordHasher>().Hash(password);
+
+        db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "vault-admin",
+            DisplayName = "Vault Administrator",
+            Email = "vault-admin@eclipsvault.local",
+            PasswordHash = hash.Hash,
+            PasswordSalt = hash.Salt,
+            Clearance = ClearanceLevel.TopSecret,
+            ProjectKey = "GLOBAL",
+            CreatedAtUtc = now
+        });
+
+        await db.SaveChangesAsync();
+        logger.LogWarning(
+            "Bootstrapped administrator {AdminUser} from Seed:AdminPassword on an empty vault. Sign in, " +
+            "enrol TOTP, then remove the setting — it is not read again once an account exists.",
+            "vault-admin");
+    }
+
+    private const int MinimumBootstrapPasswordLength = 12;
+
+    /// <summary>
+    /// The demo world: known-credential accounts and sample secrets whose values are committed to
+    /// this repository. Development only, and unreachable from anywhere else — see
+    /// <see cref="SeedAsync"/>.
+    /// </summary>
+    private static async Task SeedDevelopmentDataAsync(
+        IServiceProvider sp, EclipsVaultDbContext db, ILogger logger, DateTimeOffset now)
+    {
         if (!await db.Users.AnyAsync())
         {
             var hasher = sp.GetRequiredService<IPasswordHasher>();

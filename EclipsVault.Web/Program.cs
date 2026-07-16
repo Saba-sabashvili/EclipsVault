@@ -296,7 +296,8 @@ try
         _ = scope.ServiceProvider.GetRequiredService<ICryptoEngineFactory>().Create();
     }
 
-    await DbSeeder.SeedAsync(app.Services);
+    await DatabaseMigrator.MigrateAsync(app.Services);
+    await DbSeeder.SeedAsync(app.Services, app.Environment);
 
     // Back-fill + seed the audit hash chain (after migrations + seeding are in place).
     await AuditChainInitializer.InitializeAsync(app.Services);
@@ -306,6 +307,12 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "EclipsVault terminated unexpectedly");
+
+    // A refused startup has to look like a failure to whatever is supervising this process.
+    // Exiting 0 tells an orchestrator, a deploy job, or a shell checking $? that the vault came
+    // up healthy — so the checks that deliberately stop the boot (no bootstrap password, an
+    // unreadable KEK, a schema behind its migrations) would be reported as success.
+    Environment.ExitCode = 1;
 }
 finally
 {

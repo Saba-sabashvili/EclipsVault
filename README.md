@@ -118,6 +118,16 @@ First launch creates and seeds the `EclipsVaultUmbraDb` database ("umbra" — th
 | `vault-admin` | `ChangeMe!Umbra#2026-Admin` | TopSecret clearance, project GLOBAL |
 | `dev-user` | `ChangeMe!Umbra#2026-Dev` | Standard clearance, project PHOENIX |
 
+**These accounts exist in Development only.** The passwords above are published here, which is what "compromised" means, so they are also in the [bundled compromised-password corpus](EclipsVault.Infrastructure/Security/Data/CompromisedPasswords.txt) — the same screen that rejects them at every password change rejects them at the production bootstrap too, from one list rather than a second rule that could drift.
+
+Anywhere other than Development, **none of this is seeded**: no dev account, no sample secrets, no decoys, no dynamic-secret roles. A vault that invents its own administrator on first boot is one that anyone who has read this source can sign in to. Instead, on an **empty** vault, supply a password you choose out-of-band:
+
+```bash
+Seed__AdminPassword='<a password unique to this deployment>' dotnet run --project EclipsVault.Web
+```
+
+That creates `vault-admin` once; remove the setting afterwards, as it is only read while the vault has no accounts. It is screened like any other password (minimum 12 characters, not in the corpus). If it is missing or rejected, **startup fails and the process exits non-zero** rather than falling back to a default — an orchestrator or deploy job must not see a refused boot as a healthy one. `ASPNETCORE_ENVIRONMENT` being unset counts as production, so forgetting to set it fails closed rather than seeding known credentials.
+
 Sign in with **either the username or the email** (both seeded accounts also accept their `@eclipsvault.local` email). On first sign-in each account walks through **mandatory TOTP enrollment** (add the displayed key to any authenticator app). No session cookie exists until the second factor passes.
 
 Once a user registers a **passkey** (Profile → Passkeys), the login page offers **“Sign in with a passkey”** for a fully passwordless sign-in — a passkey verifies the user on their device, so it satisfies both factors on its own and skips the password and TOTP steps entirely.
