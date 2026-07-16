@@ -8,6 +8,7 @@ using EclipsVault.Web.Authentication;
 using EclipsVault.Infrastructure.Security;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Middleware;
+using EclipsVault.Web.Security;
 using EclipsVault.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -36,6 +37,10 @@ try
 
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<IAuditContext, HttpAuditContext>();
+
+    // The keys behind every auth cookie, antiforgery token and session. Must outlive the process
+    // and be shared by every node, or users are signed out by a restart and by each other's replicas.
+    builder.Services.AddVaultDataProtection(builder.Configuration, builder.Environment);
 
     // ABAC: policy-based authorization with a resource-aware handler.
     builder.Services.Configure<AbacOptions>(builder.Configuration.GetSection(AbacOptions.SectionName));
