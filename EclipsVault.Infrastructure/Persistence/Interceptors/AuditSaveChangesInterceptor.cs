@@ -37,14 +37,22 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         _logger = logger;
     }
 
+    /// <summary>
+    /// Stamping the chain takes a database lock and reads the head, so it is inherently async.
+    /// Rather than block a thread on it — or, far worse, quietly skip it and leave the row outside
+    /// the tamper-evidence chain — the synchronous path refuses.
+    /// </summary>
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         InjectAuditEntries(eventData.Context);
-        var rows = CollectAddedAuditRows(eventData.Context);
-        if (rows.Count > 0)
+        if (CollectAddedAuditRows(eventData.Context).Count > 0)
         {
-            _pending = _chain.Begin(rows);
+            throw new NotSupportedException(
+                "Audit rows must be persisted with SaveChangesAsync. Stamping the tamper-evidence hash " +
+                "chain reads its head under a database lock, which the synchronous path cannot do, and " +
+                "writing the row unstamped would silently leave it outside the chain.");
         }
+
         return base.SavingChanges(eventData, result);
     }
 
@@ -55,55 +63,49 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
     {
         InjectAuditEntries(eventData.Context);
         var rows = CollectAddedAuditRows(eventData.Context);
-        if (rows.Count > 0)
+        if (rows.Count > 0 && eventData.Context is { } context)
         {
-            _pending = await _chain.BeginAsync(rows, cancellationToken);
+            // Holds the chain until SavedChangesAsync commits or SaveChangesFailedAsync rolls back.
+            _pending = await _chain.BeginAsync(context, rows, cancellationToken);
         }
+
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
-    {
-        CommitChain();
-        return base.SavedChanges(eventData, result);
-    }
+        => base.SavedChanges(eventData, result);
 
-    public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    public override async ValueTask<int> SavedChangesAsync(
+        SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
     {
-        CommitChain();
-        return base.SavedChangesAsync(eventData, result, cancellationToken);
+        // The rows are in; committing here both persists them and releases the chain.
+        if (_pending is { } batch)
+        {
+            _pending = null;
+            await AuditChain.CommitAsync(batch, cancellationToken);
+        }
+
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
         LogFailure(eventData);
-        AbortChain();
         base.SaveChangesFailed(eventData);
     }
 
-    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    public override async Task SaveChangesFailedAsync(
+        DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
     {
         LogFailure(eventData);
-        AbortChain();
-        return base.SaveChangesFailedAsync(eventData, cancellationToken);
-    }
 
-    private void CommitChain()
-    {
         if (_pending is { } batch)
         {
-            _chain.Commit(batch);
             _pending = null;
+            await AuditChain.AbortAsync(batch);
         }
-    }
 
-    private void AbortChain()
-    {
-        if (_pending is not null)
-        {
-            _chain.Abort();
-            _pending = null;
-        }
+        await base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
     private static List<AuditLog> CollectAddedAuditRows(DbContext? context)
