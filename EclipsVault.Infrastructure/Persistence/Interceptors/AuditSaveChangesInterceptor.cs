@@ -47,10 +47,9 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         InjectAuditEntries(eventData.Context);
         if (CollectAddedAuditRows(eventData.Context).Count > 0)
         {
-            // Unstage them on the way out: this context is shared, so rows left pending here would
-            // be swept into the next async save and committed for an operation that never ran.
-            DiscardStagedAuditRows(eventData.Context);
-
+            // Throwing leaves the rows just injected staged; the context unstages them (see
+            // EclipsVaultDbContext.DiscardPendingChanges), since anything left pending on this
+            // shared context is committed by whoever saves next.
             throw new NotSupportedException(
                 "Audit rows must be persisted with SaveChangesAsync. Stamping the tamper-evidence hash " +
                 "chain reads its head under a database lock, which the synchronous path cannot do, and " +
@@ -95,7 +94,6 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
         LogFailure(eventData);
-        DiscardStagedAuditRows(eventData.Context);
         base.SaveChangesFailed(eventData);
     }
 
@@ -110,8 +108,6 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             await AuditChain.AbortAsync(batch);
         }
 
-        DiscardStagedAuditRows(eventData.Context);
-
         await base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
@@ -120,29 +116,6 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             .Where(e => e.State == EntityState.Added)
             .Select(e => e.Entity)
             .ToList() ?? [];
-
-    /// <summary>
-    /// Drops the audit rows staged for a batch that failed — both the ones injected here and any the
-    /// sink added — because the changes they describe were rolled back with it.
-    ///
-    /// Aborting the chain is not enough on its own: the rows stay in the change tracker as Added, and
-    /// the context is scoped and shared, so the next SaveChanges (an unrelated sink write, or a
-    /// retry) sweeps them up and stamps them into the chain for real. The trail would then carry a
-    /// perfectly valid, correctly hashed entry for something that never happened — and a chain whose
-    /// rows may be false is worth less than no chain at all, because it is believed.
-    /// </summary>
-    private static void DiscardStagedAuditRows(DbContext? context)
-    {
-        if (context is null)
-        {
-            return;
-        }
-
-        foreach (var entry in context.ChangeTracker.Entries<AuditLog>().Where(e => e.State == EntityState.Added).ToList())
-        {
-            entry.State = EntityState.Detached;
-        }
-    }
 
     private void LogFailure(DbContextErrorEventData eventData)
         => _logger.LogCritical(eventData.Exception,

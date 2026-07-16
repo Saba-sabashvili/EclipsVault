@@ -10,6 +10,12 @@
   <ItemGroup>
     <!-- Data / EF Core -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
+    <!-- Test-only: lets the real DbContext run in-process so persistence invariants are pinned in CI. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <!-- The SQLite provider still resolves the native library at 2.1.11, which carries a high-severity
+         advisory (GHSA-2m69-gcr7-jv3q). Test-only and never shipped, but a known-vulnerable package has
+         no business in a vault's dependency tree — pinned forward to the patched build. -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.9" />
