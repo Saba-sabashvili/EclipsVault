@@ -15,6 +15,14 @@ public static class DatabaseProvider
     public const string SqlServer = "SqlServer";
     public const string Postgres = "Postgres";
 
+    /// <summary>
+    /// Migrations are generated per provider — the DDL differs down to the column types — so each
+    /// engine needs its own set, and EF finds a set by assembly. SQL Server's live in Infrastructure
+    /// where they have always been (moving them would rewrite history for every existing
+    /// deployment); PostgreSQL's get their own assembly.
+    /// </summary>
+    public const string PostgresMigrationsAssembly = "EclipsVault.Migrations.Postgres";
+
     public static bool IsPostgres(string provider) =>
         provider.Equals(Postgres, StringComparison.OrdinalIgnoreCase) ||
         provider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase) ||
@@ -34,7 +42,8 @@ public static class DatabaseProvider
     {
         if (IsPostgres(provider))
         {
-            return options.UseNpgsql(connectionString);
+            return options.UseNpgsql(connectionString,
+                npgsql => npgsql.MigrationsAssembly(PostgresMigrationsAssembly));
         }
 
         if (IsSqlServer(provider))

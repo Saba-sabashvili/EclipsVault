@@ -3,6 +3,17 @@
   <ItemGroup>
     <ProjectReference Include="..\EclipsVault.Core\EclipsVault.Core.csproj" />
     <ProjectReference Include="..\EclipsVault.Infrastructure\EclipsVault.Infrastructure.csproj" />
+    <!-- Migrations are found by assembly, so the PostgreSQL set has to be loadable by the host that
+         applies them at startup. Referenced regardless of the configured provider: it is inert DDL
+         when running on SQL Server, and absent it, a Postgres deployment starts and finds no
+         migrations to apply — an empty database rather than an error. -->
+    <ProjectReference Include="..\EclipsVault.Migrations.Postgres\EclipsVault.Migrations.Postgres.csproj" />
+    <!-- Design-time only (PrivateAssets), so `dotnet ef` can use this as the startup project when
+         generating migrations. Never ships. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
