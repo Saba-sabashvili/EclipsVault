@@ -15,7 +15,12 @@ public interface ISecretService
     Task<Guid> CreateAsync(CreateSecretRequest request, CancellationToken ct);
 
     /// <summary>Sets a new value, archiving the current one as a version first. Audited.</summary>
-    Task RotateAsync(Guid id, string newValue, string? changeNote, CancellationToken ct);
+    /// <summary>
+    /// Replaces the value, archiving the current one as a version. <paramref name="renewTtlDays"/>
+    /// resets the expiry to that many days from now — the renewal the "Expiring soon" panel points
+    /// at; null leaves the existing deadline untouched.
+    /// </summary>
+    Task RotateAsync(Guid id, string newValue, string? changeNote, int? renewTtlDays, CancellationToken ct);
 
     /// <summary>Lists the archived (superseded) values of a secret, newest first. Metadata only.</summary>
     Task<IReadOnlyList<SecretVersionDto>> ListVersionsAsync(Guid id, CancellationToken ct);

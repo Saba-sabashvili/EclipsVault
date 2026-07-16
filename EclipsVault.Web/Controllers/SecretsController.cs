@@ -135,8 +135,16 @@ public sealed class SecretsController : VaultController
             return RedirectToAction(nameof(Details), new { id = model.Id });
         }
 
-        await _secrets.RotateAsync(model.Id, model.NewValue, string.IsNullOrWhiteSpace(model.ChangeNote) ? null : model.ChangeNote.Trim(), ct);
-        this.FlashSuccess("Secret rotated. The previous value was archived to version history.");
+        await _secrets.RotateAsync(
+            model.Id,
+            model.NewValue,
+            string.IsNullOrWhiteSpace(model.ChangeNote) ? null : model.ChangeNote.Trim(),
+            model.RenewTtlDays,
+            ct);
+
+        this.FlashSuccess(model.RenewTtlDays is > 0
+            ? $"Secret rotated and renewed for {model.RenewTtlDays} more day(s). The previous value was archived to version history."
+            : "Secret rotated. The previous value was archived to version history.");
         return RedirectToAction(nameof(Details), new { id = model.Id });
     }
 

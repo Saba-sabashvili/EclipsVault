@@ -91,6 +91,11 @@ public sealed class RotateSecretViewModel
     [StringLength(256)]
     [Display(Name = "Change note (optional)")]
     public string? ChangeNote { get; set; }
+
+    /// <summary>Null leaves the existing expiry alone; a value resets it to that many days from now.</summary>
+    [Range(1, 3650)]
+    [Display(Name = "Renew for (days)")]
+    public int? RenewTtlDays { get; set; }
 }
 
 public sealed class CreateSecretViewModel

@@ -108,7 +108,7 @@ public sealed class SecretService : ISecretService
         return secret.Id;
     }
 
-    public async Task RotateAsync(Guid id, string newValue, string? changeNote, CancellationToken ct)
+    public async Task RotateAsync(Guid id, string newValue, string? changeNote, int? renewTtlDays, CancellationToken ct)
     {
         var envelope = await GetEnvelopeAsync(id, ct);
         await TripHoneyTokenIfNeededAsync(envelope, ct);
@@ -116,12 +116,22 @@ public sealed class SecretService : ISecretService
         var entity = await _repository.FindAsync(id, ct) ?? throw new SecretNotFoundException(id);
         var archived = await ArchiveCurrentAsync(entity, changeNote, ct);
 
+        var now = _clock.GetUtcNow();
         var sealedSecret = SealValue(newValue);
         entity.Ciphertext = sealedSecret.Ciphertext;
         entity.WrappedDek = sealedSecret.WrappedDek;
         entity.KekId = sealedSecret.KekId;
         entity.Algorithm = sealedSecret.Algorithm;
-        entity.UpdatedAtUtc = _clock.GetUtcNow();
+        entity.UpdatedAtUtc = now;
+
+        // Renewing is what saves a near-TTL secret from the lifecycle reaper. Without this the new
+        // value inherits the old deadline and is shredded on schedule — silently destroying the
+        // credential the operator just rotated in. Mirrors CreateAsync: days from now, or leave
+        // the existing deadline (including "never") alone.
+        if (renewTtlDays is > 0)
+        {
+            entity.ExpiresAtUtc = now.AddDays(renewTtlDays.Value);
+        }
 
         // One transaction: the interceptor writes a SecretUpdated audit row atomically.
         await _repository.RotateAsync(entity, archived, ct);

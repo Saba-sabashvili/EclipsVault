@@ -43,6 +43,14 @@ public class Secret
     /// <summary>When set, the lifecycle worker shreds the key material after this instant.</summary>
     public DateTimeOffset? ExpiresAtUtc { get; set; }
 
+    /// <summary>
+    /// The <see cref="ExpiresAtUtc"/> value an expiry notice has already been sent for. Holding the
+    /// deadline itself (not a bool) keeps the notice idempotent across every sweep, yet re-arms it
+    /// automatically when the deadline moves. Bookkeeping only — writing it is not a domain change,
+    /// so it is exempt from the SecretUpdated audit row.
+    /// </summary>
+    public DateTimeOffset? ExpiryNoticeSentForUtc { get; set; }
+
     /// <summary>True once key material has been destroyed. The row remains as a tombstone for the audit trail.</summary>
     public bool IsShredded { get; set; }
 

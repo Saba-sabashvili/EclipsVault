@@ -174,6 +174,15 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     private static AuditRow? DescribeSecretChange(EntityEntry<Secret> entry)
     {
+        // Stamping the expiry-notice marker is bookkeeping, not a change to the secret: reporting it
+        // as SecretUpdated would tell an auditor someone edited a secret that nobody touched, once
+        // per notice. The notice itself is recorded in the notification outbox. Narrow by
+        // construction — if anything else changed in the same write, it audits normally.
+        if (entry.State == EntityState.Modified && OnlyChanged(entry, nameof(Secret.ExpiryNoticeSentForUtc)))
+        {
+            return null;
+        }
+
         var action = entry.State switch
         {
             EntityState.Added => AuditAction.SecretCreated,
@@ -201,6 +210,13 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     private static bool IsShredTransition(EntityEntry<Secret> entry)
         => entry.Property(s => s.IsShredded) is { OriginalValue: false, CurrentValue: true };
+
+    /// <summary>True when <paramref name="propertyName"/> is the only modified property on the entry.</summary>
+    private static bool OnlyChanged(EntityEntry entry, string propertyName)
+    {
+        var modified = entry.Properties.Where(p => p.IsModified).Select(p => p.Metadata.Name).ToList();
+        return modified.Count == 1 && modified[0] == propertyName;
+    }
 
     /// <summary>The audit-relevant shape of one entity change, before the actor and clock are stamped on.</summary>
     private readonly record struct AuditRow(
