@@ -31,6 +31,7 @@ try
 
     builder.Services.AddEclipsVaultInfrastructure(builder.Configuration);
     builder.Services.AddHostedService<SecretLifecycleWorker>();
+    builder.Services.AddHostedService<DynamicLeaseWorker>();
 
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<IAuditContext, HttpAuditContext>();

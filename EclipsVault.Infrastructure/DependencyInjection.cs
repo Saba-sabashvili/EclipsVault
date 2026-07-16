@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.Configure<Argon2Options>(configuration.GetSection(Argon2Options.SectionName));
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
         services.Configure<LifecycleOptions>(configuration.GetSection(LifecycleOptions.SectionName));
+        services.Configure<DynamicLeaseOptions>(configuration.GetSection(DynamicLeaseOptions.SectionName));
         services.Configure<WebAuthnOptions>(configuration.GetSection(WebAuthnOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
@@ -83,6 +84,7 @@ public static class DependencyInjection
         services.AddScoped<IAccessRequestRepository, AccessRequestRepository>();
         services.AddScoped<IEmailLogRepository, EmailLogRepository>();
         services.AddScoped<ITrustedNetworkRepository, TrustedNetworkRepository>();
+        services.AddScoped<IDynamicSecretRepository, DynamicSecretRepository>();
 
         // Security primitives.
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
@@ -122,6 +124,10 @@ public static class DependencyInjection
             services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
         }
         services.AddScoped<IIntrusionResponseService, IntrusionResponseService>();
+
+        // Dynamic secrets: one backend per DynamicSecretBackend value; the service picks by role.
+        services.AddScoped<IDynamicSecretBackend, SqlServerDynamicSecretBackend>();
+        services.AddScoped<IDynamicSecretService, DynamicSecretService>();
 
         // Runtime-managed trusted networks + audit reading.
         services.AddScoped<ITrustedNetworkService, TrustedNetworkService>();

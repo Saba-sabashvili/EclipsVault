@@ -95,6 +95,86 @@ public static class DbSeeder
             await db.SaveChangesAsync();
             logger.LogInformation("Seeded sample secrets, one short-TTL secret, and {HoneyTokenCount} honey-token decoys", 2);
         }
+
+        await SeedDynamicSecretRolesAsync(db, logger, now);
+    }
+
+    /// <summary>
+    /// Dynamic-secret recipes. These mint real SQL Server principals against the vault's own server,
+    /// so the sample roles are genuinely usable: issue one and you can connect with it.
+    ///
+    /// Roles are seeded rather than authored in the UI on purpose — the statements run with the
+    /// vault's backend rights, so defining one is a privileged, out-of-band act.
+    /// </summary>
+    private static async Task SeedDynamicSecretRolesAsync(EclipsVaultDbContext db, ILogger logger, DateTimeOffset now)
+    {
+        if (await db.DynamicSecretRoles.AnyAsync())
+        {
+            return;
+        }
+
+        // {{name}} and {{password}} are substituted by CredentialStatementTemplate, which refuses any
+        // value that is not strictly alphanumeric — the reason interpolating into DDL is safe here.
+        const string createReader = """
+            CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';
+            CREATE USER [{{name}}] FOR LOGIN [{{name}}];
+            ALTER ROLE db_datareader ADD MEMBER [{{name}}];
+            """;
+
+        const string createWriter = """
+            CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';
+            CREATE USER [{{name}}] FOR LOGIN [{{name}}];
+            ALTER ROLE db_datareader ADD MEMBER [{{name}}];
+            ALTER ROLE db_datawriter ADD MEMBER [{{name}}];
+            """;
+
+        // Idempotent, and kills live sessions first: DROP LOGIN fails while the principal is
+        // connected, and a lease that cannot be reclaimed is the failure mode that matters.
+        const string revoke = """
+            DECLARE @sessions nvarchar(max) = N'';
+            SELECT @sessions = @sessions + N'KILL ' + CAST(session_id AS nvarchar(10)) + N';'
+            FROM sys.dm_exec_sessions WHERE login_name = N'{{name}}';
+            IF LEN(@sessions) > 0 EXEC sp_executesql @sessions;
+            DROP USER IF EXISTS [{{name}}];
+            IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'{{name}}') DROP LOGIN [{{name}}];
+            """;
+
+        db.DynamicSecretRoles.AddRange(
+            new DynamicSecretRole
+            {
+                Id = Guid.NewGuid(),
+                Name = "phoenix_db_reader",
+                Description = "Read-only SQL Server login on the vault database, minted on demand.",
+                ProjectKey = "PHOENIX",
+                Environment = SecretEnvironment.Development,
+                Sensitivity = SensitivityLevel.Internal,
+                Backend = DynamicSecretBackend.SqlServer,
+                CreationStatements = createReader,
+                RevocationStatements = revoke,
+                DefaultTtlMinutes = 15,
+                MaxTtlMinutes = 60,
+                IsEnabled = true,
+                CreatedAtUtc = now
+            },
+            new DynamicSecretRole
+            {
+                Id = Guid.NewGuid(),
+                Name = "global_db_writer",
+                Description = "Read/write SQL Server login on the vault database. Short leases only.",
+                ProjectKey = "GLOBAL",
+                Environment = SecretEnvironment.Production,
+                Sensitivity = SensitivityLevel.Secret,
+                Backend = DynamicSecretBackend.SqlServer,
+                CreationStatements = createWriter,
+                RevocationStatements = revoke,
+                DefaultTtlMinutes = 10,
+                MaxTtlMinutes = 30,
+                IsEnabled = true,
+                CreatedAtUtc = now
+            });
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Seeded {RoleCount} dynamic-secret roles (SQL Server backend)", 2);
     }
 
     private static Secret SealSecret(

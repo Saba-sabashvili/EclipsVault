@@ -10,8 +10,12 @@ namespace EclipsVault.Web.Authorization;
 /// context (production window, network trust) from the shared <see cref="IAccessContextProvider"/>
 /// — the same snapshot the self-service "My access" page shows — resolves any explicit grant, and
 /// delegates the actual decision to the pure rule engine in Core.
+///
+/// It gates any <see cref="IAbacResource"/>, not just a stored secret: a dynamic-secret role carries
+/// the same three attributes, so issuing a credential is decided by this one handler and one rule
+/// engine rather than a parallel copy that could drift from it.
 /// </summary>
-public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequirement, SecretDetailsDto>
+public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequirement, IAbacResource>
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IAccessContextProvider _accessContext;
@@ -36,7 +40,7 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
     protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
         SecretAccessRequirement requirement,
-        SecretDetailsDto resource)
+        IAbacResource resource)
     {
         var clearanceClaim = context.User.FindFirstValue(VaultClaimTypes.Clearance);
         var projectClaim = context.User.FindFirstValue(VaultClaimTypes.Project);
@@ -57,9 +61,11 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
         // Shared with the "My access" page: network trust + production-window state.
         var accessContext = await _accessContext.CurrentAsync(ct);
 
-        // An explicit grant lets a user outside the secret's project reach it.
+        // An explicit grant lets a user outside the secret's project reach it. Grants are issued
+        // against stored secrets only — there is nothing to share about a dynamic role, whose whole
+        // point is that anyone entitled to it can mint their own credential.
         var isGranted = false;
-        if (context.User.GetUserIdOrNull() is { } userId)
+        if (resource is SecretDetailsDto && context.User.GetUserIdOrNull() is { } userId)
         {
             isGranted = await _grants.HasActiveGrantAsync(userId, resource.Id, ct);
         }

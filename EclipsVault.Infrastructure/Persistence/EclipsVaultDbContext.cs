@@ -41,6 +41,12 @@ public sealed class EclipsVaultDbContext : DbContext
 
     public DbSet<EmailLog> EmailLogs => Set<EmailLog>();
 
+    /// <summary>Recipes for minting short-lived backend credentials on demand.</summary>
+    public DbSet<DynamicSecretRole> DynamicSecretRoles => Set<DynamicSecretRole>();
+
+    /// <summary>Issued dynamic credentials, tracked so they can be destroyed when their lease ends.</summary>
+    public DbSet<DynamicSecretLease> DynamicSecretLeases => Set<DynamicSecretLease>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
         => modelBuilder.ApplyConfigurationsFromAssembly(typeof(EclipsVaultDbContext).Assembly);
 }

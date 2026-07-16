@@ -80,5 +80,13 @@ public enum AuditAction
 
     // Step-up re-authentication for sensitive reveals.
     StepUpVerified = 120,
-    StepUpFailed = 121
+    StepUpFailed = 121,
+
+    // Dynamic secrets: credentials minted on a backend and destroyed when their lease ends.
+    DynamicCredentialIssued = 130,
+    DynamicCredentialRevoked = 131,
+    DynamicCredentialExpired = 132,
+
+    /// <summary>The backend refused to destroy a credential — it may still be live. Critical.</summary>
+    DynamicCredentialRevocationFailed = 133
 }

@@ -130,6 +130,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
         Inject<Secret>(context, DescribeSecretChange);
         Inject<TrustedNetwork>(context, DescribeTrustedNetworkChange);
+        Inject<DynamicSecretLease>(context, DescribeLeaseChange);
     }
 
     /// <summary>
@@ -167,7 +168,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 ResourceType = row.ResourceType,
                 ResourceId = row.ResourceId,
                 ResourceName = row.ResourceName,
-                Details = row.Details
+                Details = row.Details,
+                IsCritical = row.IsCritical
             });
         }
     }
@@ -208,6 +210,46 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             _ => null
         };
 
+    /// <summary>
+    /// A dynamic credential exists on a live backend, so issuing and destroying it are audited in
+    /// the same transaction that opens and closes the lease — the trail can never claim a credential
+    /// was reclaimed when the row saying so was rolled back.
+    /// </summary>
+    private static AuditRow? DescribeLeaseChange(EntityEntry<DynamicSecretLease> entry)
+    {
+        var lease = entry.Entity;
+
+        if (entry.State == EntityState.Added)
+        {
+            return new AuditRow(
+                AuditAction.DynamicCredentialIssued, nameof(DynamicSecretLease), lease.Id, lease.RoleName,
+                $"Minted '{lease.CredentialIdentity}' for {lease.Username}; lease elapses at {lease.ExpiresAtUtc:u}");
+        }
+
+        if (entry.State != EntityState.Modified)
+        {
+            return null;
+        }
+
+        return lease.Status switch
+        {
+            LeaseStatus.Revoked => new AuditRow(
+                AuditAction.DynamicCredentialRevoked, nameof(DynamicSecretLease), lease.Id, lease.RoleName,
+                $"Handed back '{lease.CredentialIdentity}' before its lease elapsed"),
+
+            LeaseStatus.Expired => new AuditRow(
+                AuditAction.DynamicCredentialExpired, nameof(DynamicSecretLease), lease.Id, lease.RoleName,
+                $"Lease elapsed; destroyed '{lease.CredentialIdentity}'"),
+
+            // The credential may still be live on the backend — the one lease outcome that needs a human.
+            LeaseStatus.RevocationFailed => new AuditRow(
+                AuditAction.DynamicCredentialRevocationFailed, nameof(DynamicSecretLease), lease.Id, lease.RoleName,
+                $"Could NOT destroy '{lease.CredentialIdentity}': {lease.RevocationError}", IsCritical: true),
+
+            _ => null
+        };
+    }
+
     private static bool IsShredTransition(EntityEntry<Secret> entry)
         => entry.Property(s => s.IsShredded) is { OriginalValue: false, CurrentValue: true };
 
@@ -220,5 +262,10 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     /// <summary>The audit-relevant shape of one entity change, before the actor and clock are stamped on.</summary>
     private readonly record struct AuditRow(
-        AuditAction Action, string ResourceType, Guid ResourceId, string? ResourceName, string? Details);
+        AuditAction Action,
+        string ResourceType,
+        Guid ResourceId,
+        string? ResourceName,
+        string? Details,
+        bool IsCritical = false);
 }
