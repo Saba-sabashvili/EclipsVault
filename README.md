@@ -16,7 +16,7 @@ EclipsVault.slnx                  # modern XML solution format
 │       ├── Secrets/              #     secret service, repo port, DTOs
 │       ├── Users/                #     user admin service, repo port, DTOs
 │       ├── Profile/              #     self-service profile service
-│       ├── Networks/             #     trusted-network service
+│       ├── Networks/             #     trusted-network service + repo port, canonical IP/CIDR rules
 │       ├── Auditing/             #     audit-log reader
 │       ├── Dashboard/            #     overview aggregation
 │       ├── Activity/             #     per-user activity feed (personal security log)
@@ -53,7 +53,12 @@ Dependency rule: `Web → Infrastructure → Core`. Nothing ever points outward.
 
 **Application is sliced by feature** (vertical slices inside the layer): each folder holds the interface, its DTOs, and the service for one capability, so a feature is read and changed in one place. Cross-feature references resolve through per-project `GlobalUsings.cs`, so adding a feature folder needs no per-file `using` edits. `Abstractions/` is the exception — it holds the technical "port" interfaces that Infrastructure implements.
 
-**Auditing is a single cross-cutting port.** Every audit row is written through one fail-closed `IAuditSink.WriteAsync(AuditEntry)` (Core.Application.Abstractions → `Infrastructure/Persistence/AuditSink`), not bolted onto repository contracts. Repositories persist their own aggregate only; a service never borrows another aggregate's repository just to record an event. The sink escalates any write failure to `AuditWriteFailedException`, so a secret read that cannot be audited aborts before decrypting (fail-closed). Writes that must be atomic with a data change (secret create/update/shred) are still injected by the `SaveChangesInterceptor`.
+**Auditing is a single cross-cutting port.** An audit row has exactly **two** ways into the database, both in `Infrastructure/Persistence`, and no service may hand-write one:
+
+1. **`IAuditSink.WriteAsync(AuditEntry)`** (Core.Application.Abstractions → `AuditSink`) — for a standalone event (a reveal, a sign-in, lifting an IP block). It is fail-closed: any write failure escalates to `AuditWriteFailedException`, so a secret read that cannot be audited aborts before decrypting.
+2. **`AuditSaveChangesInterceptor`** — for an event that must be **atomic with a data change**, which the sink cannot give you because it commits separately (the change could persist unaudited if the audit insert then failed). The interceptor injects the row into the *same* `SaveChanges` batch, so the change and its audit row commit or roll back together. It audits `Secret` (create/update/shred/delete) and `TrustedNetwork` (add/remove — both move the ABAC network boundary).
+
+The interceptor is also the choke point through which **every** row passes on its way to the database (whether injected there or added by the sink), so it stamps each one into the tamper-evidence hash chain just before persistence. Repositories persist their own aggregate only; a service never borrows another aggregate's repository — or a `DbContext` — just to record an event.
 
 **Schema is owned by EF Core Migrations** (`Infrastructure/Migrations/`). Startup runs `Database.MigrateAsync()`; there is no `EnsureCreated` and no hand-written DDL. Add a schema change with:
 
@@ -278,7 +283,8 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 - ✅ **KMS-backed KEK (HashiCorp Vault Transit)** — the master key can now live in Vault instead of an environment variable: the `VaultTransit` crypto engine wraps/unwraps each DEK via Vault's Transit API, so the KEK never enters process memory. Opt-in via `Crypto:Engine=VaultTransit`; verified end-to-end against a local dev Vault (a secret created and revealed through the app, stored with `KekId=vault:eclipsvault:v1` and a `vault:v1:` wrapped DEK). An AWS KMS / Azure Key Vault engine would follow the same `ICryptoEngine` shape (needs the respective cloud credentials).
 - **Dynamic secrets & leasing** — issue short-lived, auto-revoked backend credentials on demand (the flagship capability of a Vault-class engine), and rotate the *actual* upstream secret, not just re-wrap the DEK.
 - **SSO (OIDC/SAML) + SCIM** — enterprise identity, with clearance/project attributes flowing from the IdP.
-- **Further clean-arch** — move `TrustedNetworkService` / `IntrusionResponseService` off `DbContext` and behind Core repository ports; wire near-TTL secrets through the notification service.
+- ✅ **Further clean-arch: one true audit choke point** — the two services that reached past `IAuditSink` straight into `DbContext` to hand-build `AuditLog` rows (`TrustedNetworkService`, `IntrusionResponseService`) now go through the ports, making the "single cross-cutting port" rule above actually true instead of aspirational: audit rows have exactly two writers again (sink + interceptor), and `Infrastructure/Security` no longer touches the `DbContext` at all. `TrustedNetworkService` moved to `Core/Application/Networks` behind a new `ITrustedNetworkRepository` (which also absorbed its cache), joining every other feature-slice service in Core — and, no longer needing a database, became unit-testable. Its trusted-range validation turned out to duplicate `NetworkRules.TryParseCidr`, a copy that survived the IP/CIDR consolidation; it now calls it. The interceptor generalised from a `Secret`-only block into a small per-entity rule table, which is what lets a trusted-network add stay atomic with its audit row. `IntrusionResponseService` stays in Infrastructure by design — it implements an `Abstractions` port and its `LogCritical` alarm *is* the product, and Core has no logger.
+- **Further clean-arch (remaining)** — wire near-TTL secrets through the notification service.
 
 ## Notes
 

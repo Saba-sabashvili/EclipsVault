@@ -82,6 +82,7 @@ public static class DependencyInjection
         services.AddScoped<IMfaRecoveryCodeRepository, MfaRecoveryCodeRepository>();
         services.AddScoped<IAccessRequestRepository, AccessRequestRepository>();
         services.AddScoped<IEmailLogRepository, EmailLogRepository>();
+        services.AddScoped<ITrustedNetworkRepository, TrustedNetworkRepository>();
 
         // Security primitives.
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();

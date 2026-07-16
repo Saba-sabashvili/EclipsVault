@@ -8,11 +8,12 @@ using Microsoft.Extensions.Logging;
 namespace EclipsVault.Infrastructure.Persistence.Interceptors;
 
 /// <summary>
-/// Injects an AuditLog row for every Secret insert/update/delete into the SAME
-/// SaveChanges batch, which SQL Server executes as one implicit transaction.
-/// Fail-closed by construction: if the audit row cannot be written the entire
-/// transaction — including the secret change itself — is rolled back, and the
-/// failure is surfaced as a critical event.
+/// Injects an AuditLog row for every change to an audited entity (see <see cref="InjectAuditEntries"/>
+/// for the set) into the SAME SaveChanges batch, which SQL Server executes as one implicit
+/// transaction. Fail-closed by construction: if the audit row cannot be written the entire
+/// transaction — including the change itself — is rolled back, and the failure is surfaced as a
+/// critical event. This is why these rows are injected here rather than written through
+/// <c>IAuditSink</c>, which commits separately and so could leave the change persisted unaudited.
 ///
 /// It is also the single choke point for <b>every</b> audit insert (whether injected here or
 /// added by the <c>AuditSink</c>), so it stamps each new row into the tamper-evidence hash
@@ -115,6 +116,11 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         => _logger.LogCritical(eventData.Exception,
             "SaveChanges failed with pending audit entries — transaction aborted, no unaudited change was persisted (fail-closed)");
 
+    /// <summary>
+    /// The audited entities. A type belongs here only when its audit row must be atomic with the
+    /// change itself; everything else is written through <c>IAuditSink</c> from the service that
+    /// owns the operation.
+    /// </summary>
     private void InjectAuditEntries(DbContext? context)
     {
         if (context is null)
@@ -122,25 +128,33 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             return;
         }
 
-        var secretEntries = context.ChangeTracker.Entries<Secret>()
+        Inject<Secret>(context, DescribeSecretChange);
+        Inject<TrustedNetwork>(context, DescribeTrustedNetworkChange);
+    }
+
+    /// <summary>
+    /// Appends one audit row per pending change to <typeparamref name="TEntity"/>, shaped by
+    /// <paramref name="describe"/>. A null description means the change is not audited.
+    /// </summary>
+    private void Inject<TEntity>(DbContext context, Func<EntityEntry<TEntity>, AuditRow?> describe)
+        where TEntity : class
+    {
+        var entries = context.ChangeTracker.Entries<TEntity>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             .ToList();
 
-        if (secretEntries.Count == 0)
+        if (entries.Count == 0)
         {
             return;
         }
 
         var now = _clock.GetUtcNow();
-        foreach (var entry in secretEntries)
+        foreach (var entry in entries)
         {
-            var action = entry.State switch
+            if (describe(entry) is not { } row)
             {
-                EntityState.Added => AuditAction.SecretCreated,
-                EntityState.Deleted => AuditAction.SecretDeleted,
-                _ when IsShredTransition(entry) => AuditAction.SecretShredded,
-                _ => AuditAction.SecretUpdated
-            };
+                continue;
+            }
 
             context.Set<AuditLog>().Add(new AuditLog
             {
@@ -149,15 +163,46 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 UserId = _actor.UserId,
                 Username = _actor.Username ?? "system",
                 SourceIp = _actor.SourceIp ?? "internal",
-                Action = action,
-                ResourceType = nameof(Secret),
-                ResourceId = entry.Entity.Id,
-                ResourceName = entry.Entity.Name,
-                Details = $"EntityState={entry.State}"
+                Action = row.Action,
+                ResourceType = row.ResourceType,
+                ResourceId = row.ResourceId,
+                ResourceName = row.ResourceName,
+                Details = row.Details
             });
         }
     }
 
+    private static AuditRow? DescribeSecretChange(EntityEntry<Secret> entry)
+    {
+        var action = entry.State switch
+        {
+            EntityState.Added => AuditAction.SecretCreated,
+            EntityState.Deleted => AuditAction.SecretDeleted,
+            _ when IsShredTransition(entry) => AuditAction.SecretShredded,
+            _ => AuditAction.SecretUpdated
+        };
+
+        return new AuditRow(action, nameof(Secret), entry.Entity.Id, entry.Entity.Name, $"EntityState={entry.State}");
+    }
+
+    /// <summary>
+    /// Trusting or untrusting a range widens or narrows the ABAC network rule, so it is audited
+    /// atomically with the change. There is no update path — a range is added or removed.
+    /// </summary>
+    private static AuditRow? DescribeTrustedNetworkChange(EntityEntry<TrustedNetwork> entry)
+        => entry.State switch
+        {
+            EntityState.Added => new AuditRow(
+                AuditAction.TrustedNetworkAdded, nameof(TrustedNetwork), entry.Entity.Id, entry.Entity.Cidr, entry.Entity.Label),
+            EntityState.Deleted => new AuditRow(
+                AuditAction.TrustedNetworkRemoved, nameof(TrustedNetwork), entry.Entity.Id, entry.Entity.Cidr, entry.Entity.Label),
+            _ => null
+        };
+
     private static bool IsShredTransition(EntityEntry<Secret> entry)
         => entry.Property(s => s.IsShredded) is { OriginalValue: false, CurrentValue: true };
+
+    /// <summary>The audit-relevant shape of one entity change, before the actor and clock are stamped on.</summary>
+    private readonly record struct AuditRow(
+        AuditAction Action, string ResourceType, Guid ResourceId, string? ResourceName, string? Details);
 }

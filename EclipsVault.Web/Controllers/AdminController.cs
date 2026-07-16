@@ -1,3 +1,4 @@
+using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
@@ -18,6 +19,7 @@ public sealed class AdminController : VaultController
     private readonly IUserAdminService _userAdmin;
     private readonly ITrustedNetworkService _trustedNetworks;
     private readonly IIpBlacklist _blacklist;
+    private readonly IAuditSink _audit;
     private readonly AbacOptions _abacOptions;
     private readonly ILogger<AdminController> _logger;
 
@@ -25,12 +27,14 @@ public sealed class AdminController : VaultController
         IUserAdminService userAdmin,
         ITrustedNetworkService trustedNetworks,
         IIpBlacklist blacklist,
+        IAuditSink audit,
         IOptions<AbacOptions> abacOptions,
         ILogger<AdminController> logger)
     {
         _userAdmin = userAdmin;
         _trustedNetworks = trustedNetworks;
         _blacklist = blacklist;
+        _audit = audit;
         _abacOptions = abacOptions.Value;
         _logger = logger;
     }
@@ -285,7 +289,13 @@ public sealed class AdminController : VaultController
     {
         if (await _blacklist.UnblockAsync(network, ct))
         {
-            await _trustedNetworks.RecordUnblockedAsync(network, ct);
+            await _audit.WriteAsync(new AuditEntry
+            {
+                Action = AuditAction.IpRangeUnblocked,
+                ResourceType = "TrustedNetwork",
+                ResourceName = network,
+                Details = "Intrusion-defence block lifted"
+            }, ct);
             _logger.LogWarning("Administrator {Username} lifted the intrusion-defence block on {Network}", User.Identity?.Name, network);
             this.FlashSuccess($"Block on {network} lifted.");
         }
