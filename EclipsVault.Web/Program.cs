@@ -5,11 +5,13 @@ using EclipsVault.Infrastructure.Logging;
 using EclipsVault.Infrastructure.Persistence;
 using EclipsVault.Infrastructure.Workers;
 using EclipsVault.Web.Authentication;
+using EclipsVault.Infrastructure.Security;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Middleware;
 using EclipsVault.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
@@ -121,6 +123,63 @@ try
             options.SlidingExpiration = false;
         })
         .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(AuthSchemes.ApiKey, _ => { });
+
+    // Single sign-on — only wired up when configured, so a deployment that does not use it carries
+    // none of its surface. The handler proves who the caller is at the IdP and nothing more: the
+    // vault decides whether they may in (see SsoSignInService), which is why this signs into a
+    // throwaway correlation scheme rather than the session.
+    var sso = builder.Configuration.GetSection(SsoOptions.SectionName).Get<SsoOptions>() ?? new SsoOptions();
+    if (sso.Enabled)
+    {
+        builder.Services
+            .AddAuthentication()
+            .AddCookie(AuthSchemes.OidcCorrelation, options =>
+            {
+                options.Cookie.Name = "EclipsVault.OidcCorrelation";
+                options.Cookie.HttpOnly = true;
+                // Lax, not Strict: the IdP redirects back with a cross-site POST/GET, and Strict
+                // would withhold the correlation cookie and fail every sign-in.
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+            })
+            .AddOpenIdConnect(AuthSchemes.Oidc, options =>
+            {
+                options.Authority = sso.Authority;
+                options.ClientId = sso.ClientId;
+                options.ClientSecret = sso.ClientSecret;
+                options.SignInScheme = AuthSchemes.OidcCorrelation;
+
+                // Authorization code with PKCE, and no tokens in the front channel.
+                options.ResponseType = OpenIdConnectResponseType.Code;
+                options.UsePkce = true;
+                options.ResponseMode = OpenIdConnectResponseMode.FormPost;
+
+                options.Scope.Clear();
+                options.Scope.Add("openid");
+                options.Scope.Add("profile");
+                options.Scope.Add("email");
+
+                options.GetClaimsFromUserInfoEndpoint = true;
+                options.SaveTokens = false; // the vault has no use for the IdP's tokens after sign-in
+                options.MapInboundClaims = false; // keep the raw OIDC claim names (sub, amr, email_verified)
+
+                // The handler drops these as protocol noise by default. They are not noise here:
+                // 'iss' is *which* IdP made the assertion, without which the trail cannot say whose
+                // word was taken, and 'amr' is how they authenticated, which decides whether the
+                // vault's own second factor may be waived.
+                options.ClaimActions.Remove("iss");
+                options.ClaimActions.Remove("amr");
+
+                options.TokenValidationParameters.ValidateIssuer = true;
+                options.TokenValidationParameters.ValidateAudience = true;
+                options.TokenValidationParameters.ValidateLifetime = true;
+
+                // Discovery over plain HTTP means the JWKS can be swapped in flight, and with it the
+                // keys that validate every token. Dev-only, and it has to be asked for.
+                options.RequireHttpsMetadata = !sso.AllowInsecureHttp;
+            });
+    }
 
     builder.Services.AddAuthorization(options =>
     {

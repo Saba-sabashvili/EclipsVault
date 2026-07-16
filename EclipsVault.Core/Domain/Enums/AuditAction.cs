@@ -97,5 +97,14 @@ public enum AuditAction
     /// An upstream rotation left the stored value and the live credential out of step, and the
     /// vault could not put it back. Someone has to reconcile it by hand. Critical.
     /// </summary>
-    SecretUpstreamRotationDrifted = 135
+    SecretUpstreamRotationDrifted = 135,
+
+    /// <summary>An identity provider's assertion was matched to a vault account.</summary>
+    SsoIdentityLinked = 140,
+
+    /// <summary>
+    /// The vault turned an SSO sign-in away. Routine when someone simply has no account here — and
+    /// the single most useful row in the trail when it isn't, because it is the IdP being told no.
+    /// </summary>
+    SsoSignInRefused = 141
 }

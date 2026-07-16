@@ -42,6 +42,16 @@ public static class AuthSchemes
 
     /// <summary>Bearer / X-Api-Key authentication for non-interactive service accounts.</summary>
     public const string ApiKey = "ApiKey";
+
+    /// <summary>
+    /// The OpenID Connect handler. Deliberately not an application scheme: signing in here proves
+    /// only what the identity provider asserts, and the vault still has to decide whether that
+    /// person may in at all. The principal it produces is read once, at the callback, and discarded.
+    /// </summary>
+    public const string Oidc = "EclipsVault.Oidc";
+
+    /// <summary>Holds the OIDC handler's correlation and nonce for the round trip to the IdP.</summary>
+    public const string OidcCorrelation = "EclipsVault.OidcCorrelation";
 }
 
 public static class VaultPolicies

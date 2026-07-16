@@ -61,7 +61,7 @@ services:
   # together in the UI, so everyone gets the same IdP.
   #
   # Realm 'eclipsvault' ships two users, both with the dev-user password:
-  #   dev-user@eclipsvault.local      — matches a seeded vault account, so sign-in succeeds
+  #   devon@eclipsvault.local         — matches the seeded dev-user account, so sign-in succeeds
   #   idp-only-user@eclipsvault.local — genuine to the IdP, unknown to the vault, so it is refused
   #                                     (the vault decides who may in, not the IdP)
   keycloak:

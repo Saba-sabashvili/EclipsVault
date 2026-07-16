@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <!-- Data / EF Core -->
+    <!-- OpenID Connect: SSO against the customer's own IdP, rather than a dependency on ours. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
     <!-- PostgreSQL is a first-class target: SQL Server licensing is a line item on every
          self-hosted deployment, and the chain lock was the only thing tying the vault to it. -->

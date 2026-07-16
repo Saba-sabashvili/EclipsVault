@@ -1,3 +1,4 @@
+using EclipsVault.Core.Application.Sso;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Auditing;
 using EclipsVault.Infrastructure.Caching;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.Configure<WebAuthnOptions>(configuration.GetSection(WebAuthnOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
+        services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddMemoryCache();
@@ -165,6 +167,14 @@ public static class DependencyInjection
         services.AddScoped<IServiceAccountService>(sp => sp.GetRequiredService<ServiceAccountService>());
         services.AddScoped<IApiKeyAuthenticator>(sp => sp.GetRequiredService<ServiceAccountService>());
         services.AddScoped<IVaultAuthenticationService, VaultAuthenticationService>();
+
+        // SSO: the IdP proves who you are, this decides whether you may in. The policy is a Core
+        // type bound from configuration here, so Core keeps no dependency on a config binder.
+        var ssoSection = configuration.GetSection(SsoOptions.SectionName).Get<SsoOptions>();
+        services.AddSingleton(ssoSection is null
+            ? SsoPolicy.Default
+            : new SsoPolicy(ssoSection.TrustIdpMultiFactor));
+        services.AddScoped<ISsoSignInService, SsoSignInService>();
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IMfaRecoveryService, MfaRecoveryService>();

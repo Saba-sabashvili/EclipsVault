@@ -14,6 +14,11 @@ public sealed class LoginViewModel
     [DataType(DataType.Password)]
     [Display(Name = "Password")]
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>Whether an identity provider is configured — the button is absent otherwise.</summary>
+    public bool SsoEnabled { get; set; }
+
+    public string SsoDisplayName { get; set; } = "single sign-on";
 }
 
 public sealed class TotpViewModel
