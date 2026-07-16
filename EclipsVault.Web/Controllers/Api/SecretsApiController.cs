@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
@@ -26,22 +25,20 @@ public sealed class SecretsApiController : ControllerBase
         _authorization = authorization;
     }
 
-    /// <summary>Lists secret metadata (no values). Values are fetched one at a time and ABAC-gated.</summary>
+    /// <summary>
+    /// Lists secret metadata (no values) the calling service account may know exists. Values are
+    /// fetched one at a time and gated by the same policy.
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        var secrets = await _secrets.ListAsync(ct);
+        // Every row runs the full rule set — clearance, project, network, time window, and the
+        // key's own scope — through the same handler that gates a read. The key's project scope
+        // used to be re-applied here by hand, which was both a second copy of rule 5 and the only
+        // rule this list applied at all: everything else was disclosed to any valid key.
+        var visible = await _authorization.VisibleToAsync(User, await _secrets.ListAsync(ct));
 
-        // A project-scoped key only ever sees its own project's metadata.
-        var scopeProject = User.FindFirstValue(VaultClaimTypes.ScopeProject);
-        if (!string.IsNullOrEmpty(scopeProject))
-        {
-            secrets = secrets
-                .Where(s => string.Equals(s.ProjectKey, scopeProject, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        return Ok(secrets.Select(s => new
+        return Ok(visible.Select(s => new
         {
             id = s.Id,
             name = s.Name,

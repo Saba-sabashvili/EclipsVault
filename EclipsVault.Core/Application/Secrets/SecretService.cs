@@ -45,11 +45,23 @@ public sealed class SecretService : ISecretService
     private Task AuditSecretAsync(Guid id, string name, AuditAction action, CancellationToken ct)
         => _audit.WriteAsync(new AuditEntry { Action = action, ResourceType = nameof(Secret), ResourceId = id, ResourceName = name }, ct);
 
+    /// <summary>
+    /// Every active secret's metadata, decoys excluded — this is attribute data for the caller's
+    /// ABAC filter to narrow, not a list anyone is entitled to see whole.
+    ///
+    /// Decoys are dropped here, for every caller, rather than being handed out with a flag for the
+    /// UI to hide. A decoy that is reachable by following a link is a trap for your own staff:
+    /// opening one revokes their session and blocks their network range, and they had no way to
+    /// know. Unlisted, the only way to reach one is with an id obtained out of band — from a
+    /// database dump, a backup, a stolen envelope — which is exactly the reader a decoy exists to
+    /// catch, and makes any read of one unambiguous.
+    /// </summary>
     public async Task<IReadOnlyList<SecretSummaryDto>> ListAsync(CancellationToken ct)
     {
         var secrets = await _repository.ListActiveAsync(_clock.GetUtcNow(), ct);
         return secrets
-            .Select(s => new SecretSummaryDto(s.Id, s.Name, s.ProjectKey, s.Environment, s.Sensitivity, s.CreatedAtUtc, s.ExpiresAtUtc, s.IsHoneyToken))
+            .Where(s => !s.IsHoneyToken)
+            .Select(s => new SecretSummaryDto(s.Id, s.Name, s.ProjectKey, s.Environment, s.Sensitivity, s.CreatedAtUtc, s.ExpiresAtUtc))
             .ToList();
     }
 

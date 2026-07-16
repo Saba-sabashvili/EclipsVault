@@ -45,16 +45,15 @@ public sealed class SecretsController : VaultController
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken ct)
     {
-        var secrets = await _secrets.ListAsync(ct);
+        // A name is not nothing: "Production_AWS_Root_Key" says what exists, where, and what it is
+        // worth. Every row goes through the same ABAC handler that gates opening one, so the list
+        // shows exactly what this caller could reach and nothing more.
+        var visible = await _authorization.VisibleToAsync(User, await _secrets.ListAsync(ct));
 
-        // Only administrators get the decoy marker; to everyone else the bait must
-        // look exactly like a real secret.
-        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)Core.Domain.Enums.ClearanceLevel.TopSecret).ToString());
-
-        var items = secrets
+        var items = visible
             .Select(s => new SecretListItemViewModel(
                 s.Id, s.Name, s.ProjectKey, s.Environment, s.Sensitivity,
-                s.CreatedAtUtc, s.ExpiresAtUtc, IsDecoy: isAdmin && s.IsHoneyToken))
+                s.CreatedAtUtc, s.ExpiresAtUtc))
             .ToList();
         return View(items);
     }

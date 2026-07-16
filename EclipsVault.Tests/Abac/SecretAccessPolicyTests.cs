@@ -119,6 +119,71 @@ public class SecretAccessPolicyTests
         Assert.False(decision.IsAllowed);
     }
 
+    // ---- enumeration runs the same rules ------------------------------------------------
+
+    [Fact]
+    public void Metadata_only_key_may_still_enumerate()
+    {
+        // The one rule enumeration drops, because dropping it is what "metadata-only" means.
+        var subject = new SubjectAttributes(ClearanceLevel.Secret, "PHOENIX");
+        var scope = new ApiKeyScope(ProjectScope: null, MetadataOnly: true);
+        var decision = SecretAccessPolicy.Evaluate(subject, Resource(), Context(), scope, AccessKind.Enumerate);
+        Assert.True(decision.IsAllowed);
+    }
+
+    [Theory]
+    [InlineData(AccessKind.Enumerate)]
+    [InlineData(AccessKind.Read)]
+    public void Clearance_below_sensitivity_hides_the_secret_as_firmly_as_it_blocks_the_read(AccessKind kind)
+    {
+        // Knowing 'Production_AWS_Root_Key' exists is worth having; the name says what it is worth.
+        var subject = new SubjectAttributes(ClearanceLevel.Standard, "PHOENIX");
+        var decision = SecretAccessPolicy.Evaluate(
+            subject, Resource(sensitivity: SensitivityLevel.TopSecret), Context(), scope: null, kind);
+        Assert.False(decision.IsAllowed);
+    }
+
+    [Theory]
+    [InlineData(AccessKind.Enumerate)]
+    [InlineData(AccessKind.Read)]
+    public void Another_projects_secret_is_not_enumerable_either(AccessKind kind)
+    {
+        var subject = new SubjectAttributes(ClearanceLevel.Secret, "ORION");
+        var decision = SecretAccessPolicy.Evaluate(
+            subject, Resource(project: "PHOENIX"), Context(), scope: null, kind);
+        Assert.False(decision.IsAllowed);
+    }
+
+    [Theory]
+    [InlineData(AccessKind.Enumerate)]
+    [InlineData(AccessKind.Read)]
+    public void A_project_scoped_key_enumerates_only_its_own_project(AccessKind kind)
+    {
+        var subject = new SubjectAttributes(ClearanceLevel.TopSecret, "GLOBAL");
+        var scope = new ApiKeyScope(ProjectScope: "ORION", MetadataOnly: false);
+        var decision = SecretAccessPolicy.Evaluate(subject, Resource(project: "PHOENIX"), Context(), scope, kind);
+        Assert.False(decision.IsAllowed);
+    }
+
+    [Theory]
+    [InlineData(AccessKind.Enumerate)]
+    [InlineData(AccessKind.Read)]
+    public void An_untrusted_network_hides_confidential_secrets_rather_than_only_blocking_them(AccessKind kind)
+    {
+        var subject = new SubjectAttributes(ClearanceLevel.Secret, "PHOENIX");
+        var decision = SecretAccessPolicy.Evaluate(
+            subject, Resource(sensitivity: SensitivityLevel.Confidential), Context(trusted: false), scope: null, kind);
+        Assert.False(decision.IsAllowed);
+    }
+
+    [Fact]
+    public void Read_is_the_default_so_a_caller_that_forgets_to_say_gets_the_strict_answer()
+    {
+        var subject = new SubjectAttributes(ClearanceLevel.Secret, "PHOENIX");
+        var scope = new ApiKeyScope(ProjectScope: null, MetadataOnly: true);
+        Assert.False(SecretAccessPolicy.Evaluate(subject, Resource(), Context(), scope).IsAllowed);
+    }
+
     [Fact]
     public void Project_scoped_key_is_denied_outside_its_project_even_for_topsecret()
     {

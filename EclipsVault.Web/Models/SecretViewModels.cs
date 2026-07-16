@@ -4,8 +4,10 @@ using EclipsVault.Core.Domain.Enums;
 
 namespace EclipsVault.Web.Models;
 
-/// <summary>IsDecoy is only ever set for TopSecret administrators — ordinary users
-/// must see decoys as indistinguishable from real secrets.</summary>
+/// <summary>
+/// One row of the secrets list, already narrowed to what the caller may know exists. There is no
+/// decoy marker because decoys never reach a list — see <see cref="ISecretService.ListAsync"/>.
+/// </summary>
 public sealed record SecretListItemViewModel(
     Guid Id,
     string Name,
@@ -13,8 +15,7 @@ public sealed record SecretListItemViewModel(
     SecretEnvironment Environment,
     SensitivityLevel Sensitivity,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? ExpiresAtUtc,
-    bool IsDecoy);
+    DateTimeOffset? ExpiresAtUtc);
 
 public sealed class SecretDetailsViewModel
 {

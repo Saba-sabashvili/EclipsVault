@@ -65,7 +65,7 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
         // against stored secrets only — there is nothing to share about a dynamic role, whose whole
         // point is that anyone entitled to it can mint their own credential.
         var isGranted = false;
-        if (resource is SecretDetailsDto && context.User.GetUserIdOrNull() is { } userId)
+        if (resource is IGrantableResource && context.User.GetUserIdOrNull() is { } userId)
         {
             isGranted = await _grants.HasActiveGrantAsync(userId, resource.Id, ct);
         }
@@ -84,20 +84,26 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
             ? new ApiKeyScope(scopeProject, metadataOnly)
             : null;
 
-        var decision = SecretAccessPolicy.Evaluate(subject, resourceAttributes, requestContext, scope);
+        var decision = SecretAccessPolicy.Evaluate(subject, resourceAttributes, requestContext, scope, requirement.Kind);
         if (decision.IsAllowed)
         {
             context.Succeed(requirement);
+            return;
         }
-        else
+
+        // A denied read is someone reaching for a specific secret they cannot have, which is worth
+        // knowing about. A denied enumeration is the list page doing its job once per hidden row —
+        // logging those at Warning would bury the reads under routine noise.
+        if (requirement.Kind == AccessKind.Read)
         {
             _logger.LogWarning(
                 "ABAC denied access to secret {SecretId} ({SecretName}) for user {UserName} from {SourceIp}: {DenialReasons}",
                 resource.Id, resource.Name, context.User.Identity?.Name, requestContext.SourceIp, decision.DenialReasons);
-            foreach (var reason in decision.DenialReasons)
-            {
-                context.Fail(new AuthorizationFailureReason(this, reason));
-            }
+        }
+
+        foreach (var reason in decision.DenialReasons)
+        {
+            context.Fail(new AuthorizationFailureReason(this, reason));
         }
     }
 }
