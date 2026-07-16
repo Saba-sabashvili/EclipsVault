@@ -392,6 +392,12 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 
   Stamping the notice marker is bookkeeping, not an edit, so it is exempt from the `SecretUpdated` audit row — narrowly, by checking that the marker is the *only* modified property. Live verification caught that the first cut of this leaked anyway: `UpdateAsync` calls `DbSet.Update()`, which flags every property modified, making the write indistinguishable from a real edit. It writes the single column now.
 
+## Licence
+
+**Source-available, not open source.** EclipsVault is © 2026 Saba Sabashvili, all rights reserved, and is licensed rather than sold. You may read the source and run it for **evaluation** for 30 days; **production use — anything holding a real credential — requires a written commercial licence.** Redistributing it, hosting it for others, or offering it as a service is not permitted. See [LICENSE](LICENSE) for the terms and `sabashvili13@icloud.com` for licensing.
+
+This is the managed self-hosted model: the source is visible to customers, because a vault you cannot read is a vault you cannot audit, and running one you have not audited is a decision no security team should make. What is licensed is running it in production.
+
 ## Notes
 
 - List views show metadata only and are not per-row audited; every by-id metadata view and every reveal is audited (`SecretMetadataViewed`, `SecretRevealed`).
