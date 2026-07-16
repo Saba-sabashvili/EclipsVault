@@ -10,6 +10,9 @@
   <ItemGroup>
     <!-- Data / EF Core -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
+    <!-- PostgreSQL is a first-class target: SQL Server licensing is a line item on every
+         self-hosted deployment, and the chain lock was the only thing tying the vault to it. -->
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <!-- Test-only: lets the real DbContext run in-process so persistence invariants are pinned in CI. -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
     <!-- The SQLite provider still resolves the native library at 2.1.11, which carries a high-severity

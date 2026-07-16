@@ -48,7 +48,20 @@ public sealed class EclipsVaultDbContext : DbContext
     public DbSet<DynamicSecretLease> DynamicSecretLeases => Set<DynamicSecretLease>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplyConfigurationsFromAssembly(typeof(EclipsVaultDbContext).Assembly);
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(EclipsVaultDbContext).Assembly);
+
+        // The unique sequence index skips not-yet-chained rows (Sequence 0), so the constraint can
+        // exist before the one-time back-fill runs. A partial index's predicate is raw SQL in the
+        // provider's own identifier quoting — SQL Server and SQLite take [Sequence], PostgreSQL
+        // takes "Sequence" — so it is declared here, where the provider is known, rather than in
+        // AuditLogConfiguration, which cannot see one.
+        var sequence = Database.IsNpgsql() ? "\"Sequence\"" : "[Sequence]";
+        modelBuilder.Entity<AuditLog>()
+            .HasIndex(a => a.Sequence)
+            .IsUnique()
+            .HasFilter($"{sequence} <> 0");
+    }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

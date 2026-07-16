@@ -6,6 +6,7 @@ using EclipsVault.Infrastructure.Media;
 using EclipsVault.Infrastructure.Notifications;
 using EclipsVault.Infrastructure.Persistence;
 using EclipsVault.Infrastructure.Persistence.Interceptors;
+using EclipsVault.Infrastructure.Persistence.Locking;
 using EclipsVault.Infrastructure.Persistence.Repositories;
 using EclipsVault.Infrastructure.Security;
 using EclipsVault.Infrastructure.Security.WebAuthn;
@@ -69,9 +70,19 @@ public static class DependencyInjection
                 "Database connection string 'DefaultConnection' is not configured. Set the " +
                 "ConnectionStrings__DefaultConnection environment variable (or a secret store).");
 
+        // Which database to run on. SQL Server stays the default so existing deployments are
+        // unaffected; PostgreSQL exists because a paid database is a line item on every self-hosted
+        // deployment, and the vault should not be the reason for one.
+        var provider = configuration.GetValue<string?>("Database:Provider") ?? DatabaseProvider.SqlServer;
+
         services.AddDbContext<EclipsVaultDbContext>((sp, options) => options
-            .UseSqlServer(connectionString)
+            .UseVaultDatabase(provider, connectionString)
             .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
+
+        // The one database-specific thing in the chain: the lock that serialises appends to it.
+        services.AddSingleton<IAuditChainLocker>(_ => DatabaseProvider.IsPostgres(provider)
+            ? new PostgresAuditChainLocker()
+            : new SqlServerAuditChainLocker());
 
         // The one place standalone audit rows are written (fail-closed). It commits through the
         // group committer, which is why the same instance is both a singleton and the hosted

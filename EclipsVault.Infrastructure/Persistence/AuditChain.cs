@@ -1,4 +1,5 @@
 using EclipsVault.Core.Domain.Entities;
+using EclipsVault.Infrastructure.Persistence.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -27,28 +28,22 @@ public sealed class AuditChain
 
     /// <summary>
     /// How long a writer waits for the chain before giving up. Generous, because contention here is
-    /// normal and brief (one insert), and failing is expensive: the caller's whole operation aborts.
+    /// normal and brief (one batch), and failing is expensive: the caller's whole operation aborts.
     /// </summary>
-    private const int LockTimeoutMilliseconds = 15_000;
+    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(15);
 
-    /// <summary>
-    /// A transaction-scoped exclusive lock, released automatically when the transaction ends —
-    /// which is exactly the window the chain head must be held for. sp_getapplock reports timeout
-    /// and deadlock as a negative return rather than an error, so raise it: silently proceeding
-    /// would append a row computed from a head someone else has already moved.
-    /// </summary>
-    private const string AcquireLockSql = """
-        DECLARE @result int;
-        EXEC @result = sp_getapplock
-            @Resource = @p0, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = @p1;
-        IF @result < 0
-            THROW 51000, 'Could not acquire the audit chain lock; refusing to write an unchained audit row.', 1;
-        """;
+    private readonly IAuditChainLocker _locker;
+
+    public AuditChain(IAuditChainLocker locker) => _locker = locker;
 
     /// <summary>
     /// Takes the chain, reads its head, and stamps <paramref name="rows"/> onto it. The returned
     /// batch must be handed to <see cref="CommitAsync"/> or <see cref="AbortAsync"/> — until then
     /// the chain is held and every other writer, on any replica, waits.
+    ///
+    /// <para>Stamps the whole list under one lock: the chain is a linked list, but a batch can be
+    /// linked in memory and inserted together, so the lock's cost is per batch, not per row. That is
+    /// what keeps auditing every read fail-closed from capping how fast secrets can be served.</para>
     /// </summary>
     public async Task<AuditBatch> BeginAsync(DbContext db, IReadOnlyList<AuditLog> rows, CancellationToken ct)
     {
@@ -60,7 +55,7 @@ public sealed class AuditChain
 
         try
         {
-            await db.Database.ExecuteSqlRawAsync(AcquireLockSql, [LockResource, LockTimeoutMilliseconds], ct);
+            await _locker.AcquireAsync(db, LockResource, LockTimeout, ct);
 
             var tail = await db.Set<AuditLog>()
                 .AsNoTracking()

@@ -24,8 +24,9 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.HasIndex(a => a.ResourceId);
         builder.HasIndex(a => a.UserId);
 
-        // Chained rows have a unique, gap-free sequence; the filter excludes not-yet-chained
-        // rows (Sequence 0) so the constraint can be added before the one-time back-fill runs.
-        builder.HasIndex(a => a.Sequence).IsUnique().HasFilter("[Sequence] <> 0");
+        // Chained rows have a unique, gap-free sequence. The index that enforces that is declared in
+        // EclipsVaultDbContext.OnModelCreating instead: its filter has to be written in the
+        // provider's own identifier quoting, and a configuration class cannot see the provider.
+        builder.HasIndex(a => a.Sequence);
     }
 }
