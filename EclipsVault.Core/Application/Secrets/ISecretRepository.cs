@@ -6,6 +6,11 @@ namespace EclipsVault.Core.Application.Secrets;
 /// Persistence boundary for secrets. Write operations that must be audited atomically
 /// with the change (create/update/shred) are audited by the SaveChanges interceptor;
 /// read/share auditing is written separately through <see cref="IAuditSink"/>.
+///
+/// Every write here is all-or-nothing, including in memory: if one throws, the entity it was given
+/// is left exactly as it was and nothing remains staged for a later write to commit. Callers rely on
+/// this to undo the outside world — putting an upstream password back, say — knowing the value they
+/// still hold is the one that is stored.
 /// </summary>
 public interface ISecretRepository
 {
