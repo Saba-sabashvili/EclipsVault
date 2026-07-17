@@ -36,7 +36,12 @@ public sealed class KekXmlEncryptor : IXmlEncryptor
         var plaintext = Encoding.UTF8.GetBytes(plaintextElement.ToString(SaveOptions.DisableFormatting));
         try
         {
-            var sealedKey = _crypto.Create().Seal(plaintext, Binding);
+            // IXmlEncryptor is a synchronous framework contract, so the one place the vault must bridge
+            // to the async crypto engine is here. It is the cold path — Data Protection seals the key
+            // ring when it is generated or rotated, not per request — so blocking briefly (only with a
+            // network-backed engine; the local engine completes synchronously) is acceptable, unlike a
+            // per-reveal call, which is exactly why ICryptoEngine is otherwise awaited.
+            var sealedKey = _crypto.Create().SealAsync(plaintext, Binding, CancellationToken.None).GetAwaiter().GetResult();
             var element = new XElement("sealedKey",
                 new XElement("ciphertext", Convert.ToBase64String(sealedKey.Ciphertext)),
                 new XElement("wrappedDek", Convert.ToBase64String(sealedKey.WrappedDek)),

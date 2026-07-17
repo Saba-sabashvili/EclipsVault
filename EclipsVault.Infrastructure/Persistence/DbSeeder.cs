@@ -175,19 +175,19 @@ public static class DbSeeder
             var engine = sp.GetRequiredService<ICryptoEngineFactory>().Create();
 
             db.Secrets.AddRange(
-                SealSecret(engine, now, "Phoenix_Dev_Database_Password", "PHOENIX", SecretEnvironment.Development,
+                await SealSecretAsync(engine, now, "Phoenix_Dev_Database_Password", "PHOENIX", SecretEnvironment.Development,
                     SensitivityLevel.Internal, "Server=phx-dev-sql;Database=Phoenix;User Id=phx_app;Password=dev-only-Sample!42"),
-                SealSecret(engine, now, "Phoenix_Staging_Api_Key", "PHOENIX", SecretEnvironment.Staging,
+                await SealSecretAsync(engine, now, "Phoenix_Staging_Api_Key", "PHOENIX", SecretEnvironment.Staging,
                     SensitivityLevel.Confidential, "phx_stg_api_9f83b2e1c4d5460fb7a1"),
-                SealSecret(engine, now, "Phoenix_Ephemeral_Deploy_Token", "PHOENIX", SecretEnvironment.Development,
+                await SealSecretAsync(engine, now, "Phoenix_Ephemeral_Deploy_Token", "PHOENIX", SecretEnvironment.Development,
                     SensitivityLevel.Internal, "deploy-token-expires-soon-5f6e7d8c",
                     expiresAtUtc: now.AddMinutes(5)),
 
                 // Honey-token decoys: realistic bait. Any by-id read trips the intrusion response.
-                SealSecret(engine, now, "Production_AWS_Root_Key", "GLOBAL", SecretEnvironment.Production,
+                await SealSecretAsync(engine, now, "Production_AWS_Root_Key", "GLOBAL", SecretEnvironment.Production,
                     SensitivityLevel.TopSecret, "AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
                     isHoneyToken: true),
-                SealSecret(engine, now, "Global_SQL_SA_Password", "GLOBAL", SecretEnvironment.Production,
+                await SealSecretAsync(engine, now, "Global_SQL_SA_Password", "GLOBAL", SecretEnvironment.Production,
                     SensitivityLevel.TopSecret, "Sup3r$ecretS4-Pr0d-2026!",
                     isHoneyToken: true));
 
@@ -276,7 +276,7 @@ public static class DbSeeder
         logger.LogInformation("Seeded {RoleCount} dynamic-secret roles (SQL Server backend)", 2);
     }
 
-    private static Secret SealSecret(
+    private static async Task<Secret> SealSecretAsync(
         ICryptoEngine engine,
         DateTimeOffset now,
         string name,
@@ -288,7 +288,8 @@ public static class DbSeeder
         bool isHoneyToken = false)
     {
         var id = Guid.NewGuid();
-        var sealedSecret = engine.Seal(System.Text.Encoding.UTF8.GetBytes(value), SecretBinding.ForCurrentValue(id));
+        var sealedSecret = await engine.SealAsync(
+            System.Text.Encoding.UTF8.GetBytes(value), SecretBinding.ForCurrentValue(id), CancellationToken.None);
         return new Secret
         {
             Id = id,

@@ -10,6 +10,10 @@ public sealed record SealedSecret(byte[] Ciphertext, byte[] WrappedDek, string K
 /// Envelope-encryption engine. The default implementation is local AES-256-GCM;
 /// swapping to a cloud KMS is a configuration change (see ICryptoEngineFactory),
 /// the business layer never changes.
+///
+/// The contract is asynchronous because a KMS/HSM-backed engine wraps and unwraps the DEK over the
+/// network — the local engine completes synchronously, but the interface must not force a
+/// network-backed one into blocking a thread-pool thread on every seal and unseal.
 /// </summary>
 public interface ICryptoEngine
 {
@@ -18,15 +22,15 @@ public interface ICryptoEngine
     /// <param name="associatedData">
     /// Binds the payload to the row it is being stored in — see <see cref="SecretBinding"/>. It is
     /// authenticated but not encrypted, and the identical value must be supplied to
-    /// <see cref="Unseal"/> or the read fails.
+    /// <see cref="UnsealAsync"/> or the read fails.
     /// </param>
-    SealedSecret Seal(byte[] plaintext, byte[] associatedData);
+    Task<SealedSecret> SealAsync(byte[] plaintext, byte[] associatedData, CancellationToken ct);
 
     /// <param name="associatedData">
     /// The binding this payload was sealed with. If it does not match — because the envelope was
     /// moved into a different row — the tag check fails and nothing is returned.
     /// </param>
-    byte[] Unseal(SealedSecret sealedSecret, byte[] associatedData);
+    Task<byte[]> UnsealAsync(SealedSecret sealedSecret, byte[] associatedData, CancellationToken ct);
 
     /// <summary>
     /// Re-wraps an already-sealed secret's DEK under the <em>current</em> KEK — used by key
@@ -34,5 +38,5 @@ public interface ICryptoEngine
     /// and its <see cref="SealedSecret.KekId"/> change. The DEK is unwrapped with whichever KEK
     /// originally sealed it, so the engine must still hold that (now retired) key.
     /// </summary>
-    SealedSecret Rewrap(SealedSecret sealedSecret);
+    Task<SealedSecret> RewrapAsync(SealedSecret sealedSecret, CancellationToken ct);
 }

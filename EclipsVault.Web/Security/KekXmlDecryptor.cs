@@ -25,7 +25,9 @@ public sealed class KekXmlDecryptor : IXmlDecryptor
             Value(encryptedElement, "kekId"),
             Value(encryptedElement, "algorithm"));
 
-        var plaintext = _crypto.Create().Unseal(sealedKey, KekXmlEncryptor.Binding);
+        // IXmlDecryptor is synchronous (see KekXmlEncryptor): the key ring is read at startup and on
+        // rotation, not per request, so bridging to the async engine here is the one acceptable block.
+        var plaintext = _crypto.Create().UnsealAsync(sealedKey, KekXmlEncryptor.Binding, CancellationToken.None).GetAwaiter().GetResult();
         try
         {
             return XElement.Parse(Encoding.UTF8.GetString(plaintext));

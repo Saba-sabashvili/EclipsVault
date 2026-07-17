@@ -18,10 +18,10 @@ public sealed class FakeCryptoEngine : ICryptoEngine, ICryptoEngineFactory
 
     public ICryptoEngine Create() => this;
 
-    public SealedSecret Seal(byte[] plaintext, byte[] associatedData)
-        => new(Frame(associatedData, plaintext), [], "test-kek", "FAKE");
+    public Task<SealedSecret> SealAsync(byte[] plaintext, byte[] associatedData, CancellationToken ct)
+        => Task.FromResult(new SealedSecret(Frame(associatedData, plaintext), [], "test-kek", "FAKE"));
 
-    public byte[] Unseal(SealedSecret sealedSecret, byte[] associatedData)
+    public Task<byte[]> UnsealAsync(SealedSecret sealedSecret, byte[] associatedData, CancellationToken ct)
     {
         var length = BitConverter.ToInt32(sealedSecret.Ciphertext, 0);
         var bound = sealedSecret.Ciphertext.AsSpan(sizeof(int), length);
@@ -32,10 +32,10 @@ public sealed class FakeCryptoEngine : ICryptoEngine, ICryptoEngineFactory
                 "This payload is bound to a different row than the one it was read from.");
         }
 
-        return sealedSecret.Ciphertext[(sizeof(int) + length)..];
+        return Task.FromResult(sealedSecret.Ciphertext[(sizeof(int) + length)..]);
     }
 
-    public SealedSecret Rewrap(SealedSecret sealedSecret) => sealedSecret;
+    public Task<SealedSecret> RewrapAsync(SealedSecret sealedSecret, CancellationToken ct) => Task.FromResult(sealedSecret);
 
     /// <summary>The plaintext inside a framed ciphertext, for tests that assert on stored bytes.</summary>
     public static byte[] ValueOf(byte[] ciphertext)

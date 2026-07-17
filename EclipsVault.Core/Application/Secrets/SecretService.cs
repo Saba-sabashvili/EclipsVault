@@ -87,9 +87,9 @@ public sealed class SecretService : ISecretService
         await AuditSecretAsync(envelope.Id, envelope.Name, AuditAction.SecretRevealed, ct);
 
         var engine = _cryptoFactory.Create();
-        var plaintext = engine.Unseal(
+        var plaintext = await engine.UnsealAsync(
             new SealedSecret(envelope.Ciphertext, envelope.WrappedDek, envelope.KekId, envelope.Algorithm),
-            SecretBinding.ForCurrentValue(envelope.Id));
+            SecretBinding.ForCurrentValue(envelope.Id), ct);
         try
         {
             return new RevealedSecretDto(envelope.Id, envelope.Name, Encoding.UTF8.GetString(plaintext));
@@ -104,7 +104,7 @@ public sealed class SecretService : ISecretService
     {
         // The id is settled before the value is sealed, because it is what the payload is bound to.
         var id = Guid.NewGuid();
-        var sealedSecret = SealValue(request.Value, SecretBinding.ForCurrentValue(id));
+        var sealedSecret = await SealValueAsync(request.Value, SecretBinding.ForCurrentValue(id), ct);
         var now = _clock.GetUtcNow();
 
         var secret = new Secret
@@ -148,7 +148,7 @@ public sealed class SecretService : ISecretService
         var archived = await ArchiveCurrentAsync(entity, changeNote, ct);
 
         var now = _clock.GetUtcNow();
-        var sealedSecret = SealValue(newValue, SecretBinding.ForCurrentValue(entity.Id));
+        var sealedSecret = await SealValueAsync(newValue, SecretBinding.ForCurrentValue(entity.Id), ct);
         entity.Ciphertext = sealedSecret.Ciphertext;
         entity.WrappedDek = sealedSecret.WrappedDek;
         entity.KekId = sealedSecret.KekId;
@@ -190,9 +190,9 @@ public sealed class SecretService : ISecretService
 
         // Keep the current value so the upstream change can be undone. Held only for this call.
         var engine = _cryptoFactory.Create();
-        var previousPassword = engine.Unseal(
+        var previousPassword = await engine.UnsealAsync(
             new SealedSecret(entity.Ciphertext, entity.WrappedDek, entity.KekId, entity.Algorithm),
-            SecretBinding.ForCurrentValue(entity.Id));
+            SecretBinding.ForCurrentValue(entity.Id), ct);
 
         try
         {
@@ -268,9 +268,9 @@ public sealed class SecretService : ISecretService
         await AuditSecretAsync(id, envelope.Name, AuditAction.SecretVersionRevealed, ct);
 
         var engine = _cryptoFactory.Create();
-        var plaintext = engine.Unseal(
+        var plaintext = await engine.UnsealAsync(
             new SealedSecret(version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm),
-            SecretBinding.ForArchivedVersion(id, version.Id));
+            SecretBinding.ForArchivedVersion(id, version.Id), ct);
         try
         {
             return new RevealedSecretDto(id, envelope.Name, Encoding.UTF8.GetString(plaintext));
@@ -296,7 +296,7 @@ public sealed class SecretService : ISecretService
         // precisely the move the binding exists to stop — an archived value put back as the current
         // one — and refusing to do it by hand is what leaves that signature meaningful when someone
         // does it in the database instead. Here it is a real restore: audited, and access-controlled.
-        var restored = ResealForCurrentValue(entity, version);
+        var restored = await ResealForCurrentValueAsync(entity, version, ct);
         entity.Ciphertext = restored.Ciphertext;
         entity.WrappedDek = restored.WrappedDek;
         entity.KekId = restored.KekId;
@@ -320,7 +320,7 @@ public sealed class SecretService : ISecretService
     private async Task<SecretVersion> ArchiveCurrentAsync(Secret entity, string? changeNote, CancellationToken ct)
     {
         var versionId = Guid.NewGuid();
-        var resealed = ResealForVersion(entity, versionId);
+        var resealed = await ResealForVersionAsync(entity, versionId, ct);
 
         return new SecretVersion
         {
@@ -338,26 +338,26 @@ public sealed class SecretService : ISecretService
     }
 
     /// <summary>Moves the secret's live value into the binding of an archived version.</summary>
-    private SealedSecret ResealForVersion(Secret entity, Guid versionId)
-        => Reseal(
+    private Task<SealedSecret> ResealForVersionAsync(Secret entity, Guid versionId, CancellationToken ct)
+        => ResealAsync(
             new SealedSecret(entity.Ciphertext, entity.WrappedDek, entity.KekId, entity.Algorithm),
             SecretBinding.ForCurrentValue(entity.Id),
-            SecretBinding.ForArchivedVersion(entity.Id, versionId));
+            SecretBinding.ForArchivedVersion(entity.Id, versionId), ct);
 
     /// <summary>Moves an archived version's value back into the secret's live binding.</summary>
-    private SealedSecret ResealForCurrentValue(Secret entity, SecretVersion version)
-        => Reseal(
+    private Task<SealedSecret> ResealForCurrentValueAsync(Secret entity, SecretVersion version, CancellationToken ct)
+        => ResealAsync(
             new SealedSecret(version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm),
             SecretBinding.ForArchivedVersion(entity.Id, version.Id),
-            SecretBinding.ForCurrentValue(entity.Id));
+            SecretBinding.ForCurrentValue(entity.Id), ct);
 
-    private SealedSecret Reseal(SealedSecret sealedSecret, byte[] from, byte[] to)
+    private async Task<SealedSecret> ResealAsync(SealedSecret sealedSecret, byte[] from, byte[] to, CancellationToken ct)
     {
         var engine = _cryptoFactory.Create();
-        var plaintext = engine.Unseal(sealedSecret, from);
+        var plaintext = await engine.UnsealAsync(sealedSecret, from, ct);
         try
         {
-            return engine.Seal(plaintext, to);
+            return await engine.SealAsync(plaintext, to, ct);
         }
         finally
         {
@@ -375,12 +375,12 @@ public sealed class SecretService : ISecretService
         await _cache.EvictAsync(id, ct);
     }
 
-    private SealedSecret SealValue(string value, byte[] associatedData)
+    private async Task<SealedSecret> SealValueAsync(string value, byte[] associatedData, CancellationToken ct)
     {
         var plaintext = Encoding.UTF8.GetBytes(value);
         try
         {
-            return _cryptoFactory.Create().Seal(plaintext, associatedData);
+            return await _cryptoFactory.Create().SealAsync(plaintext, associatedData, ct);
         }
         finally
         {

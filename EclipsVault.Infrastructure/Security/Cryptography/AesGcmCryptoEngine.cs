@@ -31,14 +31,17 @@ public sealed class AesGcmCryptoEngine : ICryptoEngine
 
     public string EngineId => EngineName;
 
-    public SealedSecret Seal(byte[] plaintext, byte[] associatedData)
+    // Local AES-GCM is CPU-only: there is nothing to await, so each method completes synchronously
+    // and hands back an already-completed task. The async signature exists for the network-backed
+    // engines (see VaultTransitCryptoEngine); it costs this one only a completed-task wrapper.
+    public Task<SealedSecret> SealAsync(byte[] plaintext, byte[] associatedData, CancellationToken ct)
     {
         var dek = RandomNumberGenerator.GetBytes(GcmBlob.DekSize);
         try
         {
             var ciphertext = GcmBlob.Encrypt(dek, plaintext, associatedData);
             var wrappedDek = GcmBlob.Encrypt(_kekProvider.CurrentKek, dek, default);
-            return new SealedSecret(ciphertext, wrappedDek, _kekProvider.CurrentKekId, SealAlgorithms.AesGcmLocal);
+            return Task.FromResult(new SealedSecret(ciphertext, wrappedDek, _kekProvider.CurrentKekId, SealAlgorithms.AesGcmLocal));
         }
         finally
         {
@@ -46,7 +49,7 @@ public sealed class AesGcmCryptoEngine : ICryptoEngine
         }
     }
 
-    public byte[] Unseal(SealedSecret sealedSecret, byte[] associatedData)
+    public Task<byte[]> UnsealAsync(SealedSecret sealedSecret, byte[] associatedData, CancellationToken ct)
     {
         var binding = LegacyBlobPolicy.BindingFor(sealedSecret.Algorithm, associatedData, _options);
 
@@ -54,7 +57,7 @@ public sealed class AesGcmCryptoEngine : ICryptoEngine
         var dek = GcmBlob.Decrypt(_kekProvider.ResolveKek(sealedSecret.KekId), sealedSecret.WrappedDek, default);
         try
         {
-            return GcmBlob.Decrypt(dek, sealedSecret.Ciphertext, binding);
+            return Task.FromResult(GcmBlob.Decrypt(dek, sealedSecret.Ciphertext, binding));
         }
         finally
         {
@@ -62,18 +65,18 @@ public sealed class AesGcmCryptoEngine : ICryptoEngine
         }
     }
 
-    public SealedSecret Rewrap(SealedSecret sealedSecret)
+    public Task<SealedSecret> RewrapAsync(SealedSecret sealedSecret, CancellationToken ct)
     {
         if (string.Equals(sealedSecret.KekId, _kekProvider.CurrentKekId, StringComparison.Ordinal))
         {
-            return sealedSecret; // already under the current KEK
+            return Task.FromResult(sealedSecret); // already under the current KEK
         }
 
         var dek = GcmBlob.Decrypt(_kekProvider.ResolveKek(sealedSecret.KekId), sealedSecret.WrappedDek, default);
         try
         {
             var rewrappedDek = GcmBlob.Encrypt(_kekProvider.CurrentKek, dek, default);
-            return sealedSecret with { WrappedDek = rewrappedDek, KekId = _kekProvider.CurrentKekId };
+            return Task.FromResult(sealedSecret with { WrappedDek = rewrappedDek, KekId = _kekProvider.CurrentKekId });
         }
         finally
         {

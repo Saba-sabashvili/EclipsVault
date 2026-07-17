@@ -134,9 +134,11 @@ public class ManagedRotationTests
 
     private static Secret ManagedSecret(bool bound = true)
     {
-        // Sealed the way the service would seal it: bound to this secret's own id.
-        var sealedSecret = new FakeCryptoEngine().Seal(
-            Encoding.UTF8.GetBytes(OriginalPassword), SecretBinding.ForCurrentValue(SecretId));
+        // Sealed the way the service would seal it: bound to this secret's own id. The fake engine
+        // completes synchronously, so resolving the task inline in this sync helper never blocks.
+        var sealedSecret = new FakeCryptoEngine()
+            .SealAsync(Encoding.UTF8.GetBytes(OriginalPassword), SecretBinding.ForCurrentValue(SecretId), default)
+            .GetAwaiter().GetResult();
 
         return new Secret
         {

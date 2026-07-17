@@ -62,8 +62,8 @@ public static class LegacyBlobUpgrader
 
         foreach (var secret in secrets)
         {
-            var resealed = Reseal(engine, secret.Ciphertext, secret.WrappedDek, secret.KekId, secret.Algorithm,
-                SecretBinding.ForCurrentValue(secret.Id));
+            var resealed = await ResealAsync(engine, secret.Ciphertext, secret.WrappedDek, secret.KekId, secret.Algorithm,
+                SecretBinding.ForCurrentValue(secret.Id), ct);
             secret.Ciphertext = resealed.Ciphertext;
             secret.WrappedDek = resealed.WrappedDek;
             secret.KekId = resealed.KekId;
@@ -72,8 +72,8 @@ public static class LegacyBlobUpgrader
 
         foreach (var version in versions)
         {
-            var resealed = Reseal(engine, version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm,
-                SecretBinding.ForArchivedVersion(version.SecretId, version.Id));
+            var resealed = await ResealAsync(engine, version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm,
+                SecretBinding.ForArchivedVersion(version.SecretId, version.Id), ct);
             version.Ciphertext = resealed.Ciphertext;
             version.WrappedDek = resealed.WrappedDek;
             version.KekId = resealed.KekId;
@@ -89,14 +89,15 @@ public static class LegacyBlobUpgrader
             secrets.Count, versions.Count);
     }
 
-    private static SealedSecret Reseal(
-        ICryptoEngine engine, byte[] ciphertext, byte[] wrappedDek, string kekId, string algorithm, byte[] binding)
+    private static async Task<SealedSecret> ResealAsync(
+        ICryptoEngine engine, byte[] ciphertext, byte[] wrappedDek, string kekId, string algorithm, byte[] binding,
+        CancellationToken ct)
     {
         // Unbound on the way in — that is what makes it legacy — and bound on the way out.
-        var plaintext = engine.Unseal(new SealedSecret(ciphertext, wrappedDek, kekId, algorithm), []);
+        var plaintext = await engine.UnsealAsync(new SealedSecret(ciphertext, wrappedDek, kekId, algorithm), [], ct);
         try
         {
-            return engine.Seal(plaintext, binding);
+            return await engine.SealAsync(plaintext, binding, ct);
         }
         finally
         {
