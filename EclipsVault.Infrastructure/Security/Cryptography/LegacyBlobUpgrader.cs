@@ -1,3 +1,5 @@
+using EclipsVault.Core.Application.Secrets;
+using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -62,22 +64,14 @@ public static class LegacyBlobUpgrader
 
         foreach (var secret in secrets)
         {
-            var resealed = await ResealAsync(engine, secret.Ciphertext, secret.WrappedDek, secret.KekId, secret.Algorithm,
-                SecretBinding.ForCurrentValue(secret.Id), ct);
-            secret.Ciphertext = resealed.Ciphertext;
-            secret.WrappedDek = resealed.WrappedDek;
-            secret.KekId = resealed.KekId;
-            secret.Algorithm = resealed.Algorithm;
+            var resealed = await ResealAsync(engine, secret, SecretBinding.ForCurrentValue(secret.Id), ct);
+            secret.ApplyEnvelope(resealed);
         }
 
         foreach (var version in versions)
         {
-            var resealed = await ResealAsync(engine, version.Ciphertext, version.WrappedDek, version.KekId, version.Algorithm,
-                SecretBinding.ForArchivedVersion(version.SecretId, version.Id), ct);
-            version.Ciphertext = resealed.Ciphertext;
-            version.WrappedDek = resealed.WrappedDek;
-            version.KekId = resealed.KekId;
-            version.Algorithm = resealed.Algorithm;
+            var resealed = await ResealAsync(engine, version, SecretBinding.ForArchivedVersion(version.SecretId, version.Id), ct);
+            version.ApplyEnvelope(resealed);
         }
 
         await db.SaveChangesAsync(ct);
@@ -90,11 +84,10 @@ public static class LegacyBlobUpgrader
     }
 
     private static async Task<SealedSecret> ResealAsync(
-        ICryptoEngine engine, byte[] ciphertext, byte[] wrappedDek, string kekId, string algorithm, byte[] binding,
-        CancellationToken ct)
+        ICryptoEngine engine, IEnvelope legacy, byte[] binding, CancellationToken ct)
     {
         // Unbound on the way in — that is what makes it legacy — and bound on the way out.
-        var plaintext = await engine.UnsealAsync(new SealedSecret(ciphertext, wrappedDek, kekId, algorithm), [], ct);
+        var plaintext = await engine.UnsealAsync(legacy.ToSealedSecret(), [], ct);
         try
         {
             return await engine.SealAsync(plaintext, binding, ct);

@@ -1,3 +1,4 @@
+using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 
 namespace EclipsVault.Core.Application.Abstractions;
@@ -21,7 +22,7 @@ public sealed record EncryptedSecretEnvelope(
     DateTimeOffset? UpdatedAtUtc,
     DateTimeOffset? ExpiresAtUtc,
     bool IsManaged = false,
-    string? RotationPrincipal = null);
+    string? RotationPrincipal = null) : IEnvelope;
 
 /// <summary>
 /// Cache-aside store for encrypted envelopes. Entries carry a short absolute TTL and

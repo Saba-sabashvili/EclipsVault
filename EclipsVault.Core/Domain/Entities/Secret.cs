@@ -7,7 +7,7 @@ namespace EclipsVault.Core.Domain.Entities;
 /// (AES-256-GCM); the DEK itself is stored wrapped by the master KEK. Plaintext
 /// never touches this entity.
 /// </summary>
-public class Secret
+public class Secret : IMutableEnvelope
 {
     public Guid Id { get; set; }
 
