@@ -8,6 +8,7 @@
 //   tr[data-href]                         → make a whole table row clickable
 //   input[data-reveal]                    → adds a show/hide eye button inside the field
 //   input[data-strength]                  → adds a live strength meter below the field
+//   nav[data-command-source]              → the palette's navigation entries (⌘K / Ctrl+K)
 document.addEventListener('DOMContentLoaded', () => {
     wireConfirms();
     wireCopyButtons();
@@ -21,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     wirePasswordBreachCheck();
     wireRevealToggles();
     wirePasswordStrength();
+    wireCommandPalette();
     wireThemeToggle();
 });
 
@@ -418,6 +420,208 @@ function scorePassword(value) {
     if (bits < 80) return { score: 2, text: 'Fair' };
     if (bits < 110) return { score: 3, text: 'Strong' };
     return { score: 4, text: 'Very strong' };
+}
+
+// --- Command palette (⌘K / Ctrl+K) ------------------------------------------------
+// Two sources, and neither of them is a list maintained here.
+//
+// Navigation is harvested from the sidebar's own <a> elements. That is not a shortcut — it is
+// what makes the palette safe. The sidebar is already rendered per-caller (an admin-only entry
+// is simply not in the DOM for anyone else), so reading it back means the palette offers exactly
+// the routes this user was already offered. A hardcoded command list here would be a second
+// copy of the navigation *and* of its authorization, and the copy would rot: the day someone
+// adds an admin page, the palette would happily show it to everyone.
+//
+// Secrets come from /Secrets/Search, which runs the same ABAC enumeration filter as the Secrets
+// list. See the comment on SecretsController.Search — a name is a disclosure, and the palette
+// is not allowed to be a way around that.
+function wireCommandPalette() {
+    const nav = document.querySelector('nav[data-command-source]');
+    if (!nav) return;   // signed-out pages have no shell and nothing to command
+
+    const searchUrl = nav.dataset.commandSearch;
+    const commands = [...nav.querySelectorAll('a[href]')].map((a) => ({
+        kind: 'Go to',
+        label: a.textContent.trim(),
+        url: a.getAttribute('href'),
+    })).filter((c) => c.label);
+
+    let backdrop = null;
+    let opener = null;
+    let seq = 0;
+    let timer;
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            backdrop ? close() : open();
+        }
+    });
+
+    function close() {
+        if (!backdrop) return;
+        backdrop.remove();
+        backdrop = null;
+        clearTimeout(timer);
+        seq++;                       // any in-flight search result is now stale
+
+        // Hand focus back where it came from. Dismissing a dialog that dumps focus on <body>
+        // sends a keyboard user back to the top of the document to find their place again.
+        if (opener && document.contains(opener)) opener.focus();
+        opener = null;
+    }
+
+    function open() {
+        opener = document.activeElement;
+        backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop palette-backdrop';
+        backdrop.innerHTML = `
+            <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+                <div class="palette-field">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                    <input type="text" class="palette-input" role="combobox" aria-expanded="true"
+                           aria-controls="palette-list" aria-autocomplete="list"
+                           placeholder="Search secrets, or jump to a page…" autocomplete="off" spellcheck="false" />
+                </div>
+                <ul class="palette-list" id="palette-list" role="listbox" aria-label="Results"></ul>
+                <p class="palette-hint">
+                    <span><kbd>↑</kbd><kbd>↓</kbd> to move</span>
+                    <span><kbd>↵</kbd> to open</span>
+                    <span><kbd>esc</kbd> to close</span>
+                </p>
+            </div>`;
+        document.body.appendChild(backdrop);
+
+        const input = backdrop.querySelector('.palette-input');
+        const list = backdrop.querySelector('.palette-list');
+        let items = [];
+        let active = 0;
+
+        backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+        function render(results) {
+            items = results;
+            active = 0;
+            list.innerHTML = '';
+
+            if (!results.length) {
+                const empty = document.createElement('li');
+                empty.className = 'palette-empty';
+                empty.textContent = input.value.trim()
+                    ? 'Nothing matches that.'
+                    : 'Type to search.';
+                list.appendChild(empty);
+                return;
+            }
+
+            results.forEach((r, i) => {
+                const li = document.createElement('li');
+                li.className = i === 0 ? 'palette-item is-active' : 'palette-item';
+                li.setAttribute('role', 'option');
+                li.setAttribute('aria-selected', String(i === 0));
+
+                const kind = document.createElement('span');
+                kind.className = 'palette-kind';
+                kind.textContent = r.kind;
+
+                // textContent, never innerHTML: a secret's name is user-supplied data and this is
+                // the one place it would be trivially easy to hand it to the parser.
+                const label = document.createElement('span');
+                label.className = 'palette-label';
+                label.textContent = r.label;
+
+                li.append(kind, label);
+
+                if (r.meta) {
+                    const meta = document.createElement('span');
+                    meta.className = 'palette-meta';
+                    meta.textContent = r.meta;
+                    li.appendChild(meta);
+                }
+                if (r.sensitivity) {
+                    const badge = document.createElement('span');
+                    badge.className = `badge sens-${r.sensitivity}`;
+                    badge.textContent = r.sensitivityName;
+                    li.appendChild(badge);
+                }
+
+                li.addEventListener('click', () => activate(i));
+                li.addEventListener('mousemove', () => highlight(i));
+                list.appendChild(li);
+            });
+        }
+
+        function highlight(i) {
+            if (i === active) return;
+            active = i;
+            [...list.children].forEach((li, n) => {
+                li.classList.toggle('is-active', n === i);
+                li.setAttribute('aria-selected', String(n === i));
+            });
+            list.children[i]?.scrollIntoView({ block: 'nearest' });
+        }
+
+        function activate(i) {
+            const item = items[i];
+            if (!item) return;
+            close();
+            window.location.assign(item.url);
+        }
+
+        function localMatches(q) {
+            const needle = q.toLowerCase();
+            return commands.filter((c) => c.label.toLowerCase().includes(needle));
+        }
+
+        async function search() {
+            const q = input.value.trim();
+            const local = localMatches(q);
+
+            // Pages resolve instantly and offline; secrets need the server. Show what is already
+            // known rather than making the whole palette wait on a round trip.
+            render(q ? local : commands);
+            if (q.length < 2 || !searchUrl) return;
+
+            const mine = ++seq;
+            try {
+                const res = await fetch(`${searchUrl}?q=${encodeURIComponent(q)}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok || mine !== seq || !backdrop) return;
+                const secrets = await res.json();
+                if (mine !== seq || !backdrop) return;   // a later keystroke already won
+
+                render([
+                    ...secrets.map((s) => ({
+                        kind: 'Secret',
+                        label: s.name,
+                        meta: `${s.project} · ${s.environment}`,
+                        sensitivity: s.sensitivity,
+                        sensitivityName: s.sensitivityName,
+                        url: s.url,
+                    })),
+                    ...local,
+                ]);
+            } catch {
+                // Offline or refused: the navigation half still works, so leave it standing.
+            }
+        }
+
+        input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 160); });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); close(); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); highlight(Math.min(active + 1, items.length - 1)); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(Math.max(active - 1, 0)); }
+            else if (e.key === 'Enter') { e.preventDefault(); activate(active); }
+            // The input is the dialog's only focusable element, so holding it is the whole trap:
+            // without this, Tab walks focus out into the page behind an open modal.
+            else if (e.key === 'Tab') { e.preventDefault(); }
+        });
+
+        render(commands);
+        input.focus();
+    }
 }
 
 function passkeyPost(url, body) {

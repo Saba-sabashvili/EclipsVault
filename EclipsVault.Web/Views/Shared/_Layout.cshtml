@@ -48,7 +48,13 @@
 
         @if (User.Identity?.IsAuthenticated == true)
         {
-            <nav class="sidenav">
+            @* data-command-source marks this nav as where the ⌘K palette reads its "Go to" entries
+               from. It reads the links that are actually here, which is what keeps the palette
+               honest: this nav is already rendered per-caller — an admin-only entry is not in the
+               DOM for anyone else — so the palette can only ever offer routes this user was
+               already offered. The signed-out nav below is deliberately not marked. *@
+            <nav class="sidenav" data-command-source
+                 data-command-search="@Url.Action("Search", "Secrets")">
                 <span class="nav-section">Vault</span>
                 <a class="@Nav("Home", "Index")" asp-controller="Home" asp-action="Index">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>

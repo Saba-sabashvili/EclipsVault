@@ -19,6 +19,9 @@ namespace EclipsVault.Web.Controllers;
 /// </summary>
 public sealed class SecretsController : VaultController
 {
+    /// <summary>Enough for the palette to show a useful shortlist; not a bulk-export channel.</summary>
+    private const int SearchResultLimit = 8;
+
     private readonly ISecretService _secrets;
     private readonly ISecretGrantService _grants;
     private readonly IAuthorizationService _authorization;
@@ -56,6 +59,58 @@ public sealed class SecretsController : VaultController
                 s.CreatedAtUtc, s.ExpiresAtUtc))
             .ToList();
         return View(items);
+    }
+
+    /// <summary>
+    /// Backs the command palette's secret search.
+    ///
+    /// This is <see cref="Index"/> with a substring match bolted on, and that is the point: it goes
+    /// through the same <c>ListAsync</c> (which drops honey tokens, so the palette can never invite
+    /// someone to open a decoy) and the same <c>VisibleToAsync</c>, so a search can only ever return
+    /// names the caller was already entitled to enumerate. A palette that queried the repository
+    /// directly — or filtered on claims of its own — would be a second, unpoliced enumeration route
+    /// around the ABAC filter, which is exactly the disclosure the list was fixed to close.
+    ///
+    /// Enumeration is not per-row audited, matching every other list view; opening a result is.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Search(string? q, CancellationToken ct)
+    {
+        var query = (q ?? string.Empty).Trim();
+
+        // Two characters before anything is disclosed: a one-letter query is not a search, it is a
+        // request for the whole list, and the palette has no reason to serve that.
+        if (query.Length < 2)
+        {
+            return Json(Array.Empty<object>());
+        }
+
+        var visible = await _authorization.VisibleToAsync(User, await _secrets.ListAsync(ct));
+
+        var matches = visible
+            .Where(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        || s.ProjectKey.Contains(query, StringComparison.OrdinalIgnoreCase))
+            // A name that starts with what was typed is likelier the one meant than one that merely
+            // contains it somewhere.
+            .OrderByDescending(s => s.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(SearchResultLimit)
+            .Select(s => new
+            {
+                id = s.Id,
+                name = s.Name,
+                project = s.ProjectKey,
+                environment = s.Environment.ToString(),
+                // Both forms: the number picks the badge's colour class, the name is what it reads.
+                // Sending the name rather than mapping the enum again in JavaScript keeps the
+                // vocabulary in one place — a copy in the client is one that silently goes stale.
+                sensitivity = (int)s.Sensitivity,
+                sensitivityName = s.Sensitivity.ToString(),
+                url = Url.Action(nameof(Details), new { id = s.Id })
+            })
+            .ToList();
+
+        return Json(matches);
     }
 
     [HttpGet]
