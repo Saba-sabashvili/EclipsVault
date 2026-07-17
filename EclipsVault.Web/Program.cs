@@ -280,6 +280,20 @@ try
     if (!app.Environment.IsDevelopment())
     {
         app.UseHsts();
+
+        // Host filtering only binds when AllowedHosts names real hosts; "*" (the framework default)
+        // waves through any Host header. Same spirit as the KEK dev-fallback warning: the app still
+        // runs, but a real deployment should pin this to the vault's own hostname(s) so a spoofed or
+        // reflected Host cannot slip through. Left permissive by default because the code cannot know
+        // the deployment's hostname — this is the one place to say so out loud.
+        var allowedHosts = app.Configuration["AllowedHosts"];
+        if (string.IsNullOrWhiteSpace(allowedHosts) ||
+            allowedHosts.Split(';').Any(host => host.Trim() == "*"))
+        {
+            app.Logger.LogWarning(
+                "AllowedHosts is '{AllowedHosts}' outside Development — set it to this vault's hostname(s) so Host-header filtering is actually enforced",
+                allowedHosts ?? "(unset)");
+        }
     }
 
     app.UseHttpsRedirection();
