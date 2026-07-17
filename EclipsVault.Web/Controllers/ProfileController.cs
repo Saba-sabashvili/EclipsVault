@@ -174,7 +174,15 @@ public sealed class ProfileController : VaultController
             return View(model);
         }
 
-        this.FlashSuccess("Your password was changed.");
+        // The service revoked every session issued up to now — this one included. Re-issue THIS
+        // device with a strong-auth time strictly after that instant (the kill switch compares at
+        // one-second granularity, so an equal timestamp would revoke the session we are keeping), so
+        // whoever just proved the new password stays signed in while every other device is signed
+        // out on its next request.
+        var freshAuthTime = _clock.GetUtcNow().AddSeconds(1).ToUnixTimeSeconds().ToString();
+        await ReissueReplacingClaimsAsync((VaultClaimTypes.AuthTime, freshAuthTime));
+
+        this.FlashSuccess("Your password was changed. Any other signed-in devices have been signed out.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -286,9 +294,10 @@ public sealed class ProfileController : VaultController
     }
 
     /// <summary>
-    /// Re-issues the auth cookie with the given claim(s) replaced, preserving every
-    /// other claim — including the auth-time anchor, so the session-revocation kill
-    /// switch is not disturbed.
+    /// Re-issues the auth cookie with the given claim(s) replaced, preserving every claim not named
+    /// in the update. Callers that leave the auth-time anchor alone (profile edits, avatar changes)
+    /// do not disturb the session-revocation kill switch; the change-password flow deliberately
+    /// replaces it, to survive the account-wide revocation it just raised.
     /// </summary>
     private async Task ReissueReplacingClaimsAsync(params (string Type, string Value)[] updates)
     {

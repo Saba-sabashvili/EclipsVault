@@ -19,6 +19,7 @@ public sealed partial class ProfileService : IProfileService
     private readonly IMfaRecoveryCodeRepository _recoveryCodes;
     private readonly IBreachedPasswordScreen _breachScreen;
     private readonly INotificationService _notifications;
+    private readonly ISessionRevocationService _revocation;
     private readonly IAuditSink _audit;
     private readonly IAuditContext _actor;
     private readonly TimeProvider _clock;
@@ -30,6 +31,7 @@ public sealed partial class ProfileService : IProfileService
         IMfaRecoveryCodeRepository recoveryCodes,
         IBreachedPasswordScreen breachScreen,
         INotificationService notifications,
+        ISessionRevocationService revocation,
         IAuditSink audit,
         IAuditContext actor,
         TimeProvider clock)
@@ -40,6 +42,7 @@ public sealed partial class ProfileService : IProfileService
         _recoveryCodes = recoveryCodes;
         _breachScreen = breachScreen;
         _notifications = notifications;
+        _revocation = revocation;
         _audit = audit;
         _actor = actor;
         _clock = clock;
@@ -115,7 +118,15 @@ public sealed partial class ProfileService : IProfileService
         user.PasswordHash = hashed.Hash;
         user.PasswordSalt = hashed.Salt;
         await _users.UpdateAsync(user, ct);
-        await AuditUserAsync(AuditAction.PasswordChanged, user.Id, user.Username, "Password changed by owner", ct);
+
+        // A changed password must not leave a session opened with the old one alive. Revoke every
+        // session issued up to now — this device included; the caller's own cookie is then re-issued
+        // with a later strong-auth time by the controller, so only the *other* devices are turned
+        // out. Doing it here rather than at the call site keeps a stolen session from surviving a
+        // password reset no matter which entry point triggers the change.
+        await _revocation.RevokeAsync(user.Id, _clock.GetUtcNow(), ct);
+
+        await AuditUserAsync(AuditAction.PasswordChanged, user.Id, user.Username, "Password changed by owner; sessions revoked", ct);
         await _notifications.NotifyPasswordChangedAsync(user.Id, ct);
     }
 
