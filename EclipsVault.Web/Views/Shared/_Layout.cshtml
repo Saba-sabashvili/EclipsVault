@@ -4,9 +4,7 @@
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? "";
     var isAdmin = User.IsAdmin();
-    var clearanceName = int.TryParse(User.FindFirstValue(VaultClaimTypes.Clearance), out var cl)
-        ? ((ClearanceLevel)cl).ToString()
-        : null;
+    var clearanceName = User.GetClearanceOrNull()?.ToDisplayName();
     var displayName = User.FindFirstValue(VaultClaimTypes.Display) ?? User.Identity?.Name ?? "";
     var avatarVersion = User.FindFirstValue(VaultClaimTypes.AvatarVersion) ?? "0";
     var avatarUrl = Url.Action("Avatar", "Profile", new { v = avatarVersion });

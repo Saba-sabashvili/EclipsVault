@@ -102,10 +102,10 @@ public sealed class SecretsController : VaultController
                 project = s.ProjectKey,
                 environment = s.Environment.ToString(),
                 // Both forms: the number picks the badge's colour class, the name is what it reads.
-                // Sending the name rather than mapping the enum again in JavaScript keeps the
+                // Sending the display name rather than mapping the enum again in JavaScript keeps the
                 // vocabulary in one place — a copy in the client is one that silently goes stale.
                 sensitivity = (int)s.Sensitivity,
-                sensitivityName = s.Sensitivity.ToString(),
+                sensitivityName = s.Sensitivity.ToDisplayName(),
                 url = Url.Action(nameof(Details), new { id = s.Id })
             })
             .ToList();

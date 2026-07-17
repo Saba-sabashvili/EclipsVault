@@ -1,3 +1,4 @@
+@using EclipsVault.Web.Extensions
 @model MyAccessViewModel
 @{
     ViewData["Title"] = "My access";
@@ -18,7 +19,7 @@
         <div class="panel-header"><h2>You</h2></div>
         <dl class="detail-grid">
             <dt>Clearance</dt>
-            <dd><span class="badge sens-@((int)Model.Clearance)">@Model.Clearance</span> &mdash; you can open secrets classified up to <strong>@Model.Clearance</strong>.</dd>
+            <dd><span class="badge sens-@((int)Model.Clearance)">@Model.Clearance.ToDisplayName()</span> &mdash; you can open secrets classified up to <strong>@Model.Clearance.ToDisplayName()</strong>.</dd>
             <dt>Project</dt>
             <dd><span class="mono">@Model.ProjectKey</span></dd>
             <dt>Other projects</dt>
@@ -87,7 +88,7 @@
                 @foreach (var row in Model.Rows)
                 {
                     <tr>
-                        <th><span class="badge sens-@((int)row.Sensitivity)">@row.Sensitivity</span></th>
+                        <th><span class="badge sens-@((int)row.Sensitivity)">@row.Sensitivity.ToDisplayName()</span></th>
                         @foreach (var cell in row.Cells)
                         {
                             <td class="@(cell.Allowed ? "cell-allow" : "cell-deny")">
