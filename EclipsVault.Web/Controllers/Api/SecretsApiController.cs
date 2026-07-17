@@ -79,9 +79,22 @@ public sealed class SecretsApiController : ControllerBase
         {
             return NotFound(new { error = "not_found" });
         }
+        catch (LegacyBlobRefusedException)
+        {
+            // The value is sealed in the pre-binding format and the vault refuses to read it until an
+            // administrator runs the one-time re-seal. A clean 409 for the API caller — never the
+            // interactive path's redirect to an HTML error page.
+            return Conflict(new { error = "legacy_blob_refused" });
+        }
         catch (AuditWriteFailedException)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "audit_unavailable" });
+        }
+        catch (CryptoConfigurationException)
+        {
+            // A genuine crypto misconfiguration. Still answer in JSON: an API caller must get a status
+            // it can act on, not a 302 into the interactive HTML error page.
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "crypto_unavailable" });
         }
     }
 }

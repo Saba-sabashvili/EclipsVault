@@ -21,7 +21,10 @@ internal static class LegacyBlobPolicy
 
         if (!options.AllowUnauthenticatedLegacyBlobs)
         {
-            throw new CryptoConfigurationException(
+            // A refusal, not a misconfiguration: the crypto is fine, the vault is choosing not to read
+            // an envelope it cannot bind to its row. Distinct exception so it surfaces as a clean
+            // "refused" outcome rather than a 500 that reads like the subsystem is broken.
+            throw new LegacyBlobRefusedException(
                 $"This secret is sealed with '{algorithm}', which predates binding a payload to its row, so " +
                 "nothing proves this envelope belongs where it is stored. Reading it is refused. Set " +
                 "Crypto:AllowUnauthenticatedLegacyBlobs=true to re-seal the vault's existing secrets on the " +

@@ -50,6 +50,7 @@ public sealed class HomeController : Controller
         {
             404 => ("Not found", "The requested resource does not exist, has expired, or has been shredded."),
             403 => ("Access denied", "The attribute-based access policy denied this request."),
+            409 => ("Secret needs a one-time upgrade", "This value was sealed before the vault bound each secret to its row, so it cannot be safely read until an administrator completes the re-seal migration. Nothing was decrypted or exposed."),
             503 => ("Vault unavailable (fail-closed)", "The audit trail could not be written, so the operation was refused. No data was released."),
             _ => ("Something went wrong", "An unexpected error occurred. The incident has been logged.")
         };

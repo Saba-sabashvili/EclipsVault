@@ -191,7 +191,7 @@ public class AesGcmCryptoEngineTests
         var engine = Engine("kek-a", Key());
         var legacy = LegacyBlob(engine, "old secret");
 
-        var ex = Assert.Throws<CryptoConfigurationException>(() => engine.Unseal(legacy, BindingA));
+        var ex = Assert.Throws<LegacyBlobRefusedException>(() => engine.Unseal(legacy, BindingA));
         Assert.Contains("AllowUnauthenticatedLegacyBlobs", ex.Message, StringComparison.Ordinal);
     }
 
@@ -214,7 +214,7 @@ public class AesGcmCryptoEngineTests
         var bound = Engine("kek-a", key).Seal(Encoding.UTF8.GetBytes("prod-root-key"), BindingA);
         var relabelled = bound with { Algorithm = "AES-256-GCM" };
 
-        Assert.Throws<CryptoConfigurationException>(() => Engine("kek-a", key).Unseal(relabelled, BindingB));
+        Assert.Throws<LegacyBlobRefusedException>(() => Engine("kek-a", key).Unseal(relabelled, BindingB));
     }
 
     [Fact]
