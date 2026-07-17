@@ -86,17 +86,8 @@ public sealed class SecretService : ISecretService
         // If it cannot be written, no plaintext ever exists for this request.
         await AuditSecretAsync(envelope.Id, envelope.Name, AuditAction.SecretRevealed, ct);
 
-        var engine = _cryptoFactory.Create();
-        var plaintext = await engine.UnsealAsync(
-            envelope.ToSealedSecret(), SecretBinding.ForCurrentValue(envelope.Id), ct);
-        try
-        {
-            return new RevealedSecretDto(envelope.Id, envelope.Name, Encoding.UTF8.GetString(plaintext));
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(plaintext);
-        }
+        return await DecryptToDtoAsync(
+            envelope, SecretBinding.ForCurrentValue(envelope.Id), envelope.Id, envelope.Name, ct);
     }
 
     public async Task<Guid> CreateAsync(CreateSecretRequest request, CancellationToken ct)
@@ -262,12 +253,24 @@ public sealed class SecretService : ISecretService
         // Fail-closed: audit committed before any decryption.
         await AuditSecretAsync(id, envelope.Name, AuditAction.SecretVersionRevealed, ct);
 
+        return await DecryptToDtoAsync(
+            version, SecretBinding.ForArchivedVersion(id, version.Id), id, envelope.Name, ct);
+    }
+
+    /// <summary>
+    /// The tail every reveal shares: unseal the envelope under its row binding, hand back the
+    /// plaintext as a DTO, and wipe the plaintext buffer no matter how the caller returns. The
+    /// audit row is committed by the caller <em>before</em> this runs, so no plaintext exists
+    /// unless the reveal was already recorded.
+    /// </summary>
+    private async Task<RevealedSecretDto> DecryptToDtoAsync(
+        IEnvelope carrier, byte[] binding, Guid id, string name, CancellationToken ct)
+    {
         var engine = _cryptoFactory.Create();
-        var plaintext = await engine.UnsealAsync(
-            version.ToSealedSecret(), SecretBinding.ForArchivedVersion(id, version.Id), ct);
+        var plaintext = await engine.UnsealAsync(carrier.ToSealedSecret(), binding, ct);
         try
         {
-            return new RevealedSecretDto(id, envelope.Name, Encoding.UTF8.GetString(plaintext));
+            return new RevealedSecretDto(id, name, Encoding.UTF8.GetString(plaintext));
         }
         finally
         {
