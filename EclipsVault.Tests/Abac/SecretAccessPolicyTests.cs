@@ -71,6 +71,37 @@ public class SecretAccessPolicyTests
     }
 
     [Fact]
+    public void A_grant_can_only_widen_access_never_narrow_it()
+    {
+        // Monotonicity of the grant, pinned across the whole attribute matrix. The enumeration
+        // fast-path in SecretAccessHandler leans on exactly this: when a row already resolves to
+        // "allow" without a grant, it skips the per-secret grant database lookup — because a grant
+        // can only ever *lift* the project rule, never introduce a denial. Were that false, skipping
+        // the lookup would hand back a secret a grant was supposed to keep hidden. So: for every
+        // combination where the ungranted decision allows, the granted decision must allow too.
+        foreach (var clearance in Enum.GetValues<ClearanceLevel>())
+        foreach (var sensitivity in Enum.GetValues<SensitivityLevel>())
+        foreach (var env in Enum.GetValues<SecretEnvironment>())
+        foreach (var window in new[] { true, false })
+        foreach (var trusted in new[] { true, false })
+        foreach (var sameProject in new[] { true, false })
+        {
+            var subject = new SubjectAttributes(clearance, "PHOENIX");
+            var resource = Resource(env: env, sensitivity: sensitivity, project: sameProject ? "PHOENIX" : "ORION");
+
+            if (!SecretAccessPolicy.Evaluate(subject, resource, Context(window, trusted, granted: false)).IsAllowed)
+            {
+                continue;
+            }
+
+            var granted = SecretAccessPolicy.Evaluate(subject, resource, Context(window, trusted, granted: true));
+            Assert.True(granted.IsAllowed,
+                $"a grant flipped an allow to a deny at clearance={clearance}, sensitivity={sensitivity}, " +
+                $"env={env}, window={window}, trusted={trusted}, sameProject={sameProject}");
+        }
+    }
+
+    [Fact]
     public void Denies_production_access_outside_the_time_window()
     {
         var subject = new SubjectAttributes(ClearanceLevel.Secret, "PHOENIX");

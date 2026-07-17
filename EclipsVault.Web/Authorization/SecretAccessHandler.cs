@@ -60,22 +60,6 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
         // Shared with the "My access" page: network trust + production-window state.
         var accessContext = await _accessContext.CurrentAsync(ct);
 
-        // An explicit grant lets a user outside the secret's project reach it. Grants are issued
-        // against stored secrets only — there is nothing to share about a dynamic role, whose whole
-        // point is that anyone entitled to it can mint their own credential.
-        var isGranted = false;
-        if (resource is IGrantableResource && context.User.GetUserIdOrNull() is { } userId)
-        {
-            isGranted = await _grants.HasActiveGrantAsync(userId, resource.Id, ct);
-        }
-
-        var requestContext = new RequestContext(
-            _clock.GetUtcNow(),
-            accessContext.SourceIp?.ToString(),
-            accessContext.IsWithinProductionWindow,
-            accessContext.IsTrustedNetwork,
-            isGranted);
-
         // Per-key scope (present only for scoped API keys; interactive users carry none).
         var scopeProject = context.User.FindFirstValue(VaultClaimTypes.ScopeProject);
         var metadataOnly = context.User.FindFirstValue(VaultClaimTypes.ScopeMetadataOnly) == "true";
@@ -83,7 +67,37 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
             ? new ApiKeyScope(scopeProject, metadataOnly)
             : null;
 
+        var requestContext = new RequestContext(
+            _clock.GetUtcNow(),
+            accessContext.SourceIp?.ToString(),
+            accessContext.IsWithinProductionWindow,
+            accessContext.IsTrustedNetwork,
+            IsExplicitlyGranted: false);
+
+        // Decide without a grant first. An explicit grant only ever *relaxes* the project rule — it
+        // can turn a deny into an allow, never the reverse — so when the ungranted decision already
+        // allows, a grant cannot change it and the per-secret grant lookup is pure waste. On a list
+        // page that lookup was the whole cost: every row a user could already see (their own project,
+        // or any row at all for a TopSecret account) spent one database round-trip to ask about a
+        // grant that could not have mattered — an N+1 across the entire visible list.
         var decision = SecretAccessPolicy.Evaluate(subject, resourceAttributes, requestContext, scope, requirement.Kind);
+
+        // Denied ungranted, but a grant might rescue it. Rather than reproduce here *which* denials a
+        // grant can lift — a second copy of rule 2 that would silently drift from the engine — ask the
+        // engine itself: would the very same inputs allow if a grant were present? Only when they
+        // would is the grant decisive, and only then is it worth the query. Grants are issued against
+        // stored secrets only (a dynamic role has nothing to share), hence the IGrantableResource gate.
+        if (!decision.IsAllowed
+            && resource is IGrantableResource
+            && context.User.GetUserIdOrNull() is { } userId
+            && SecretAccessPolicy.Evaluate(
+                    subject, resourceAttributes, requestContext with { IsExplicitlyGranted = true }, scope, requirement.Kind)
+                .IsAllowed
+            && await _grants.HasActiveGrantAsync(userId, resource.Id, ct))
+        {
+            decision = AccessDecision.Allow();
+        }
+
         if (decision.IsAllowed)
         {
             context.Succeed(requirement);

@@ -26,6 +26,10 @@ public interface IAccessContextProvider
 
 public sealed class AccessContextProvider : IAccessContextProvider
 {
+    // Per-request memo key. An object identity rather than a string so it can never collide with
+    // another component's HttpContext.Items entry.
+    private static readonly object RequestCacheKey = new();
+
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITrustedNetworkService _trustedNetworks;
     private readonly AbacOptions _options;
@@ -48,7 +52,19 @@ public sealed class AccessContextProvider : IAccessContextProvider
 
     public async Task<AccessContext> CurrentAsync(CancellationToken ct)
     {
-        var sourceIp = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress;
+        var httpContext = _httpContextAccessor.HttpContext;
+
+        // The snapshot is invariant across a single request — the source IP, the window state, and
+        // the network trust do not change between two rows of the same list — so an enumeration that
+        // asks once per row (the secrets list, the "My access" grid) recomputes an identical answer N
+        // times, one of them a trusted-networks lookup. Memoise it on the request so the work, and any
+        // lookup, happens once.
+        if (httpContext?.Items.TryGetValue(RequestCacheKey, out var cached) == true && cached is AccessContext memo)
+        {
+            return memo;
+        }
+
+        var sourceIp = httpContext?.Connection.RemoteIpAddress;
 
         // Static config ranges first (cheap), then the runtime-managed trusted networks.
         var isTrusted = NetworkRules.IsInAnyCidr(sourceIp, _options.TrustedIpCidrs);
@@ -57,13 +73,20 @@ public sealed class AccessContextProvider : IAccessContextProvider
             isTrusted = await _trustedNetworks.IsTrustedAsync(sourceIp, ct);
         }
 
-        return new AccessContext(
+        var context = new AccessContext(
             sourceIp,
             isTrusted,
             IsWithinProductionWindow(_clock.GetUtcNow()),
             _options.ProductionWindowStartUtcHour,
             _options.ProductionWindowEndUtcHour,
             _windowZone?.Id ?? "UTC");
+
+        if (httpContext is not null)
+        {
+            httpContext.Items[RequestCacheKey] = context;
+        }
+
+        return context;
     }
 
     private bool IsWithinProductionWindow(DateTimeOffset nowUtc)
