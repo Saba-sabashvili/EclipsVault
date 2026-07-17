@@ -167,13 +167,20 @@
             </nav>
 
             <div class="sidebar-footer">
-                <a class="user-card" asp-controller="Profile" asp-action="Index" title="Your profile">
+                @* The clearance shows on its own, without the word "clearance" after it: the
+                   sidebar is 244px and the two icons beside this card are fixed, which leaves the
+                   name and this line about 98px to share. "Standard clearance" overruns that by
+                   4px and "TopSecret clearance" by far more, so the word is what gets clipped
+                   away — and a footer reading "Standard clearan…" says less than one reading
+                   "Standard". The full phrasing stays on hover. *@
+                <a class="user-card" asp-controller="Profile" asp-action="Index"
+                   title="@(clearanceName is null ? "Your profile" : $"Your profile — {clearanceName} clearance")">
                     <img class="avatar-img" src="@avatarUrl" alt="Your avatar" width="34" height="34" />
                     <span class="user-meta">
                         <span class="user-name">@displayName</span>
                         @if (clearanceName is not null)
                         {
-                            <span class="user-clearance">@clearanceName clearance</span>
+                            <span class="user-clearance">@clearanceName</span>
                         }
                     </span>
                 </a>

@@ -1,11 +1,40 @@
 /* ================================================================
    EclipsVault design system
-   Layers: tokens → base → shell → components → pages → overlays → legacy
+   Layers: fonts → tokens → base → shell → components → pages → overlays → legacy
    Influences: Apple HIG — restraint, hairline borders, generous space,
    a single accent used sparingly, soft depth, calm motion.
    New features should COMPOSE these components (panel, page-header,
    data-table, badge, button, field, flash) rather than add one-off CSS.
    ================================================================ */
+
+/* ---- Typeface --------------------------------------------------- */
+/* Geist, served from this origin. Not from Google Fonts, and not by @import:
+   the vault's own Content-Security-Policy is style-src 'self'; font-src 'self',
+   so a CDN import is blocked outright — and relaxing the policy to allow it
+   would let a third party inject stylesheets into pages that display secrets,
+   which is a real exfiltration channel (attribute selectors + url()), and would
+   leak every user's address to that third party on every page load. It would
+   also simply fail on the isolated networks this product is deployed into.
+
+   Two variable files carry every weight (~138 KB total, less than a handful of
+   static weights would cost), so the whole family is one request each and works
+   with no network at all. SIL OFL 1.1 — see fonts/OFL.txt, kept alongside as
+   the licence requires. */
+@font-face {
+    font-family: 'Geist';
+    src: url('/fonts/geist-variable.woff2') format('woff2');
+    font-weight: 100 900;   /* variable axis: any weight the design asks for */
+    font-style: normal;
+    font-display: swap;     /* text is readable immediately; it is not decoration */
+}
+
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('/fonts/geist-mono-variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
 
 /* ---- Tokens ---------------------------------------------------- */
 /* The dark palette is the default. A light palette is provided under
@@ -18,6 +47,12 @@
     /* Layered near-black surfaces (cool, low-chroma) */
     --bg: #0a0b0f;
     --bg-sidebar: rgba(18, 20, 27, 0.72);
+    /* Glass: the same raised surface, translucent, for elements that sit over the page
+       backdrop. A token rather than a literal rgba() so the light theme can answer for
+       itself — hardcoding a dark rgba here is how a "glass" panel ends up as a grey
+       smear on white. */
+    --bg-raised-glass: rgba(20, 22, 30, 0.72);
+    --glass-blur: saturate(160%) blur(14px);
     --bg-raised: #14161e;
     --bg-raised-2: #181b25;
     --bg-inset: #0d0e13;
@@ -59,8 +94,14 @@
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
     --dur: 200ms;
 
-    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    /* System faces stay behind Geist: font-display:swap paints in them first, and they are
+       what renders if the woff2 ever fails to load. */
+    --font: 'Geist', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: 'Geist Mono', ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+    /* Optical sizing: display type wants tighter tracking than body copy, which wants none. */
+    --tracking-display: -0.03em;
+    --tracking-heading: -0.02em;
 }
 
 /* ---- Light palette --------------------------------------------- */
@@ -72,6 +113,10 @@
 
     --bg: #f3f4f7;
     --bg-sidebar: rgba(244, 245, 248, 0.80);
+    /* Light glass is nearly opaque on purpose. White-on-white has almost no contrast to
+       begin with, so the panel edge is the only thing separating content from page — let
+       it go translucent and the layering disappears rather than deepens. */
+    --bg-raised-glass: rgba(255, 255, 255, 0.86);
     --bg-raised: #ffffff;
     --bg-raised-2: #f6f7f9;
     --bg-inset: #eceef2;
@@ -120,13 +165,43 @@ body {
     font-family: var(--font);
     font-size: 15px;
     line-height: 1.5;
-    letter-spacing: -0.01em;
+    /* No tracking at body size. The -0.01em here was compensating for SF Pro's looser
+       metrics; Geist is drawn tight already, and carrying the compensation over would
+       close up running text that people have to read carefully. */
+    letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+
+    /* Lining, tabular figures everywhere. This is a screen full of counts, sequence numbers
+       and timestamps in columns: proportional digits make them jitter between rows and make
+       two numbers of the same magnitude look different lengths. */
+    font-variant-numeric: tabular-nums lining-nums;
 }
 
-h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; margin: 0; line-height: 1.25; }
-h1 { font-size: 1.5rem; }
+/* Ambient corona. Glass needs something behind it to be glass — blur a flat colour and you get
+   the same flat colour, so the whole layer would be cost with no effect. Two very low-opacity
+   radial pools give the backdrop something to pick up, and they are the eclipse the product is
+   named for: a warm corona bleeding past a dark disc. Fixed and behind everything, so it does
+   not move with scroll or intercept a single click. */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(60rem 40rem at 78% -8%, rgba(255, 159, 10, 0.10), transparent 60%),
+        radial-gradient(48rem 34rem at 8% 102%, rgba(120, 90, 255, 0.07), transparent 62%);
+}
+
+:root[data-theme="light"] body::before {
+    background:
+        radial-gradient(60rem 40rem at 78% -8%, rgba(255, 159, 10, 0.13), transparent 60%),
+        radial-gradient(48rem 34rem at 8% 102%, rgba(120, 90, 255, 0.08), transparent 62%);
+}
+
+h1, h2, h3 { font-weight: 620; letter-spacing: var(--tracking-heading); margin: 0; line-height: 1.25; }
+h1 { font-size: 1.5rem; letter-spacing: var(--tracking-display); }
 h2 { font-size: 1.06rem; }
 
 a { color: var(--accent); text-decoration: none; transition: color var(--dur) var(--ease); }
@@ -205,6 +280,27 @@ button { font-family: inherit; }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); }
 .nav-item.active svg { opacity: 1; }
 
+/* Active indicator: an accent rule on the leading edge, which reads as "you are here" at a
+   glance down the rail in a way a tinted background alone does not. It grows from the centre
+   rather than sliding between items — the items are links, so the browser repaints the page
+   anyway and there is no continuous element to slide. */
+.nav-item { position: relative; }
+.nav-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    transform: translateY(-50%);
+    border-radius: 0 2px 2px 0;
+    background: var(--accent);
+    transition: height var(--dur) var(--ease);
+}
+.nav-item.active::before { height: 60%; }
+.nav-item:hover::before { height: 30%; background: var(--border-strong); }
+.nav-item.active:hover::before { height: 60%; background: var(--accent); }
+
 /* Collapsible nav groups (native <details>, no script). A group opens itself and tints its
    header when one of its children is the active page. */
 .nav-group { display: flex; flex-direction: column; }
@@ -223,7 +319,10 @@ button { font-family: inherit; }
     margin-top: 0.85rem;
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    /* Tight, because the name is the first thing to lose when this row runs out of room —
+       the two icons beside it are fixed, so every pixel spent here is taken from a person's
+       own name. */
+    gap: 0.15rem;
 }
 
 .user-card {
@@ -252,7 +351,16 @@ button { font-family: inherit; }
 
 .user-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .user-name { font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-clearance { font-size: 0.72rem; color: var(--text-muted); }
+/* One line, like the name above it. The clearance names all fit (TopSecret is the longest at
+   ~53px in ~98px), so the clipping here is a backstop, not the plan — the plan is in the view,
+   which stopped printing the word "clearance" after them. */
+.user-clearance {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .icon-button {
     background: none;
@@ -305,12 +413,24 @@ button { font-family: inherit; }
 
 /* ---- Panels & grids --------------------------------------------- */
 .panel {
+    /* Translucent over the page backdrop, so panels read as sheets above the surface rather
+       than holes cut in it. The solid colour stays as the fallback: backdrop-filter is what
+       makes this legible, and where it is unsupported an unblurred translucent panel would
+       just be text over text. */
     background: var(--bg-raised);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.4rem 1.6rem;
     margin-bottom: 1.2rem;
     box-shadow: var(--shadow-sm);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .panel, .stat-card {
+        background: var(--bg-raised-glass);
+        -webkit-backdrop-filter: var(--glass-blur);
+        backdrop-filter: var(--glass-blur);
+    }
 }
 
 .panel.highlight { border-color: var(--accent-line); background: linear-gradient(180deg, rgba(255, 159, 10, 0.06), var(--bg-raised) 60%); }
@@ -356,7 +476,16 @@ button { font-family: inherit; }
     transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 
-a.stat-card:hover { transform: translateY(-2px); border-color: var(--border-strong); color: var(--text); text-decoration: none; }
+/* Only the linked cards lift — the lift is the affordance that says this one goes somewhere,
+   so lifting a plain stat would be a promise the card cannot keep. */
+a.stat-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent-line);
+    color: var(--text);
+    text-decoration: none;
+    box-shadow: var(--shadow), 0 0 0 1px var(--accent-soft);
+}
+.stat-card { transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .stat-card.attention { border-color: rgba(255, 214, 10, 0.35); }
 .stat-card.alert { border-color: rgba(255, 69, 58, 0.4); background: linear-gradient(180deg, var(--danger-soft), var(--bg-raised) 65%); }
 
@@ -416,6 +545,72 @@ a.stat-card:hover { transform: translateY(-2px); border-color: var(--border-stro
 .field { margin-bottom: 1.05rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 0; }
 .field label { font-size: 0.84rem; font-weight: 600; color: var(--text-secondary); }
 .field-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+/* ---- Input affix (show/hide password) ---------------------------- */
+/* The wrapper is built by site.js around any input[data-reveal], so a view opts in with one
+   attribute and no field has to repeat the markup. */
+.input-affix { position: relative; display: flex; align-items: center; }
+.input-affix > input { padding-right: 2.6rem; }
+
+.affix-button {
+    position: absolute;
+    right: 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.affix-button:hover { color: var(--text); background: var(--bg-hover); }
+.affix-button svg { width: 17px; height: 17px; }
+
+/* ---- Password strength ------------------------------------------- */
+/* Advisory, not a gate: the two rules the vault actually enforces (length, breach corpus) are
+   reported as text by the field's own validation and the live breach check. This says how
+   expensive the password would be to guess, which no pass/fail can express.
+
+   The top margin keeps the bar clear of the input. Butted right up under the field it reads as
+   a green bottom border on the input — a statement about the field — rather than a separate
+   verdict about the password. */
+.strength { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.55rem; }
+/* `display` here outranks the user agent's [hidden] rule, so the meter needs to opt back out
+   explicitly — without this it shows an empty track before a single character is typed. */
+.strength[hidden] { display: none; }
+
+.strength-track {
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--bg-inset);
+    overflow: hidden;
+}
+
+.strength-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: var(--radius-pill);
+    background: var(--text-faint);
+    transition: width var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.strength-label { margin: 0; font-size: 0.76rem; color: var(--text-muted); }
+
+.strength[data-score="0"] .strength-fill,
+.strength[data-score="1"] .strength-fill { background: var(--danger); }
+.strength[data-score="2"] .strength-fill { background: var(--warn); }
+.strength[data-score="3"] .strength-fill { background: var(--accent); }
+.strength[data-score="4"] .strength-fill { background: var(--ok); }
+
+.strength[data-score="0"] .strength-label,
+.strength[data-score="1"] .strength-label { color: var(--danger); }
+.strength[data-score="4"] .strength-label { color: var(--ok); }
 
 @media (max-width: 640px) { .field-row { flex-direction: column; gap: 0; } }
 
@@ -570,10 +765,27 @@ input.code-input {
 .badge.env-staging { color: var(--warn); border-color: transparent; background: var(--warn-soft); }
 .badge.env-production { color: var(--danger); border-color: transparent; background: var(--danger-soft); }
 
+/* Classification badges. The glow rises with the classification, so the most dangerous thing on
+   a page is the thing your eye lands on first — on a screen full of pills that all look alike,
+   "which of these is the production root key?" should not need reading. Restrained on purpose:
+   this is a signal, not decoration, and if every badge glowed none of them would mean anything.
+   No animation, either — a pulsing badge in the corner of the eye is a thing operators learn to
+   tune out, which is the opposite of what a TopSecret marker is for. */
 .badge.sens-1 { color: var(--text-muted); }
 .badge.sens-2 { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
-.badge.sens-3 { color: var(--warn); border-color: transparent; background: var(--warn-soft); }
-.badge.sens-4 { color: var(--danger); border-color: transparent; background: var(--danger-soft); }
+.badge.sens-3 {
+    color: var(--warn);
+    border-color: rgba(255, 214, 10, 0.32);
+    background: var(--warn-soft);
+}
+.badge.sens-4 {
+    color: var(--danger);
+    border-color: rgba(255, 69, 58, 0.34);
+    background: var(--danger-soft);
+    box-shadow: 0 0 12px rgba(255, 69, 58, 0.16);
+    font-weight: 650;
+}
+.badge.env-production { box-shadow: 0 0 10px rgba(255, 69, 58, 0.12); }
 
 .badge.tone-ok { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
 .badge.tone-warn { color: var(--warn); border-color: transparent; background: var(--warn-soft); }

@@ -6,6 +6,8 @@
 //   [data-flash]                          → dismissible, auto-hiding toast
 //   input[data-filter="#id"]              → live row filter for the referenced table
 //   tr[data-href]                         → make a whole table row clickable
+//   input[data-reveal]                    → adds a show/hide eye button inside the field
+//   input[data-strength]                  → adds a live strength meter below the field
 document.addEventListener('DOMContentLoaded', () => {
     wireConfirms();
     wireCopyButtons();
@@ -17,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     wireMenus();
     wirePasskeys();
     wirePasswordBreachCheck();
+    wireRevealToggles();
+    wirePasswordStrength();
     wireThemeToggle();
 });
 
@@ -306,6 +310,114 @@ function setBreachStatus(el, message, isWarn) {
     el.textContent = message;
     el.classList.toggle('status-error', !!isWarn);
     el.classList.toggle('status-ok', !isWarn && message !== '');
+}
+
+// --- Show/hide password ----------------------------------------------------------
+// An input marked data-reveal gets an eye button inside it. Typing a long password blind
+// and finding out it was wrong only after submitting is how people end up choosing shorter
+// ones — the button is built here rather than in each view so no markup has to be repeated,
+// and so it can never be added to a field that is not opted in.
+function wireRevealToggles() {
+    document.querySelectorAll('input[data-reveal]').forEach((input) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'input-affix';
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+
+        const button = document.createElement('button');
+        button.type = 'button';                 // never submits the form it lives in
+        button.className = 'affix-button';
+        button.setAttribute('aria-label', 'Show password');
+        button.innerHTML = EYE_OPEN;
+        wrap.appendChild(button);
+
+        button.addEventListener('click', () => {
+            const shown = input.type === 'text';
+            input.type = shown ? 'password' : 'text';
+            button.innerHTML = shown ? EYE_OPEN : EYE_CLOSED;
+            button.setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+            // Put the caret back where it was; toggling type resets it to the start.
+            const end = input.value.length;
+            input.focus();
+            input.setSelectionRange(end, end);
+        });
+    });
+}
+
+const EYE_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_CLOSED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7c2 0 3.8.7 5.2 1.6M22 12s-3.6 7-10 7c-2 0-3.8-.7-5.2-1.6"/><path d="m4 4 16 16"/></svg>';
+
+// --- Password strength meter ------------------------------------------------------
+// Deliberately advisory, not a gate. The vault enforces exactly two rules — at least 12
+// characters, and not in the breach corpus (NIST 800-63B 5.1.1.2) — and those are the two
+// shown as pass/fail. Everything else here is an estimate of how much guessing the password
+// would cost, shown as a bar.
+//
+// It does NOT demand an uppercase letter and a symbol. The same NIST guidance this vault
+// screens against advises against composition rules: they push people towards Password1!
+// and away from length, which is what actually helps. A checklist insisting on a symbol
+// would also be claiming a rule the server does not enforce — telling a user their password
+// is invalid when the vault would accept it.
+//
+// Everything is computed in the browser. The breach check already talks to the server; there
+// is no reason for the shape of a candidate password to make a second trip.
+function wirePasswordStrength() {
+    document.querySelectorAll('input[data-strength]').forEach((input) => {
+        const meter = document.createElement('div');
+        meter.className = 'strength';
+        meter.hidden = true;
+        meter.innerHTML = `
+            <div class="strength-track" role="img">
+                <span class="strength-fill"></span>
+            </div>
+            <p class="strength-label"></p>`;
+        // After the affix wrapper if there is one, so the meter sits under the whole field.
+        const anchor = input.closest('.input-affix') || input;
+        anchor.parentNode.insertBefore(meter, anchor.nextSibling);
+
+        const fill = meter.querySelector('.strength-fill');
+        const label = meter.querySelector('.strength-label');
+        const track = meter.querySelector('.strength-track');
+
+        input.addEventListener('input', () => {
+            const value = input.value;
+            if (!value) { meter.hidden = true; return; }
+            meter.hidden = false;
+
+            const { score, text } = scorePassword(value);
+            fill.style.width = `${(score + 1) * 20}%`;
+            meter.dataset.score = String(score);
+            label.textContent = text;
+            track.setAttribute('aria-label', `Password strength: ${text}`);
+        });
+    });
+}
+
+// A rough guessing-cost estimate: variety widens the alphabet, length multiplies it, and the
+// obvious shapes (one repeated character, a straight run off the keyboard) are discounted
+// because an attacker tries those first. Not a substitute for the server's corpus screen —
+// that catches the passwords that are weak for reasons no formula can see.
+function scorePassword(value) {
+    let alphabet = 0;
+    if (/[a-z]/.test(value)) alphabet += 26;
+    if (/[A-Z]/.test(value)) alphabet += 26;
+    if (/[0-9]/.test(value)) alphabet += 10;
+    if (/[^A-Za-z0-9]/.test(value)) alphabet += 33;
+
+    let bits = value.length * Math.log2(Math.max(alphabet, 2));
+
+    const distinct = new Set(value).size;
+    if (distinct <= 2) bits *= 0.35;                       // "aaaaaaaaaaaa"
+    else if (distinct / value.length < 0.4) bits *= 0.7;   // heavy repetition
+    if (/^(?:0123456789|abcdefghij|qwertyuiop)/i.test(value)) bits *= 0.4;
+
+    if (value.length < 12) {
+        return { score: 0, text: `Too short — ${12 - value.length} more character${value.length === 11 ? '' : 's'} needed` };
+    }
+    if (bits < 60) return { score: 1, text: 'Weak — predictable for its length' };
+    if (bits < 80) return { score: 2, text: 'Fair' };
+    if (bits < 110) return { score: 3, text: 'Strong' };
+    return { score: 4, text: 'Very strong' };
 }
 
 function passkeyPost(url, body) {
