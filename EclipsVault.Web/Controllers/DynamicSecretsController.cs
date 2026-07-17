@@ -131,6 +131,5 @@ public sealed class DynamicSecretsController : VaultController
     private async Task<bool> CanIssueAsync(IAbacResource role)
         => (await _authorization.AuthorizeAsync(User, role, VaultPolicies.SecretAccess)).Succeeded;
 
-    private bool IsAdmin()
-        => User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
+    private bool IsAdmin() => User.IsAdmin();
 }

@@ -142,7 +142,7 @@ public sealed class AccessRequestsController : VaultController
         return canReview ? null : Forbid();
     }
 
-    private bool IsAdmin() => User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
+    private bool IsAdmin() => User.IsAdmin();
 
     private string CurrentProject() => User.GetProject();
 }

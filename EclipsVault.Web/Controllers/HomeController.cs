@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authorization;
+using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,7 +22,7 @@ public sealed class HomeController : Controller
             return View();
         }
 
-        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
+        var isAdmin = User.IsAdmin();
         var dto = await _dashboard.GetAsync(isAdmin ? null : User.Identity.Name, ct);
         var displayName = User.FindFirst(VaultClaimTypes.Display)?.Value ?? User.Identity.Name ?? string.Empty;
 

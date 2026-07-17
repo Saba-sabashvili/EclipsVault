@@ -278,7 +278,7 @@ public sealed class SecretsController : VaultController
     public IActionResult Create()
         => View(new CreateSecretViewModel
         {
-            ProjectKey = User.FindFirst(VaultClaimTypes.Project)?.Value ?? string.Empty
+            ProjectKey = User.GetProject()
         });
 
     [HttpPost]
@@ -290,7 +290,7 @@ public sealed class SecretsController : VaultController
         }
 
         // A user may not classify a secret above their own clearance.
-        var clearance = int.TryParse(User.FindFirst(VaultClaimTypes.Clearance)?.Value, out var c) ? c : 0;
+        var clearance = (int)User.GetClearance();
         if ((int)model.Sensitivity > clearance)
         {
             ModelState.AddModelError(nameof(model.Sensitivity),
@@ -488,10 +488,6 @@ public sealed class SecretsController : VaultController
 
     /// <summary>Sharing is managed by administrators and by members of the secret's own project.</summary>
     private bool CanShare(SecretDetailsDto dto)
-    {
-        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
-        var project = User.FindFirst(VaultClaimTypes.Project)?.Value;
-        return isAdmin || string.Equals(project, dto.ProjectKey, StringComparison.OrdinalIgnoreCase);
-    }
+        => User.IsAdmin() || string.Equals(User.GetProject(), dto.ProjectKey, StringComparison.OrdinalIgnoreCase);
 
 }

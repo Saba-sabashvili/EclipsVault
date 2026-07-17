@@ -1,8 +1,9 @@
 @using System.Security.Claims
+@using EclipsVault.Web.Extensions
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? "";
-    var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
+    var isAdmin = User.IsAdmin();
     var clearanceName = int.TryParse(User.FindFirstValue(VaultClaimTypes.Clearance), out var cl)
         ? ((ClearanceLevel)cl).ToString()
         : null;

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using EclipsVault.Core.Application.Abac;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authorization;
+using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -35,15 +36,13 @@ public sealed class AccessController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken ct)
     {
-        var clearanceClaim = User.FindFirstValue(VaultClaimTypes.Clearance);
         var projectClaim = User.FindFirstValue(VaultClaimTypes.Project);
-        if (!int.TryParse(clearanceClaim, out var clearanceValue) || projectClaim is null)
+        if (User.GetClearanceOrNull() is not { } clearance || projectClaim is null)
         {
             // Missing vault attribute claims — a stale session; send it to sign out.
             return RedirectToAction("Logout", "Account");
         }
 
-        var clearance = (ClearanceLevel)clearanceValue;
         var context = await _accessContext.CurrentAsync(ct);
 
         // The context that ABAC would see for this request. Project is set to the user's own so the

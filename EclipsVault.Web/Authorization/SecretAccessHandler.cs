@@ -42,10 +42,9 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
         SecretAccessRequirement requirement,
         IAbacResource resource)
     {
-        var clearanceClaim = context.User.FindFirstValue(VaultClaimTypes.Clearance);
         var projectClaim = context.User.FindFirstValue(VaultClaimTypes.Project);
 
-        if (!int.TryParse(clearanceClaim, out var clearanceValue) || projectClaim is null)
+        if (context.User.GetClearanceOrNull() is not { } clearance || projectClaim is null)
         {
             _logger.LogWarning("ABAC denied secret {SecretId}: principal is missing vault attribute claims", resource.Id);
             context.Fail(new AuthorizationFailureReason(this,
@@ -53,7 +52,7 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
             return;
         }
 
-        var subject = new SubjectAttributes((ClearanceLevel)clearanceValue, projectClaim);
+        var subject = new SubjectAttributes(clearance, projectClaim);
         var resourceAttributes = new ResourceAttributes(resource.Environment, resource.Sensitivity, resource.ProjectKey);
 
         var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;

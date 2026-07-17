@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authorization;
 
 namespace EclipsVault.Web.Extensions;
@@ -37,4 +38,31 @@ public static class ClaimsPrincipalExtensions
     /// <summary>The project the principal is scoped to, or empty when none is present.</summary>
     public static string GetProject(this ClaimsPrincipal principal)
         => principal.FindFirstValue(VaultClaimTypes.Project) ?? string.Empty;
+
+    /// <summary>
+    /// The clearance the principal carries, or null when the claim is absent or unparseable — for
+    /// the two enforcement points (the ABAC handler, the "My access" page) that must tell a stale
+    /// session apart from a low one and send it to sign in again rather than assume anything.
+    /// </summary>
+    public static ClearanceLevel? GetClearanceOrNull(this ClaimsPrincipal principal)
+        => int.TryParse(principal.FindFirstValue(VaultClaimTypes.Clearance), out var value) && Enum.IsDefined((ClearanceLevel)value)
+            ? (ClearanceLevel)value
+            : null;
+
+    /// <summary>
+    /// The clearance the principal carries, defaulting to the lowest real clearance
+    /// (<see cref="ClearanceLevel.Standard"/>) when absent — the fail-closed floor for a display or
+    /// a "may I classify this high?" check, where assuming least privilege is the safe direction.
+    /// </summary>
+    public static ClearanceLevel GetClearance(this ClaimsPrincipal principal)
+        => principal.GetClearanceOrNull() ?? ClearanceLevel.Standard;
+
+    /// <summary>
+    /// True only when the principal holds TopSecret clearance — the vault's single administrator
+    /// bar. This is the one place that definition lives: an absent or lower clearance is not an
+    /// admin, so it fails closed. Mirrors the <c>AdminOnly</c> policy for the many call sites that
+    /// need the boolean inline rather than as a route gate.
+    /// </summary>
+    public static bool IsAdmin(this ClaimsPrincipal principal)
+        => principal.GetClearanceOrNull() == ClearanceLevel.TopSecret;
 }
