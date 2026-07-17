@@ -174,6 +174,9 @@ public static class DbSeeder
         {
             var engine = sp.GetRequiredService<ICryptoEngineFactory>().Create();
 
+            // Every credential string below is synthetic — invented for this dev-only seed, never a
+            // real secret — and the two GLOBAL/Production entries are honey-token decoys by design. A
+            // secret scanner will flag them; they are safe to ignore.
             db.Secrets.AddRange(
                 await SealSecretAsync(engine, now, "Phoenix_Dev_Database_Password", "PHOENIX", SecretEnvironment.Development,
                     SensitivityLevel.Internal, "Server=phx-dev-sql;Database=Phoenix;User Id=phx_app;Password=dev-only-Sample!42"),
