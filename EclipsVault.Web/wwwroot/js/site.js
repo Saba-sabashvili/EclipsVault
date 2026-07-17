@@ -8,7 +8,9 @@
 //   tr[data-href]                         → make a whole table row clickable
 //   input[data-reveal]                    → adds a show/hide eye button inside the field
 //   input[data-strength]                  → adds a live strength meter below the field
-//   nav[data-command-source]              → the palette's navigation entries (⌘K / Ctrl+K)
+//   [data-command-source]                 → containers the ⌘K palette harvests its links from
+//   [data-command-open]                    → opens the ⌘K palette (the visible way in)
+//   [data-command-chord]                   → shows ⌘K, rewritten to Ctrl K off the Mac
 document.addEventListener('DOMContentLoaded', () => {
     wireConfirms();
     wireCopyButtons();
@@ -155,14 +157,35 @@ function wireAutoSubmit() {
     });
 }
 
-// Close any open row overflow menu when clicking elsewhere.
+// Dismiss any open <details> menu — clicking away, or Escape.
+//
+// The selector lists every menu flavour rather than matching bare `details`, because the nav
+// groups in the sidebar are <details> too and collapsing someone's open nav the moment they
+// click the page would be a poltergeist. New menu? Add it here; the alternative is a menu that
+// opens fine and then will not go away, which is exactly how .account-menu shipped its first
+// draft.
+const MENU_SELECTOR = 'details.row-menu[open], details.account-menu[open]';
+
 function wireMenus() {
-    document.addEventListener('click', (event) => {
-        document.querySelectorAll('details.row-menu[open]').forEach((menu) => {
-            if (!menu.contains(event.target)) menu.removeAttribute('open');
+    const closeAll = (predicate) =>
+        document.querySelectorAll(MENU_SELECTOR).forEach((menu) => {
+            if (predicate(menu)) menu.removeAttribute('open');
+        });
+
+    document.addEventListener('click', (event) => closeAll((menu) => !menu.contains(event.target)));
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        // Give focus back to the control that opened it, or Escape strands the keyboard at the
+        // top of the document.
+        closeAll((menu) => {
+            if (menu.contains(document.activeElement)) menu.querySelector('summary')?.focus();
+            return true;
         });
     });
 }
+
+// Whether ⌘ is a key this keyboard actually has.
+const IS_APPLE = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 
 // --- Theme toggle ----------------------------------------------------------------
 // The server stamps <html data-theme> from the EclipsVault.Theme cookie so the first
@@ -174,7 +197,19 @@ function wireThemeToggle() {
             const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', next);
             document.cookie = `EclipsVault.Theme=${next}; path=/; max-age=31536000; SameSite=Strict; Secure`;
+            labelThemeToggles();
         });
+    });
+    labelThemeToggles();
+}
+
+// Name the destination, not the mechanism. A menu row saying "Switch appearance" makes you click
+// it to find out what happens; "Switch to light" has already told you. Only the menu row carries
+// a label — the icon-only toggles say it with the icon.
+function labelThemeToggles() {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.querySelectorAll('[data-theme-label]').forEach((el) => {
+        el.textContent = `Switch to ${next}`;
     });
 }
 
@@ -436,15 +471,20 @@ function scorePassword(value) {
 // list. See the comment on SecretsController.Search — a name is a disclosure, and the palette
 // is not allowed to be a way around that.
 function wireCommandPalette() {
-    const nav = document.querySelector('nav[data-command-source]');
-    if (!nav) return;   // signed-out pages have no shell and nothing to command
+    // Every marked container, not just the nav: Profile lives in the account menu at the foot of
+    // the sidebar, and harvesting only the nav would leave it out of the palette entirely.
+    const sources = [...document.querySelectorAll('[data-command-source]')];
+    if (!sources.length) return;   // signed-out pages have no shell and nothing to command
 
-    const searchUrl = nav.dataset.commandSearch;
-    const commands = [...nav.querySelectorAll('a[href]')].map((a) => ({
-        kind: 'Go to',
-        label: a.textContent.trim(),
-        url: a.getAttribute('href'),
-    })).filter((c) => c.label);
+    const searchUrl = sources.find((s) => s.dataset.commandSearch)?.dataset.commandSearch;
+    const commands = sources
+        .flatMap((s) => [...s.querySelectorAll('a[href]')])
+        .map((a) => ({
+            kind: 'Go to',
+            label: a.textContent.trim(),
+            url: a.getAttribute('href'),
+        }))
+        .filter((c) => c.label);
 
     let backdrop = null;
     let opener = null;
@@ -457,6 +497,17 @@ function wireCommandPalette() {
             backdrop ? close() : open();
         }
     });
+
+    // The visible way in. Without this the palette is a rumour.
+    document.querySelectorAll('[data-command-open]').forEach((trigger) => {
+        trigger.addEventListener('click', () => { if (!backdrop) open(); });
+    });
+
+    // ⌘ is a Mac key. Telling a Windows user to press ⌘K is telling them to press a key their
+    // keyboard does not have, which is worse than saying nothing.
+    if (!IS_APPLE) {
+        document.querySelectorAll('[data-command-chord]').forEach((el) => { el.textContent = 'Ctrl K'; });
+    }
 
     function close() {
         if (!backdrop) return;

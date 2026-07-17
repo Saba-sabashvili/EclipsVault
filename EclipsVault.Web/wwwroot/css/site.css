@@ -253,6 +253,36 @@ button { font-family: inherit; }
 }
 .brand:hover { color: var(--text); }
 
+/* ---- Command trigger (the ⌘K front door) -------------------------- */
+/* Dressed as a search field because that is the shape people already know how to read: a
+   magnifier, grey prompt text, a shortcut on the right. It sits directly under the brand — the
+   first thing in the rail — because a shortcut is only discoverable if you meet it before you
+   need it. */
+.command-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    margin-bottom: 0.9rem;
+    padding: 0.42rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-inset);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.86rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+                color var(--dur) var(--ease);
+}
+.command-trigger:hover { border-color: var(--border-strong); background: var(--bg-hover); color: var(--text); }
+.command-trigger svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
+/* The label yields and the keycap holds its size — if anything has to give in a narrow rail it
+   should be the word "Search", not the shortcut this element exists to advertise. */
+.command-trigger-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-trigger kbd { flex-shrink: 0; }
+
 .sidenav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
 
 .nav-section {
@@ -317,26 +347,50 @@ button { font-family: inherit; }
     border-top: 1px solid var(--border);
     padding-top: 0.85rem;
     margin-top: 0.85rem;
-    display: flex;
-    align-items: center;
-    /* Tight, because the name is the first thing to lose when this row runs out of room —
-       the two icons beside it are fixed, so every pixel spent here is taken from a person's
-       own name. */
-    gap: 0.15rem;
 }
+
+/* ---- Account menu -------------------------------------------------- */
+/* The card is now the whole footer, so the name finally gets the full width — the theme toggle
+   and the sign-out button that used to flank it were where the missing pixels went. */
+.account-menu { position: relative; }
+.account-menu > summary { list-style: none; }
+.account-menu > summary::-webkit-details-marker { display: none; }
 
 .user-card {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     padding: 0.3rem;
-    flex: 1;
     min-width: 0;
     border-radius: var(--radius-sm);
     color: var(--text);
+    cursor: pointer;
     transition: background var(--dur) var(--ease);
 }
 .user-card:hover { background: var(--bg-hover); text-decoration: none; color: var(--text); }
+.account-menu[open] > .user-card { background: var(--bg-hover); }
+
+/* Points up, because that is where the panel opens — the sidebar's foot has nothing below it.
+   A chevron that points down at a menu that appears above it is a small lie. */
+.user-chevron { width: 15px; height: 15px; flex-shrink: 0; margin-left: auto; color: var(--text-faint); }
+
+.account-menu-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 30;
+    padding: 0.3rem;
+    background: var(--bg-raised-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.account-menu-panel .menu-item { border-radius: var(--radius-sm); }
+.menu-sep { height: 1px; margin: 0.25rem 0; background: var(--border); }
 
 /* Round avatar images at every size. */
 .avatar-img, .avatar-sm, .avatar-lg {
@@ -525,6 +579,28 @@ a.stat-card:hover {
 .button.copied { border-color: var(--ok); color: var(--ok); }
 
 .button-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+/* ---- Keycaps ------------------------------------------------------ */
+/* A shortcut should look like the key you press. The heavier bottom edge is the whole trick —
+   one line of fake depth that reads as a keycap instead of a code span, which is what stops
+   "⌘K" from looking like a variable name. A component rather than a rule scoped to the palette:
+   a shortcut renders the same wherever the product mentions one. */
+kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    padding: 0.1rem 0.3rem;
+    border: 1px solid var(--border-strong);
+    border-bottom: 2px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--bg-raised-2);
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
 
 .link-button {
     background: none;
@@ -1161,15 +1237,7 @@ input.code-input {
     color: var(--text-faint);
     font-size: 0.72rem;
 }
-.palette-hint kbd {
-    font-family: var(--mono);
-    font-size: 0.68rem;
-    padding: 0.05rem 0.3rem;
-    margin-right: 0.15rem;
-    border: 1px solid var(--border-strong);
-    border-radius: 4px;
-    background: var(--bg-raised);
-}
+.palette-hint kbd { margin-right: 0.15rem; }
 
 @media (max-width: 640px) {
     .palette-hint { display: none; }   /* no modifier keys to advertise on a touch keyboard */
@@ -1242,7 +1310,10 @@ label.button { cursor: pointer; }
     border-radius: 6px;
     cursor: pointer;
 }
-.menu-item:hover { background: var(--bg-hover); }
+/* Colour pinned on hover, not just background: these rows are a mix of <a> and <button>, and the
+   global a:hover turns links amber — so without this the one link in a menu would light up amber
+   while the buttons beside it did not, in a menu whose whole point is that the rows are peers. */
+.menu-item:hover { background: var(--bg-hover); color: var(--text); }
 .menu-item.danger { color: var(--danger); }
 .menu-item.danger:hover { background: var(--danger); color: #fff; }
 
