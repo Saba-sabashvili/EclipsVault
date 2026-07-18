@@ -1,3 +1,4 @@
+using EclipsVault.Core.Application.Abstractions;
 using EclipsVault.Core.Application.Sso;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Auditing;
@@ -10,6 +11,7 @@ using EclipsVault.Infrastructure.Persistence.Interceptors;
 using EclipsVault.Infrastructure.Persistence.Locking;
 using EclipsVault.Infrastructure.Persistence.Repositories;
 using EclipsVault.Infrastructure.Security;
+using EclipsVault.Infrastructure.Security.Licensing;
 using EclipsVault.Infrastructure.Security.WebAuthn;
 using EclipsVault.Infrastructure.Workers;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +38,7 @@ public static class DependencyInjection
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
         services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
+        services.Configure<LicenseOptions>(configuration.GetSection(LicenseOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddMemoryCache();
@@ -163,6 +166,10 @@ public static class DependencyInjection
         // Audit attestation: an ECDSA signer over the hash-chain head + the export service.
         services.AddSingleton<IAuditCheckpointSigner, EcdsaAuditCheckpointSigner>();
         services.AddScoped<IAuditCheckpointService, AuditCheckpointService>();
+
+        // Licensing: resolve and verify the license once at startup (soft — it only informs the nudge
+        // surfaces). A singleton so the token is read and verified exactly once per process.
+        services.AddSingleton<ILicenseState, LicenseService>();
 
         // Application services (pure Core classes, composed here).
         services.AddScoped<ISecretService, SecretService>();
