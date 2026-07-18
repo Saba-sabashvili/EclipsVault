@@ -63,9 +63,11 @@ Each control makes the attack *harder or evident*, not metaphysically impossible
 8. **Long-lived standing credentials.** Dynamic secrets are minted on demand and destroyed at lease
    end; a credential the vault fails to destroy is escalated to a critical alert rather than silently
    marked done.
-9. **Dependency supply chain (the code you build).** The Core project is BCL-only (zero third-party
-   packages); versions are pinned centrally with committed lockfiles; CI restores in locked mode and
-   fails on any vulnerable dependency; a CycloneDX SBOM is emitted per build.
+9. **Dependency and release supply chain.** The Core project is BCL-only (zero third-party packages);
+   versions are pinned centrally with committed lockfiles; CI restores in locked mode and fails on any
+   vulnerable dependency; a CycloneDX SBOM is emitted per build. Release images are **keyless-signed**
+   with Sigstore cosign and ship a signed SBOM attestation, so an operator can prove the image they run
+   was built by this repository's pipeline and audit what is in it ([`VERIFYING.md`](VERIFYING.md)).
 10. **Configuration and credential leakage.** The database connection string is absent from committed
     config; the KEK comes from the environment or a KMS; TLS to the database is enforced by
     configuration; forwarded-header and `AllowedHosts` validation reject a spoofed client IP or Host.

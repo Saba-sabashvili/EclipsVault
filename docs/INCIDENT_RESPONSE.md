@@ -52,9 +52,16 @@ warning *out*. Before the first real sale, stand up **one** of:
 Record who has bought a license (the MoR gives you buyer emails) so a Critical advisory can reach
 every current operator directly, not just those who happen to check the repo.
 
-## Your own keys (do not skip in a rush)
+## Your own trust roots (do not skip in a rush)
 
-If the incident involves a leaked **release-signing key** or the **vendor license private key**, treat
-key rotation as part of the fix: re-issue from a fresh key, publish the new public key, and note the
-rotation in the advisory. A leaked license key is low-impact (enforcement is soft); a leaked
-*release-signing* key is not — it lets an attacker ship a malicious build under your name.
+Release images are signed **keyless** (Sigstore) by the GitHub Actions release workflow's identity, so
+there is no release-signing key to leak. The trust root is instead the **GitHub account, repository, and
+release workflow** — anyone who can push a `v*` tag or alter `.github/workflows/release.yml` can get a
+legitimately-signed malicious image. So an incident touching CI is a supply-chain incident: enable 2FA,
+protect the default branch and tags, review any workflow change, and if the account or a maintainer
+credential is compromised, treat every release since as suspect, publish which digests are trusted, and
+say so in the advisory.
+
+The one long-lived secret that remains is the **vendor license private key**. A leak there is
+low-impact — enforcement is soft, so a forged license cannot unlock anyone's data — but rotate it
+anyway: re-issue from a fresh key, ship the new public key in a release, and note it in the advisory.

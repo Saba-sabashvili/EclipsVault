@@ -280,6 +280,7 @@ The mechanisms above are the *what*. These documents are the *boundary* and the 
 - **[Security policy](SECURITY.md)** — how to report a vulnerability, the in-scope surface, and the safe-harbor terms.
 - **[Incident response](docs/INCIDENT_RESPONSE.md)** — the triage → fix → disclose → notify runbook for a reported weakness.
 - **[Backup & recovery](docs/BACKUP_AND_RECOVERY.md)** — the three things to back up, the KEK-custody rule, and a tested restore procedure.
+- **[Verifying a release](docs/VERIFYING.md)** — every release image is keyless-signed with Sigstore cosign; verify it (and its signed SBOM) before you run it.
 - **[Production install](docs/INSTALL.md)** — the deployment runbook (required configuration, least-privilege schema migration, verification).
 
 ## Extension points

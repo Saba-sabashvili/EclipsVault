@@ -46,6 +46,11 @@ On an empty vault, create the first admin once (screened like any password), the
 
 ## 5. Run (Docker)
 
+Released images are published to `ghcr.io/saba-sabashvili/eclipsvault` and are **cryptographically
+signed** — verify the image and pin it to the digest you verified *before* running it. See
+[`VERIFYING.md`](VERIFYING.md), then use the verified `ghcr.io/saba-sabashvili/eclipsvault@sha256:…`
+reference below in place of a locally-built tag.
+
     docker run -d --name eclipsvault \
       -e ConnectionStrings__DefaultConnection="…" \
       -e Database__Provider=Postgres \
