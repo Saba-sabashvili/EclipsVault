@@ -1299,7 +1299,9 @@ label.button { cursor: pointer; }
     text-align: left;
 }
 .menu-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
     width: 100%;
     text-align: left;
     padding: 0.45rem 0.6rem;
@@ -1310,6 +1312,7 @@ label.button { cursor: pointer; }
     border-radius: 6px;
     cursor: pointer;
 }
+.menu-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
 /* Colour pinned on hover, not just background: these rows are a mix of <a> and <button>, and the
    global a:hover turns links amber — so without this the one link in a menu would light up amber
    while the buttons beside it did not, in a menu whose whole point is that the rows are peers. */
