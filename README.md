@@ -272,6 +272,16 @@ Scopes are enforced by the **same pure ABAC engine** as everything else — they
 - **Real client IP behind a proxy** — `ForwardedHeaders` middleware recovers the true caller address from `X-Forwarded-For`, but **only from proxies you list** in `ForwardedHeaders:KnownProxies` (with none listed, the socket address is used — safe for direct exposure). Every IP-based control — the rate limiter, the intrusion IP-blacklist, the ABAC trusted-network check, and the audit `SourceIp` — depends on this being correct, so it must be configured whenever the app runs behind a load balancer or ingress.
 - **Host filtering** — `AllowedHosts` ships as `*` (the framework default) so the app runs out of the box, but that accepts any `Host` header. Set it to the vault's own hostname(s) in production so a spoofed or reflected `Host` is rejected by the host-filtering middleware; the app logs a warning at startup outside Development while it is still permissive, in the same spirit as the KEK dev-fallback warning.
 
+### Security & operations documentation
+
+The mechanisms above are the *what*. These documents are the *boundary* and the *runbooks* — read them before a production deployment, and share the threat model with anyone evaluating the vault:
+
+- **[Threat model](docs/THREAT_MODEL.md)** — what EclipsVault defends against and, explicitly, what it does **not**; the assets, actors, and the operator-responsibility boundary.
+- **[Security policy](SECURITY.md)** — how to report a vulnerability, the in-scope surface, and the safe-harbor terms.
+- **[Incident response](docs/INCIDENT_RESPONSE.md)** — the triage → fix → disclose → notify runbook for a reported weakness.
+- **[Backup & recovery](docs/BACKUP_AND_RECOVERY.md)** — the three things to back up, the KEK-custody rule, and a tested restore procedure.
+- **[Production install](docs/INSTALL.md)** — the deployment runbook (required configuration, least-privilege schema migration, verification).
+
 ## Extension points
 
 - **Cloud KMS** — implement `ICryptoEngine`, register it in `CryptoEngineFactory`, set `Crypto:Engine`. The `VaultTransit` engine is the reference implementation; an AWS KMS or Azure Key Vault engine follows the same shape (wrap/unwrap the DEK via the provider's SDK).

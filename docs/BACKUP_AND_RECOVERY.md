@@ -1,0 +1,73 @@
+# Backup & recovery
+
+The "I lost everything" runbook. EclipsVault seals every secret with your master key (KEK), so a
+recoverable deployment is not one thing to back up — it is **three**, kept in the right places. This
+expands on the summary in [`INSTALL.md`](INSTALL.md) §7.
+
+> **The one rule that matters:** the KEK is what makes a backup meaningful *and* what makes it
+> dangerous. A database backup without the KEK is inert ciphertext (good — that is the point). A
+> backup *beside* the KEK is plaintext waiting to be read. Keep them in **different systems with
+> different access**.
+
+## What to back up
+
+| # | Item | Where it is | If you lose it |
+|---|---|---|---|
+| 1 | **Database** | Your SQL Server / PostgreSQL | All secrets, versions, users, audit trail — gone. |
+| 2 | **Data Protection key ring** | `DataProtection__KeyRingPath` | Sessions/antiforgery break; sealed at rest with the KEK, so it is inert on its own. |
+| 3 | **The KEK** (`ECLIPSVAULT_KEK`) and any **retired KEKs** (`ECLIPSVAULT_KEK_RETIRED`) | Your secret manager / KMS | **Every secret is permanently unrecoverable.** There is no vendor recovery. |
+| 4 | **Audit signing key** (`ECLIPSVAULT_AUDIT_SIGNING_KEY`) | Your secret manager | You can still read the audit trail, but new checkpoints won't chain to the old ones under the same key. |
+
+Items 1–2 go in your normal encrypted backup. Items 3–4 live in a secret manager (or KMS) and are
+**never** written next to the backup, into an environment file that gets snapshotted, or into the
+same cloud account with the same credentials that reach the backup.
+
+If you use the KMS engine (`Crypto:Engine=VaultTransit`), the KEK lives in HashiCorp Vault instead of
+`ECLIPSVAULT_KEK` — then item 3 is "back up / seal-and-recover your Vault Transit key" per Vault's own
+runbook, and the app never holds the master key at all.
+
+## Restore procedure
+
+1. **Provision a clean database** and restore the backup (item 1).
+2. **Restore the key ring** directory to `DataProtection__KeyRingPath` (item 2).
+3. **Supply the same KEK.** Set `ECLIPSVAULT_KEK` to the exact key that sealed this data. If secrets
+   were written under earlier keys and not yet rotated forward, also set `ECLIPSVAULT_KEK_RETIRED`
+   (the `;`-separated list) so their DEKs still unwrap (item 3).
+4. **Supply the audit signing key** (`ECLIPSVAULT_AUDIT_SIGNING_KEY`, item 4).
+5. **Start the app** with `ASPNETCORE_ENVIRONMENT=Production` and the normal connection string.
+6. **Verify** (this is the part people skip):
+   - Startup logs the license line and does **not** warn about a missing/malformed KEK.
+   - Sign in, complete MFA, and **reveal one secret** — proves the KEK unwraps a real DEK.
+   - On the admin **Audit log** page, run **Verify integrity** — the hash chain reports intact.
+   - Optionally, export an audit bundle and verify it offline with `EclipsVault.AuditVerifier`.
+
+If step 6 reveals a secret, your restore is real. If it cannot, stop and fix the KEK before trusting
+the environment — a half-restored vault that "starts fine" but cannot decrypt is the worst outcome,
+because it looks healthy.
+
+## Test the restore (do this on a schedule, not after a disaster)
+
+A backup you have never restored is a hypothesis. Once a quarter (and after any KEK rotation):
+
+1. Restore items 1–2 into a **throwaway** environment.
+2. Supply the KEK and audit key from your secret manager.
+3. Run step 6 above.
+4. Tear the throwaway environment down.
+
+This exercise is also what proves your KEK custody actually works — if you cannot lay hands on the KEK
+during a drill, you would not have had it during a real outage either.
+
+## KEK rotation (keeps the recovery window bounded)
+
+Rotating the KEK limits how long any single key must survive to keep old data readable. Generate a new
+key, move the previous one into `ECLIPSVAULT_KEK_RETIRED`, restart, then run the rotation from the
+admin **Encryption keys** page. Once it reports everything on the current KEK, the retired key can be
+dropped from the list — and from that point a backup only needs the current KEK. Full steps are in the
+[`README`](../README.md) under *Master key (KEK)*.
+
+## What recovery cannot do
+
+Stated plainly so it is never a surprise (see [`THREAT_MODEL.md`](THREAT_MODEL.md)): if the KEK and all
+retired KEKs are lost, the data is gone. This is a cryptographic guarantee working as intended, not a
+failure — it is also why nobody, including the vendor, can read your secrets. Your recovery plan **is**
+your KEK-custody plan.
