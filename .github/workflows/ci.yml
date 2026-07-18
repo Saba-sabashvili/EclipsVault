@@ -88,3 +88,30 @@ jobs:
             echo "::error::Vulnerable packages detected"
             exit 1
           fi
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install CycloneDX
+        run: dotnet tool install --global CycloneDX
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      # A software bill of materials for the deployed app: every transitive dependency, so a
+      # consumer can audit what ships. Fits the pin-and-prove supply-chain posture.
+      - name: Generate SBOM
+        run: dotnet CycloneDX EclipsVault.Web/EclipsVault.Web.csproj -o sbom -fn sbom.json -F Json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/sbom.json
