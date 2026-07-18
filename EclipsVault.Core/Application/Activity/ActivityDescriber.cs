@@ -84,6 +84,9 @@ public static class ActivityDescriber
         AuditAction.AuditCheckpointCreated => new(ActivityCategory.Administration, "Signed an audit checkpoint", ActivitySeverity.Notable),
         AuditAction.AuditBundleExported => new(ActivityCategory.Administration, "Exported the audit trail", ActivitySeverity.Notable),
 
+        // --- Licensing (soft — an operational notice, never a security event) --------
+        AuditAction.LicenseInvalidProductionUse => new(ActivityCategory.Administration, "Started unlicensed in production", ActivitySeverity.Notable),
+
         // Any action added in future still renders as a readable, spaced-out title.
         _ => new(ActivityCategory.Other, Humanize(action), ActivitySeverity.Routine)
     };

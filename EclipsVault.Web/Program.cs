@@ -35,6 +35,11 @@ try
     builder.Services.AddHostedService<SecretLifecycleWorker>();
     builder.Services.AddHostedService<DynamicLeaseWorker>();
 
+    // Registered after the audit committer (inside AddEclipsVaultInfrastructure) so it starts once the
+    // committer is draining: it logs the license status and records one soft audit row if the vault
+    // came up unlicensed outside Development. It never blocks startup.
+    builder.Services.AddHostedService<LicenseStartupCheck>();
+
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<IAuditContext, HttpAuditContext>();
 

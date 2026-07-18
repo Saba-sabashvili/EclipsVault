@@ -106,5 +106,11 @@ public enum AuditAction
     /// The vault turned an SSO sign-in away. Routine when someone simply has no account here — and
     /// the single most useful row in the trail when it isn't, because it is the IdP being told no.
     /// </summary>
-    SsoSignInRefused = 141
+    SsoSignInRefused = 141,
+
+    /// <summary>
+    /// The vault started without a valid license outside Development — a soft, one-per-startup marker
+    /// so an operator has a dated record. It never restricts the vault and is not a security event.
+    /// </summary>
+    LicenseInvalidProductionUse = 200
 }
