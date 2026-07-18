@@ -180,6 +180,10 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.85 12.15 19 4M18 5l2 2M15 8l2 2"/></svg>
                         Encryption keys
                     </a>
+                    <a class="@Nav("License")" asp-controller="License" asp-action="Index">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h4"/><circle cx="16.3" cy="13.6" r="2.2"/><path d="m14.9 15.2-.6 2.3 2-1 2 1-.6-2.3"/></svg>
+                        License
+                    </a>
                 }
             </nav>
 
@@ -245,6 +249,12 @@
 
     <main class="content">
         <partial name="_Flash" />
+        @* Admin-only: a licensing reminder is only useful to whoever can act on it, and nagging every
+           user about the operator's license would just degrade their experience. *@
+        @if (isAdmin)
+        {
+            <partial name="_LicenseBanner" />
+        }
         @RenderBody()
         <footer class="content-footer">
             EclipsVault — envelope-encrypted secret management. Everything is audited.

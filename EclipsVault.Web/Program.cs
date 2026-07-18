@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using EclipsVault.Core.Application.Abstractions;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure;
 using EclipsVault.Infrastructure.Logging;
@@ -39,6 +41,24 @@ try
     // committer is draining: it logs the license status and records one soft audit row if the vault
     // came up unlicensed outside Development. It never blocks startup.
     builder.Services.AddHostedService<LicenseStartupCheck>();
+
+    // Precompute the licensing-banner inputs once: the status, plus any premium feature switched on in
+    // configuration that the current tier does not cover. Soft — it only decides what the banner says.
+    builder.Services.AddSingleton(sp =>
+    {
+        var license = sp.GetRequiredService<ILicenseState>();
+        var cfg = sp.GetRequiredService<IConfiguration>();
+
+        var active = new List<string>();
+        if (string.Equals(cfg["Crypto:Engine"], "VaultTransit", StringComparison.OrdinalIgnoreCase))
+            active.Add(LicenseFeatures.Kms);
+        if (cfg.GetValue<bool>("Redis:Enabled"))
+            active.Add(LicenseFeatures.RedisHa);
+        if (!string.IsNullOrWhiteSpace(cfg["Sso:Authority"]))
+            active.Add(LicenseFeatures.Sso);
+
+        return LicenseNudgeState.From(license, active);
+    });
 
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<IAuditContext, HttpAuditContext>();
