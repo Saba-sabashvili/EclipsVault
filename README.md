@@ -397,6 +397,26 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 
   Stamping the notice marker is bookkeeping, not an edit, so it is exempt from the `SecretUpdated` audit row — narrowly, by checking that the marker is the *only* modified property. Live verification caught that the first cut of this leaked anyway: `UpdateAsync` calls `DbSet.Update()`, which flags every property modified, making the write indistinguishable from a real edit. It writes the single column now.
 
+## Pricing & licensing
+
+EclipsVault is **self-hosted**: you run it in your own environment and hold your own keys — the vendor never sees your secrets or your servers. A production license is an **annual subscription per production deployment** (one install, however many replicas). It buys three things: the legal right to run in production, ongoing security patches, and best-effort email support. Enforcement is soft — an unlicensed or lapsed vault shows an admin banner and records it, but **never** stops serving secrets.
+
+| Tier | Price | For |
+|---|---|---|
+| **Community** | Free | Non-production — homelab, personal, and a 30-day production evaluation. All features present (source-available). |
+| **Pro** | **$249/year** per production deployment | SSO, PostgreSQL, dynamic secrets, Redis HA, and the KMS engine, plus best-effort email support. |
+| **Enterprise / Support** | Custom (annual) | Everything in Pro plus managed rotation, signed audit attestation, priority security patches, an MSA/DPA, and deployment help. Invoice billing. |
+
+_Launch offer: a one-time **$99 lifetime Pro** license for the first handful of adopters._
+
+**Continuity:** if maintenance ever stops, the intent is that customers keep the source and the right to run and patch what they have deployed — a paused project never strands a running vault.
+
+**Buy / renew:** _&lt;Merchant-of-Record link — Polar or Lemon Squeezy — added at launch&gt;_. Contact `sabashvili13@icloud.com` for Enterprise or an invoice.
+
+### Installing your license
+
+Set the token you receive at purchase as `ECLIPSVAULT_LICENSE`, or place it in a `license.key` file in the app's content root, then restart. The admin **License** page shows your status, tier, and expiry.
+
 ## Licence
 
 **Source-available, not open source.** EclipsVault is © 2026 Saba Sabashvili, all rights reserved, and is licensed rather than sold. You may read the source and run it for **evaluation** for 30 days; **production use — anything holding a real credential — requires a written commercial licence.** Redistributing it, hosting it for others, or offering it as a service is not permitted. See [LICENSE](LICENSE) for the terms and `sabashvili13@icloud.com` for licensing.
