@@ -39,19 +39,31 @@ public static class LicenseCanonical
         if (!TryB64(f[2], out var issuedTo)) return false;
         string? contact = null;
         if (f[3].Length > 0 && !TryB64(f[3], out contact)) return false;
-        if (!long.TryParse(f[4], out var issuedTicks)) return false;
+        if (!TryTicks(f[4], out var issuedAt)) return false;
         DateTimeOffset? notAfter = null;
         if (f[5] != "-")
         {
-            if (!long.TryParse(f[5], out var naTicks)) return false;
-            notAfter = new DateTimeOffset(naTicks, TimeSpan.Zero);
+            if (!TryTicks(f[5], out var na)) return false;
+            notAfter = na;
         }
         if (!int.TryParse(f[6], out var maxNodes)) return false;
         var features = f[7].Length == 0 ? [] : f[7].Split(',');
 
         claims = new LicenseClaims(
             f[0], (LicenseTier)tierValue, issuedTo!, contact,
-            new DateTimeOffset(issuedTicks, TimeSpan.Zero), notAfter, maxNodes, features);
+            issuedAt, notAfter, maxNodes, features);
+        return true;
+    }
+
+    // A tick count that parses as a long can still be outside the DateTime range, and the
+    // DateTimeOffset(long, TimeSpan) constructor throws for those. This runs before the signature
+    // check on operator/attacker-controlled bytes, so it must reject — never throw.
+    private static bool TryTicks(string s, out DateTimeOffset value)
+    {
+        value = default;
+        if (!long.TryParse(s, out var ticks)) return false;
+        if (ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks) return false;
+        value = new DateTimeOffset(ticks, TimeSpan.Zero);
         return true;
     }
 

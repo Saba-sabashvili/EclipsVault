@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
 using Xunit;
@@ -64,6 +65,30 @@ public class LicenseVerifierTests
 
         Assert.Equal(LicenseStatus.Expired, result.Status);
         Assert.Equal("Acme Ltd", result.Claims!.IssuedTo);
+    }
+
+    [Theory]
+    [InlineData("9000000000000000000", "-")] // issuedAt ticks parse as long but exceed DateTime range
+    [InlineData("0", "9000000000000000000")]  // notAfter ticks parse as long but exceed DateTime range
+    public void A_token_with_out_of_range_ticks_is_malformed_not_a_crash(string issuedTicks, string notAfterTicks)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        // A structurally valid payload whose tick fields parse as a long but fall outside the
+        // DateTime tick range. TryDeserialize runs before the signature check, so if it constructs
+        // a DateTimeOffset from these unguarded it throws — and Verify is contractually throw-proof.
+        const char sep = '';
+        var issuedTo = Convert.ToBase64String(Encoding.UTF8.GetBytes("Acme Ltd"));
+        var payloadText = string.Join(sep,
+            "lic-1", ((int)LicenseTier.Pro).ToString(), issuedTo, "",
+            issuedTicks, notAfterTicks, "3", "");
+        var payload = Encoding.UTF8.GetBytes(payloadText);
+        var signature = key.SignData(payload, HashAlgorithmName.SHA256);
+        var token = LicenseToken.Encode(payload, signature);
+
+        var result = LicenseVerifier.Verify(token, key.ExportSubjectPublicKeyInfo(), Now);
+
+        Assert.Equal(LicenseStatus.Malformed, result.Status);
     }
 
     [Fact]
