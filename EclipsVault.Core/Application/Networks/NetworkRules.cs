@@ -39,20 +39,27 @@ public static class NetworkRules
     public static bool Contains(IPNetwork network, IPAddress address) => network.Contains(Normalize(address));
 
     /// <summary>
-    /// The range to blacklist for an offending address: the exact host for loopback, otherwise
-    /// the /24 (IPv4) or /64 (IPv6) it sits in, so an attacker rotating within a subnet stays contained.
+    /// The range to blacklist for an offending address. By default this is the <em>exact host</em>:
+    /// the blacklist is consulted before authentication on every request, so widening a block to the
+    /// surrounding subnet lets one trip from a shared egress (office NAT, VPN concentrator, cloud NAT
+    /// gateway) deny the vault to everyone behind it — including the administrators who would lift it.
+    ///
+    /// Set <paramref name="blockSurroundingRange"/> only for single-tenant deployments where the whole
+    /// subnet is under one operator's control and an attacker hopping addresses within it is the larger
+    /// risk; the block then widens to the /24 (IPv4) or /64 (IPv6). Loopback is always pinned exactly.
     /// </summary>
-    public static IPNetwork ToBlockRange(IPAddress address)
+    public static IPNetwork ToBlockRange(IPAddress address, bool blockSurroundingRange = false)
     {
         var normalized = Normalize(address);
-        if (IPAddress.IsLoopback(normalized))
+        var isIpv4 = normalized.AddressFamily == AddressFamily.InterNetwork;
+
+        if (!blockSurroundingRange || IPAddress.IsLoopback(normalized))
         {
-            var host = normalized.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
-            return new IPNetwork(normalized, host);
+            return new IPNetwork(normalized, isIpv4 ? 32 : 128);
         }
 
         var bytes = normalized.GetAddressBytes();
-        if (normalized.AddressFamily == AddressFamily.InterNetwork)
+        if (isIpv4)
         {
             bytes[3] = 0;
             return new IPNetwork(new IPAddress(bytes), 24);

@@ -1,13 +1,16 @@
 using System.Collections.Concurrent;
 using System.Net;
+using EclipsVault.Core.Application.Networks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EclipsVault.Infrastructure.Security;
 
 /// <summary>
-/// Process-local blacklist of source ranges (/24 for IPv4, /64 for IPv6; loopback is
-/// pinned to its exact address). Administrators can inspect and lift blocks from the
-/// Networks console. Swap for a distributed store behind the same interface when
+/// Process-local blacklist of offending hosts. By default a block covers the exact host; it widens
+/// to the surrounding /24 (IPv4) or /64 (IPv6) only when <see cref="IntrusionResponseOptions.BlockSurroundingRange"/>
+/// is set. Loopback is always pinned to its exact address. Administrators can inspect and lift
+/// blocks from the Networks console. Swap for a distributed store behind the same interface when
 /// running multiple nodes.
 /// </summary>
 public sealed class InMemoryIpBlacklist : IIpBlacklist
@@ -17,11 +20,13 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
     private readonly ConcurrentDictionary<string, Entry> _blocked = new();
     private readonly TimeProvider _clock;
     private readonly ILogger<InMemoryIpBlacklist> _logger;
+    private readonly bool _blockSurroundingRange;
 
-    public InMemoryIpBlacklist(TimeProvider clock, ILogger<InMemoryIpBlacklist> logger)
+    public InMemoryIpBlacklist(TimeProvider clock, IOptions<IntrusionResponseOptions> options, ILogger<InMemoryIpBlacklist> logger)
     {
         _clock = clock;
         _logger = logger;
+        _blockSurroundingRange = options.Value.BlockSurroundingRange;
     }
 
     public void Block(string sourceIp, string reason)
@@ -32,7 +37,7 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
             return;
         }
 
-        var network = NetworkRules.ToBlockRange(address);
+        var network = NetworkRules.ToBlockRange(address, _blockSurroundingRange);
         var key = network.ToString();
         var entry = new Entry(network, new BlockedRangeDto(key, reason, _clock.GetUtcNow()));
 
