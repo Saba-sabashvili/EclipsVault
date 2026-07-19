@@ -1,0 +1,54 @@
+{
+  "realm": "eclipsvault",
+  "enabled": true,
+  "displayName": "EclipsVault (development IdP)",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "clients": [
+    {
+      "clientId": "eclipsvault-web",
+      "name": "EclipsVault",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-eclipsvault-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://localhost:7443/signin-oidc",
+        "http://localhost:5080/signin-oidc"
+      ],
+      "webOrigins": ["https://localhost:7443", "http://localhost:5080"],
+      "attributes": {
+        "post.logout.redirect.uris": "https://localhost:7443/signout-callback-oidc##http://localhost:5080/signout-callback-oidc"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "dev-user",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "devon@eclipsvault.local",
+      "firstName": "Dev",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "ChangeMe!Umbra#2026-Dev", "temporary": false }
+      ]
+    },
+    {
+      "username": "idp-only-user",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "idp-only-user@eclipsvault.local",
+      "firstName": "Stranger",
+      "lastName": "FromTheIdp",
+      "credentials": [
+        { "type": "password", "value": "ChangeMe!Umbra#2026-Dev", "temporary": false }
+      ]
+    }
+  ]
+}

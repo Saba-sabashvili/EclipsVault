@@ -1,3 +1,4 @@
+using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 
 namespace EclipsVault.Core.Application.Abstractions;
@@ -19,17 +20,21 @@ public sealed record EncryptedSecretEnvelope(
     bool IsHoneyToken,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
-    DateTimeOffset? ExpiresAtUtc);
+    DateTimeOffset? ExpiresAtUtc,
+    bool IsManaged = false,
+    string? RotationPrincipal = null) : IEnvelope;
 
 /// <summary>
 /// Cache-aside store for encrypted envelopes. Entries carry a short absolute TTL and
-/// are evicted eagerly by the service layer on every write/update/delete.
+/// are evicted eagerly by the service layer on every write/update/delete. Backed by a
+/// shared store (Redis) in multi-node deployments so a write on one node evicts the
+/// stale envelope for every node; single-node deployments use an in-process cache.
 /// </summary>
 public interface ISecretCache
 {
-    bool TryGet(Guid secretId, out EncryptedSecretEnvelope? envelope);
+    Task<EncryptedSecretEnvelope?> GetAsync(Guid secretId, CancellationToken ct = default);
 
-    void Set(EncryptedSecretEnvelope envelope);
+    Task SetAsync(EncryptedSecretEnvelope envelope, CancellationToken ct = default);
 
-    void Evict(Guid secretId);
+    Task EvictAsync(Guid secretId, CancellationToken ct = default);
 }

@@ -1,70 +1,50 @@
 using System.Security.Claims;
 using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Options;
 
 namespace EclipsVault.Web.Authorization;
 
 /// <summary>
-/// Resource-based ABAC handler. Extracts subject attributes from claims, computes
-/// the environmental context (time window, network trust from static configuration
-/// plus the runtime-managed trusted networks), and delegates the actual decision to
-/// the pure rule engine in Core.
+/// Resource-based ABAC handler. Extracts subject attributes from claims, reads the environmental
+/// context (production window, network trust) from the shared <see cref="IAccessContextProvider"/>
+/// — the same snapshot the self-service "My access" page shows — resolves any explicit grant, and
+/// delegates the actual decision to the pure rule engine in Core.
+///
+/// It gates any <see cref="IAbacResource"/>, not just a stored secret: a dynamic-secret role carries
+/// the same three attributes, so issuing a credential is decided by this one handler and one rule
+/// engine rather than a parallel copy that could drift from it.
 /// </summary>
-public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequirement, SecretDetailsDto>
+public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequirement, IAbacResource>
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ITrustedNetworkService _trustedNetworks;
+    private readonly IAccessContextProvider _accessContext;
     private readonly ISecretGrantService _grants;
-    private readonly AbacOptions _options;
-    private readonly TimeZoneInfo? _windowZone;
     private readonly TimeProvider _clock;
     private readonly ILogger<SecretAccessHandler> _logger;
 
     public SecretAccessHandler(
         IHttpContextAccessor httpContextAccessor,
-        ITrustedNetworkService trustedNetworks,
+        IAccessContextProvider accessContext,
         ISecretGrantService grants,
-        IOptions<AbacOptions> options,
         TimeProvider clock,
         ILogger<SecretAccessHandler> logger)
     {
         _httpContextAccessor = httpContextAccessor;
-        _trustedNetworks = trustedNetworks;
+        _accessContext = accessContext;
         _grants = grants;
-        _options = options.Value;
-        _windowZone = ResolveWindowZone(_options.TimeZoneId, logger);
         _clock = clock;
         _logger = logger;
-    }
-
-    private static TimeZoneInfo? ResolveWindowZone(string? timeZoneId, ILogger logger)
-    {
-        if (string.IsNullOrWhiteSpace(timeZoneId))
-        {
-            return null; // interpret the window in UTC (historical behaviour)
-        }
-
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-        {
-            logger.LogWarning(ex, "Abac:TimeZoneId '{TimeZoneId}' could not be resolved; falling back to UTC for the production window", timeZoneId);
-            return null;
-        }
     }
 
     protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
         SecretAccessRequirement requirement,
-        SecretDetailsDto resource)
+        IAbacResource resource)
     {
-        var clearanceClaim = context.User.FindFirstValue(VaultClaimTypes.Clearance);
         var projectClaim = context.User.FindFirstValue(VaultClaimTypes.Project);
 
-        if (!int.TryParse(clearanceClaim, out var clearanceValue) || projectClaim is null)
+        if (context.User.GetClearanceOrNull() is not { } clearance || projectClaim is null)
         {
             _logger.LogWarning("ABAC denied secret {SecretId}: principal is missing vault attribute claims", resource.Id);
             context.Fail(new AuthorizationFailureReason(this,
@@ -72,34 +52,13 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
             return;
         }
 
-        var subject = new SubjectAttributes((ClearanceLevel)clearanceValue, projectClaim);
+        var subject = new SubjectAttributes(clearance, projectClaim);
         var resourceAttributes = new ResourceAttributes(resource.Environment, resource.Sensitivity, resource.ProjectKey);
 
-        var httpContext = _httpContextAccessor.HttpContext;
-        var now = _clock.GetUtcNow();
-        var sourceIp = httpContext?.Connection.RemoteIpAddress;
+        var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
 
-        var ct = httpContext?.RequestAborted ?? CancellationToken.None;
-
-        var isTrusted = NetworkRules.IsInAnyCidr(sourceIp, _options.TrustedIpCidrs);
-        if (!isTrusted && sourceIp is not null)
-        {
-            isTrusted = await _trustedNetworks.IsTrustedAsync(sourceIp, ct);
-        }
-
-        // An explicit grant lets a user outside the secret's project reach it.
-        var isGranted = false;
-        if (Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
-        {
-            isGranted = await _grants.HasActiveGrantAsync(userId, resource.Id, ct);
-        }
-
-        var requestContext = new RequestContext(
-            now,
-            sourceIp?.ToString(),
-            IsWithinProductionWindow(now),
-            isTrusted,
-            isGranted);
+        // Shared with the "My access" page: network trust + production-window state.
+        var accessContext = await _accessContext.CurrentAsync(ct);
 
         // Per-key scope (present only for scoped API keys; interactive users carry none).
         var scopeProject = context.User.FindFirstValue(VaultClaimTypes.ScopeProject);
@@ -108,29 +67,56 @@ public sealed class SecretAccessHandler : AuthorizationHandler<SecretAccessRequi
             ? new ApiKeyScope(scopeProject, metadataOnly)
             : null;
 
-        var decision = SecretAccessPolicy.Evaluate(subject, resourceAttributes, requestContext, scope);
+        var requestContext = new RequestContext(
+            _clock.GetUtcNow(),
+            accessContext.SourceIp?.ToString(),
+            accessContext.IsWithinProductionWindow,
+            accessContext.IsTrustedNetwork,
+            IsExplicitlyGranted: false);
+
+        // Decide without a grant first. An explicit grant only ever *relaxes* the project rule — it
+        // can turn a deny into an allow, never the reverse — so when the ungranted decision already
+        // allows, a grant cannot change it and the per-secret grant lookup is pure waste. On a list
+        // page that lookup was the whole cost: every row a user could already see (their own project,
+        // or any row at all for a TopSecret account) spent one database round-trip to ask about a
+        // grant that could not have mattered — an N+1 across the entire visible list.
+        var decision = SecretAccessPolicy.Evaluate(subject, resourceAttributes, requestContext, scope, requirement.Kind);
+
+        // Denied ungranted, but a grant might rescue it. Rather than reproduce here *which* denials a
+        // grant can lift — a second copy of rule 2 that would silently drift from the engine — ask the
+        // engine itself: would the very same inputs allow if a grant were present? Only when they
+        // would is the grant decisive, and only then is it worth the query. Grants are issued against
+        // stored secrets only (a dynamic role has nothing to share), hence the IGrantableResource gate.
+        if (!decision.IsAllowed
+            && resource is IGrantableResource
+            && context.User.GetUserIdOrNull() is { } userId
+            && SecretAccessPolicy.Evaluate(
+                    subject, resourceAttributes, requestContext with { IsExplicitlyGranted = true }, scope, requirement.Kind)
+                .IsAllowed
+            && await _grants.HasActiveGrantAsync(userId, resource.Id, ct))
+        {
+            decision = AccessDecision.Allow();
+        }
+
         if (decision.IsAllowed)
         {
             context.Succeed(requirement);
+            return;
         }
-        else
+
+        // A denied read is someone reaching for a specific secret they cannot have, which is worth
+        // knowing about. A denied enumeration is the list page doing its job once per hidden row —
+        // logging those at Warning would bury the reads under routine noise.
+        if (requirement.Kind == AccessKind.Read)
         {
             _logger.LogWarning(
                 "ABAC denied access to secret {SecretId} ({SecretName}) for user {UserName} from {SourceIp}: {DenialReasons}",
                 resource.Id, resource.Name, context.User.Identity?.Name, requestContext.SourceIp, decision.DenialReasons);
-            foreach (var reason in decision.DenialReasons)
-            {
-                context.Fail(new AuthorizationFailureReason(this, reason));
-            }
         }
-    }
 
-    private bool IsWithinProductionWindow(DateTimeOffset nowUtc)
-    {
-        var hour = _windowZone is null
-            ? nowUtc.UtcDateTime.Hour
-            : TimeZoneInfo.ConvertTime(nowUtc, _windowZone).Hour;
-        return hour >= _options.ProductionWindowStartUtcHour
-               && hour < _options.ProductionWindowEndUtcHour;
+        foreach (var reason in decision.DenialReasons)
+        {
+            context.Fail(new AuthorizationFailureReason(this, reason));
+        }
     }
 }

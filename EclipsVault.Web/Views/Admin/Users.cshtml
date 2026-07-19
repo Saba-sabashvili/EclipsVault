@@ -1,3 +1,4 @@
+@using EclipsVault.Web.Extensions
 @model UsersViewModel
 @{
     ViewData["Title"] = "Users";
@@ -43,7 +44,7 @@
                             </div>
                         </div>
                     </td>
-                    <td><span class="badge sens-@((int)user.Clearance)">@user.Clearance</span></td>
+                    <td><span class="badge sens-@((int)user.Clearance)">@user.Clearance.ToDisplayName()</span></td>
                     <td>@user.ProjectKey</td>
                     <td>
                         @if (user.TotpEnabled)

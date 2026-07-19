@@ -17,43 +17,100 @@ namespace EclipsVault.Web.Controllers;
 /// against the resource's attributes before anything sensitive happens; the service
 /// layer independently enforces honey-token traps and fail-closed auditing.
 /// </summary>
-public sealed class SecretsController : Controller
+public sealed class SecretsController : VaultController
 {
+    /// <summary>Enough for the palette to show a useful shortlist; not a bulk-export channel.</summary>
+    private const int SearchResultLimit = 8;
+
     private readonly ISecretService _secrets;
     private readonly ISecretGrantService _grants;
     private readonly IAuthorizationService _authorization;
     private readonly IStepUpService _stepUp;
     private readonly TimeProvider _clock;
+    private readonly ILogger<SecretsController> _logger;
 
     public SecretsController(
         ISecretService secrets,
         ISecretGrantService grants,
         IAuthorizationService authorization,
         IStepUpService stepUp,
-        TimeProvider clock)
+        TimeProvider clock,
+        ILogger<SecretsController> logger)
     {
         _secrets = secrets;
         _grants = grants;
         _authorization = authorization;
         _stepUp = stepUp;
         _clock = clock;
+        _logger = logger;
     }
 
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken ct)
     {
-        var secrets = await _secrets.ListAsync(ct);
+        // A name is not nothing: "Production_AWS_Root_Key" says what exists, where, and what it is
+        // worth. Every row goes through the same ABAC handler that gates opening one, so the list
+        // shows exactly what this caller could reach and nothing more.
+        var visible = await _authorization.VisibleToAsync(User, await _secrets.ListAsync(ct));
 
-        // Only administrators get the decoy marker; to everyone else the bait must
-        // look exactly like a real secret.
-        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)Core.Domain.Enums.ClearanceLevel.TopSecret).ToString());
-
-        var items = secrets
+        var items = visible
             .Select(s => new SecretListItemViewModel(
                 s.Id, s.Name, s.ProjectKey, s.Environment, s.Sensitivity,
-                s.CreatedAtUtc, s.ExpiresAtUtc, IsDecoy: isAdmin && s.IsHoneyToken))
+                s.CreatedAtUtc, s.ExpiresAtUtc))
             .ToList();
         return View(items);
+    }
+
+    /// <summary>
+    /// Backs the command palette's secret search.
+    ///
+    /// This is <see cref="Index"/> with a substring match bolted on, and that is the point: it goes
+    /// through the same <c>ListAsync</c> (which drops honey tokens, so the palette can never invite
+    /// someone to open a decoy) and the same <c>VisibleToAsync</c>, so a search can only ever return
+    /// names the caller was already entitled to enumerate. A palette that queried the repository
+    /// directly — or filtered on claims of its own — would be a second, unpoliced enumeration route
+    /// around the ABAC filter, which is exactly the disclosure the list was fixed to close.
+    ///
+    /// Enumeration is not per-row audited, matching every other list view; opening a result is.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Search(string? q, CancellationToken ct)
+    {
+        var query = (q ?? string.Empty).Trim();
+
+        // Two characters before anything is disclosed: a one-letter query is not a search, it is a
+        // request for the whole list, and the palette has no reason to serve that.
+        if (query.Length < 2)
+        {
+            return Json(Array.Empty<object>());
+        }
+
+        var visible = await _authorization.VisibleToAsync(User, await _secrets.ListAsync(ct));
+
+        var matches = visible
+            .Where(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        || s.ProjectKey.Contains(query, StringComparison.OrdinalIgnoreCase))
+            // A name that starts with what was typed is likelier the one meant than one that merely
+            // contains it somewhere.
+            .OrderByDescending(s => s.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(SearchResultLimit)
+            .Select(s => new
+            {
+                id = s.Id,
+                name = s.Name,
+                project = s.ProjectKey,
+                environment = s.Environment.ToString(),
+                // Both forms: the number picks the badge's colour class, the name is what it reads.
+                // Sending the display name rather than mapping the enum again in JavaScript keeps the
+                // vocabulary in one place — a copy in the client is one that silently goes stale.
+                sensitivity = (int)s.Sensitivity,
+                sensitivityName = s.Sensitivity.ToDisplayName(),
+                url = Url.Action(nameof(Details), new { id = s.Id })
+            })
+            .ToList();
+
+        return Json(matches);
     }
 
     [HttpGet]
@@ -135,9 +192,51 @@ public sealed class SecretsController : Controller
             return RedirectToAction(nameof(Details), new { id = model.Id });
         }
 
-        await _secrets.RotateAsync(model.Id, model.NewValue, string.IsNullOrWhiteSpace(model.ChangeNote) ? null : model.ChangeNote.Trim(), ct);
-        this.FlashSuccess("Secret rotated. The previous value was archived to version history.");
+        await _secrets.RotateAsync(
+            model.Id,
+            model.NewValue,
+            string.IsNullOrWhiteSpace(model.ChangeNote) ? null : model.ChangeNote.Trim(),
+            model.RenewTtlDays,
+            ct);
+
+        this.FlashSuccess(model.RenewTtlDays is > 0
+            ? $"Secret rotated and renewed for {model.RenewTtlDays} more day(s). The previous value was archived to version history."
+            : "Secret rotated. The previous value was archived to version history.");
         return RedirectToAction(nameof(Details), new { id = model.Id });
+    }
+
+    /// <summary>
+    /// Rotates a managed secret: the vault changes the real principal's password upstream and stores
+    /// the result. No new value is submitted — the whole point is that a human never handles it.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> RotateManaged(Guid id, int? renewTtlDays, CancellationToken ct)
+    {
+        var details = await _secrets.GetDetailsAsync(id, ct);
+        if (await CheckAccessAsync(details) is { } denied)
+        {
+            return denied;
+        }
+
+        try
+        {
+            await _secrets.RotateManagedAsync(id, renewTtlDays, ct);
+            this.FlashSuccess(
+                "Rotated upstream. The vault generated a new password, changed the real credential, and stored it — " +
+                "the previous value was archived to version history.");
+        }
+        catch (VaultAdminException ex)
+        {
+            this.FlashError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Don't leak the backend's message onto the page; the audit trail and logs have it.
+            _logger.LogError(ex, "Upstream rotation of secret {SecretId} failed", id);
+            this.FlashError("The backend refused the rotation. The credential is unchanged — check the audit trail.");
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
     }
 
     [HttpPost]
@@ -179,7 +278,7 @@ public sealed class SecretsController : Controller
     public IActionResult Create()
         => View(new CreateSecretViewModel
         {
-            ProjectKey = User.FindFirst(VaultClaimTypes.Project)?.Value ?? string.Empty
+            ProjectKey = User.GetProject()
         });
 
     [HttpPost]
@@ -191,7 +290,7 @@ public sealed class SecretsController : Controller
         }
 
         // A user may not classify a secret above their own clearance.
-        var clearance = int.TryParse(User.FindFirst(VaultClaimTypes.Clearance)?.Value, out var c) ? c : 0;
+        var clearance = (int)User.GetClearance();
         if ((int)model.Sensitivity > clearance)
         {
             ModelState.AddModelError(nameof(model.Sensitivity),
@@ -212,6 +311,34 @@ public sealed class SecretsController : Controller
     {
         var shared = await _grants.ListSharedWithUserAsync(CurrentUserId(), ct);
         return View(shared);
+    }
+
+    /// <summary>
+    /// "Shared by me": an access review of every grant this user has handed out. Self-scoped by the
+    /// caller's username, so it only ever lists the caller's own outgoing shares.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> SharedByMe(CancellationToken ct)
+    {
+        var issued = await _grants.ListIssuedByAsync(User.Identity?.Name ?? string.Empty, ct);
+        return View(issued);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> RevokeSharedByMe(Guid grantId, CancellationToken ct)
+    {
+        // Issuer-scoped: RevokeIssuedAsync only removes the grant if the caller is the one who issued
+        // it, so a forged grant id belonging to someone else's share can never be revoked here.
+        if (await _grants.RevokeIssuedAsync(grantId, User.Identity?.Name ?? string.Empty, ct))
+        {
+            this.FlashSuccess("Access revoked.");
+        }
+        else
+        {
+            this.FlashError("That grant no longer exists, or it wasn't yours to revoke.");
+        }
+
+        return RedirectToAction(nameof(SharedByMe));
     }
 
     [HttpPost]
@@ -320,6 +447,8 @@ public sealed class SecretsController : Controller
             CreatedAtUtc = dto.CreatedAtUtc,
             UpdatedAtUtc = dto.UpdatedAtUtc,
             ExpiresAtUtc = dto.ExpiresAtUtc,
+            IsManaged = dto.IsManaged,
+            RotationPrincipal = dto.RotationPrincipal,
             RevealedValue = revealedValue,
             RevealedLabel = revealedLabel,
             Versions = await _secrets.ListVersionsAsync(dto.Id, ct),
@@ -359,12 +488,6 @@ public sealed class SecretsController : Controller
 
     /// <summary>Sharing is managed by administrators and by members of the secret's own project.</summary>
     private bool CanShare(SecretDetailsDto dto)
-    {
-        var isAdmin = User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
-        var project = User.FindFirst(VaultClaimTypes.Project)?.Value;
-        return isAdmin || string.Equals(project, dto.ProjectKey, StringComparison.OrdinalIgnoreCase);
-    }
+        => User.IsAdmin() || string.Equals(User.GetProject(), dto.ProjectKey, StringComparison.OrdinalIgnoreCase);
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

@@ -1,0 +1,142 @@
+using EclipsVault.Core.Application.Abstractions;
+using EclipsVault.Core.Application.Mfa;
+using EclipsVault.Core.Application.Passkeys;
+using EclipsVault.Core.Application.Profile;
+using EclipsVault.Core.Application.SecurityCheckup;
+using EclipsVault.Core.Application.Sessions;
+using EclipsVault.Core.Domain.Enums;
+using Xunit;
+
+namespace EclipsVault.Tests.SecurityCheckupTests;
+
+/// <summary>
+/// The service is a thin read-model aggregator: it gathers the four posture inputs and defers all
+/// scoring to the evaluator. These tests pin that it maps each input into the posture, keys every
+/// read to the caller's own id (self-scoping), and returns null for a vanished account.
+/// </summary>
+public class SecurityCheckupServiceTests
+{
+    private static readonly Guid User = Guid.NewGuid();
+
+    private sealed class FakeProfile : IProfileService
+    {
+        private readonly ProfileDto? _dto;
+        public Guid LastUserId { get; private set; }
+        public FakeProfile(ProfileDto? dto) => _dto = dto;
+
+        public Task<ProfileDto?> GetAsync(Guid userId, CancellationToken ct)
+        {
+            LastUserId = userId;
+            return Task.FromResult(_dto);
+        }
+
+        public Task<ProfileDto> UpdateAsync(Guid userId, string displayName, string email, CancellationToken ct) => throw new NotSupportedException();
+        public Task ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, CancellationToken ct) => throw new NotSupportedException();
+        public Task<byte[]?> GetAvatarPngAsync(Guid userId, CancellationToken ct) => throw new NotSupportedException();
+        public Task SetAvatarAsync(Guid userId, byte[] uploadedBytes, CancellationToken ct) => throw new NotSupportedException();
+        public Task RemoveAvatarAsync(Guid userId, CancellationToken ct) => throw new NotSupportedException();
+        public Task ResetOwnMfaAsync(Guid userId, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class FakePasskeys : IPasskeyService
+    {
+        private readonly int _count;
+        public bool Queried { get; private set; }
+        public FakePasskeys(int count) => _count = count;
+
+        public Task<IReadOnlyList<PasskeySummary>> ListForUserAsync(Guid userId, CancellationToken ct)
+        {
+            Queried = true;
+            IReadOnlyList<PasskeySummary> list = Enumerable.Range(0, _count)
+                .Select(i => new PasskeySummary(Guid.NewGuid(), $"key{i}", DateTimeOffset.UtcNow))
+                .ToList();
+            return Task.FromResult(list);
+        }
+
+        public Task<PasskeyCeremonyOptions> BeginRegistrationAsync(Guid userId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PasskeyRegistrationResult> CompleteRegistrationAsync(Guid userId, string expectedChallenge, string responseJson, string? nickname, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PasskeyCeremonyOptions> BeginAssertionAsync(string? usernameOrEmail, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PasskeyAssertionResult> CompleteAssertionAsync(string expectedChallenge, string responseJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> RemoveAsync(Guid userId, Guid passkeyId, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeRecovery : IMfaRecoveryService
+    {
+        private readonly int _remaining;
+        public FakeRecovery(int remaining) => _remaining = remaining;
+        public Task<int> CountRemainingAsync(Guid userId, CancellationToken ct) => Task.FromResult(_remaining);
+        public Task<IReadOnlyList<string>> GenerateAsync(Guid userId, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeSessions : ISessionRegistry
+    {
+        private readonly int _count;
+        public Guid LastUserId { get; private set; }
+        public FakeSessions(int count) => _count = count;
+
+        public Task<IReadOnlyList<ActiveSession>> ListAsync(Guid userId, CancellationToken ct = default)
+        {
+            LastUserId = userId;
+            IReadOnlyList<ActiveSession> list = Enumerable.Range(0, _count)
+                .Select(_ => new ActiveSession(Guid.NewGuid(), "Chrome on macOS", "203.0.113.5", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow))
+                .ToList();
+            return Task.FromResult(list);
+        }
+
+        public Task RecordSeenAsync(SessionObservation observation, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task RevokeAsync(Guid userId, Guid sessionId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> IsRevokedAsync(Guid userId, Guid sessionId, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    private static ProfileDto Profile(bool totp) =>
+        new(User, "alice", "Alice", "alice@example.com", ClearanceLevel.Standard, "PHOENIX", totp, false);
+
+    [Fact]
+    public async Task A_vanished_account_yields_null()
+    {
+        var service = new SecurityCheckupService(
+            new FakeProfile(null), new FakePasskeys(1), new FakeRecovery(5), new FakeSessions(1));
+
+        Assert.Null(await service.GetForUserAsync(User, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task It_maps_each_input_into_the_posture()
+    {
+        // Two-step on, a passkey, plenty of codes, one device → a fully secured, Strong result.
+        var service = new SecurityCheckupService(
+            new FakeProfile(Profile(totp: true)), new FakePasskeys(1), new FakeRecovery(8), new FakeSessions(1));
+
+        var checkup = await service.GetForUserAsync(User, CancellationToken.None);
+
+        Assert.NotNull(checkup);
+        Assert.Equal(SecurityGrade.Strong, checkup!.Grade);
+        Assert.True(checkup.AllClear);
+    }
+
+    [Fact]
+    public async Task No_two_step_no_passkey_no_codes_surfaces_two_step_as_the_next_step()
+    {
+        var service = new SecurityCheckupService(
+            new FakeProfile(Profile(totp: false)), new FakePasskeys(0), new FakeRecovery(0), new FakeSessions(1));
+
+        var checkup = await service.GetForUserAsync(User, CancellationToken.None);
+
+        Assert.Equal(SecurityCheckKind.TwoStepSignIn, checkup!.TopPriority!.Kind);
+    }
+
+    [Fact]
+    public async Task Every_read_is_scoped_to_the_caller()
+    {
+        var profile = new FakeProfile(Profile(totp: true));
+        var sessions = new FakeSessions(1);
+        var passkeys = new FakePasskeys(1);
+        var service = new SecurityCheckupService(profile, passkeys, new FakeRecovery(5), sessions);
+
+        await service.GetForUserAsync(User, CancellationToken.None);
+
+        Assert.Equal(User, profile.LastUserId);
+        Assert.Equal(User, sessions.LastUserId);
+        Assert.True(passkeys.Queried);
+    }
+}

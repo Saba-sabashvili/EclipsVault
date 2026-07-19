@@ -1,3 +1,4 @@
+@using EclipsVault.Web.Extensions
 @model ServiceAccountDetailsViewModel
 @{
     ViewData["Title"] = Model.Account.Name;
@@ -9,7 +10,7 @@
     <div>
         <h1 class="mono">@a.Name</h1>
         <p class="page-sub">
-            <span class="badge sens-@((int)a.Clearance)">@a.Clearance</span>
+            <span class="badge sens-@((int)a.Clearance)">@a.Clearance.ToDisplayName()</span>
             <span class="badge">@a.ProjectKey</span>
             @if (a.IsDisabled)
             {
@@ -47,10 +48,10 @@
                 <div class="field">
                     <label>Clearance ceiling</label>
                     <select name="clearanceCeiling">
-                        <option value="0">No limit (account: @a.Clearance)</option>
+                        <option value="0">No limit (account: @a.Clearance.ToDisplayName())</option>
                         @foreach (var level in Enum.GetValues<ClearanceLevel>().Where(l => (int)l < (int)a.Clearance))
                         {
-                            <option value="@((int)level)">at most @level</option>
+                            <option value="@((int)level)">at most @level.ToDisplayName()</option>
                         }
                     </select>
                 </div>
@@ -157,7 +158,7 @@
         <div class="panel-header"><h2>Account</h2></div>
         <dl class="detail-grid">
             <dt>Clearance</dt>
-            <dd><span class="badge sens-@((int)a.Clearance)">@a.Clearance</span></dd>
+            <dd><span class="badge sens-@((int)a.Clearance)">@a.Clearance.ToDisplayName()</span></dd>
             <dt>Project</dt>
             <dd>@a.ProjectKey</dd>
             <dt>Created (UTC)</dt>

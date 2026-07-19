@@ -24,6 +24,16 @@ public sealed class SecretRepository : ISecretRepository
             .Where(s => !s.IsShredded && s.ExpiresAtUtc != null && s.ExpiresAtUtc <= asOfUtc)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Secret>> ListExpiringAsync(DateTimeOffset asOfUtc, DateTimeOffset horizonUtc, CancellationToken ct)
+        => await _context.Secrets
+            .Where(s => !s.IsShredded
+                        && s.ExpiresAtUtc != null
+                        && s.ExpiresAtUtc > asOfUtc
+                        && s.ExpiresAtUtc <= horizonUtc
+                        && (s.ExpiryNoticeSentForUtc == null || s.ExpiryNoticeSentForUtc != s.ExpiresAtUtc))
+            .OrderBy(s => s.ExpiresAtUtc)
+            .ToListAsync(ct);
+
     public async Task AddAsync(Secret secret, CancellationToken ct)
     {
         _context.Secrets.Add(secret);
@@ -33,6 +43,14 @@ public sealed class SecretRepository : ISecretRepository
     public async Task UpdateAsync(Secret secret, CancellationToken ct)
     {
         _context.Secrets.Update(secret);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkExpiryNoticeSentAsync(Secret secret, CancellationToken ct)
+    {
+        // Mark the single column rather than the whole entity: DbSet.Update() flags every property
+        // as modified, which the audit interceptor cannot tell apart from a genuine edit.
+        _context.Entry(secret).Property(s => s.ExpiryNoticeSentForUtc).IsModified = true;
         await _context.SaveChangesAsync(ct);
     }
 
@@ -51,8 +69,9 @@ public sealed class SecretRepository : ISecretRepository
 
     public async Task ShredAsync(Secret secret, CancellationToken ct)
     {
-        // Archived versions hold key material — purge them as part of the shred.
-        var versions = _context.SecretVersions.Where(v => v.SecretId == secret.Id);
+        // Archived versions hold key material — purge them as part of the shred. Materialised rather
+        // than handed to RemoveRange as a query, which would enumerate it with a blocking call.
+        var versions = await _context.SecretVersions.Where(v => v.SecretId == secret.Id).ToListAsync(ct);
         _context.SecretVersions.RemoveRange(versions);
         _context.Secrets.Update(secret);
         await _context.SaveChangesAsync(ct); // interceptor injects the SecretShredded audit
