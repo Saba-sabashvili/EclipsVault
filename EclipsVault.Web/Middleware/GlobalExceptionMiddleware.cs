@@ -43,13 +43,6 @@ public sealed class GlobalExceptionMiddleware
             _logger.LogInformation("Secret {SecretId} not found for {Path}", ex.SecretId, context.Request.Path);
             context.Response.Redirect("/Home/Error?code=404");
         }
-        catch (LegacyBlobRefusedException ex) when (!context.Response.HasStarted)
-        {
-            // A deliberate fail-closed refusal (an unbound legacy envelope), not a fault: report it as
-            // a clean 409 the operator can act on, not a 500 that reads like the crypto is broken.
-            _logger.LogWarning(ex, "Refused an unbound legacy secret during {Path}; a re-seal migration is required", context.Request.Path);
-            context.Response.Redirect("/Home/Error?code=409");
-        }
         catch (CryptoConfigurationException ex) when (!context.Response.HasStarted)
         {
             _logger.LogCritical(ex, "Cryptographic subsystem misconfiguration surfaced during {Path}", context.Request.Path);

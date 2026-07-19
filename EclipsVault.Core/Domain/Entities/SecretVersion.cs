@@ -6,7 +6,7 @@ namespace EclipsVault.Core.Domain.Entities;
 /// value, and reverting. Holds real key material, so it is purged when the parent
 /// secret is shredded or deleted.
 /// </summary>
-public class SecretVersion : IMutableEnvelope
+public class SecretVersion
 {
     public Guid Id { get; set; }
 

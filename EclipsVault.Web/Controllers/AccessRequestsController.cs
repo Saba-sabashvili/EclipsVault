@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
@@ -12,7 +13,7 @@ namespace EclipsVault.Web.Controllers;
 /// denied; a reviewer (an administrator, or a member of the secret's project) approves it —
 /// which creates an ordinary grant — or rejects it. Everything here is audited.
 /// </summary>
-public sealed class AccessRequestsController : VaultController
+public sealed class AccessRequestsController : Controller
 {
     private readonly IAccessRequestService _requests;
     private readonly ISecretService _secrets;
@@ -142,7 +143,11 @@ public sealed class AccessRequestsController : VaultController
         return canReview ? null : Forbid();
     }
 
-    private bool IsAdmin() => User.IsAdmin();
+    private bool IsAdmin() => User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString());
 
-    private string CurrentProject() => User.GetProject();
+    private string CurrentProject() => User.FindFirst(VaultClaimTypes.Project)?.Value ?? string.Empty;
+
+    private string CurrentUsername() => User.Identity?.Name ?? string.Empty;
+
+    private Guid CurrentUserId() => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

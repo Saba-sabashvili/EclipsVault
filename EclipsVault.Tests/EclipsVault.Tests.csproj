@@ -12,11 +12,6 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <!-- Runs the real EclipsVaultDbContext against in-memory SQLite, so the persistence guarantees
-         the vault relies on are pinned without needing a database server in CI. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
-    <!-- Direct reference only to lift the native library off the vulnerable 2.1.11 the provider pulls in. -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>

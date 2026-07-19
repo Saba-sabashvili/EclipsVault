@@ -16,7 +16,7 @@ namespace EclipsVault.Web.Controllers;
 /// password, personal MFA, and session control. Anything here acts only on the
 /// caller's own account.
 /// </summary>
-public sealed class ProfileController : VaultController
+public sealed class ProfileController : Controller
 {
     /// <summary>Session key holding the challenge issued for an in-flight passkey registration.</summary>
     private const string PasskeyRegistrationChallengeKey = "passkey:registration:challenge";
@@ -174,15 +174,7 @@ public sealed class ProfileController : VaultController
             return View(model);
         }
 
-        // The service revoked every session issued up to now — this one included. Re-issue THIS
-        // device with a strong-auth time strictly after that instant (the kill switch compares at
-        // one-second granularity, so an equal timestamp would revoke the session we are keeping), so
-        // whoever just proved the new password stays signed in while every other device is signed
-        // out on its next request.
-        var freshAuthTime = _clock.GetUtcNow().AddSeconds(1).ToUnixTimeSeconds().ToString();
-        await ReissueReplacingClaimsAsync((VaultClaimTypes.AuthTime, freshAuthTime));
-
-        this.FlashSuccess("Your password was changed. Any other signed-in devices have been signed out.");
+        this.FlashSuccess("Your password was changed.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -240,7 +232,7 @@ public sealed class ProfileController : VaultController
     public async Task<IActionResult> SignOutEverywhere(CancellationToken ct)
     {
         // Revoke all sessions issued up to now (this device included), then sign out here.
-        await _revocation.RevokeAsync(CurrentUserId(), _clock.GetUtcNow(), ct);
+        _revocation.Revoke(CurrentUserId(), _clock.GetUtcNow());
         _logger.LogInformation("User {Username} signed out of all sessions", User.Identity?.Name);
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         this.FlashInfo("You have been signed out of all sessions. Sign in again to continue.");
@@ -294,10 +286,9 @@ public sealed class ProfileController : VaultController
     }
 
     /// <summary>
-    /// Re-issues the auth cookie with the given claim(s) replaced, preserving every claim not named
-    /// in the update. Callers that leave the auth-time anchor alone (profile edits, avatar changes)
-    /// do not disturb the session-revocation kill switch; the change-password flow deliberately
-    /// replaces it, to survive the account-wide revocation it just raised.
+    /// Re-issues the auth cookie with the given claim(s) replaced, preserving every
+    /// other claim — including the auth-time anchor, so the session-revocation kill
+    /// switch is not disturbed.
     /// </summary>
     private async Task ReissueReplacingClaimsAsync(params (string Type, string Value)[] updates)
     {
@@ -312,4 +303,6 @@ public sealed class ProfileController : VaultController
             new AuthenticationProperties { IsPersistent = false });
     }
 
+    private Guid CurrentUserId()
+        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

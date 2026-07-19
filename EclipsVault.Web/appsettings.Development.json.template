@@ -17,11 +17,6 @@
     "Enabled": true,
     "Smtp": { "Host": "localhost", "Port": 1025, "UseSsl": false }
   },
-  "Redis": {
-    "//": "Optional locally. Set Enabled=true to exercise the Redis-backed distributed state against the redis container from docker-compose. Leave false for the zero-infrastructure in-process stores. The password matches docker-compose's --requirepass: local Redis is authenticated too, so the configuration you develop against is the one that is safe to deploy.",
-    "Enabled": false,
-    "Configuration": "localhost:6379,password=dev-redis-password"
-  },
   "Seed": {
     "AdminPassword": "<local dev admin password>",
     "DevPassword": "<local dev user password>"

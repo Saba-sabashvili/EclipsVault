@@ -9,10 +9,7 @@ public sealed class SecurityHeadersMiddleware
         "style-src 'self'; " +
         "img-src 'self' data:; " +
         "font-src 'self'; " +
-        "connect-src 'self'; " +
-        "object-src 'none'; " +      // no <object>/<embed>/<applet> plugin vectors
-        "frame-src 'none'; " +       // the app embeds no iframes
-        "frame-ancestors 'none'; " + // and refuses to be embedded (clickjacking)
+        "frame-ancestors 'none'; " +
         "form-action 'self'; " +
         "base-uri 'self'";
 
@@ -22,22 +19,6 @@ public sealed class SecurityHeadersMiddleware
 
     public Task InvokeAsync(HttpContext context)
     {
-        // Keep authenticated vault pages out of the browser's disk cache — and off the back button
-        // after sign-out. Only HTML is marked no-store; static assets and images (served with their
-        // own caching) are untouched. Content-Type is only known once the response starts, so this
-        // is deferred to OnStarting.
-        context.Response.OnStarting(static state =>
-        {
-            var ctx = (HttpContext)state;
-            var contentType = ctx.Response.ContentType;
-            if (contentType is not null && contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase))
-            {
-                ctx.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-                ctx.Response.Headers.Pragma = "no-cache";
-            }
-            return Task.CompletedTask;
-        }, context);
-
         var headers = context.Response.Headers;
         headers["Content-Security-Policy"] = ContentSecurityPolicy;
         headers["X-Frame-Options"] = "DENY";
@@ -47,11 +28,6 @@ public sealed class SecurityHeadersMiddleware
             "camera=(), geolocation=(), microphone=(), payment=(), " +
             "publickey-credentials-get=(self), publickey-credentials-create=(self)";
         headers["Cross-Origin-Opener-Policy"] = "same-origin";
-        // Our resources (avatars, static assets) are only ever loaded same-origin behind auth,
-        // so refuse to be pulled into any other site's document.
-        headers["Cross-Origin-Resource-Policy"] = "same-origin";
-        // No legacy Flash/PDF cross-domain policy files are honoured.
-        headers["X-Permitted-Cross-Domain-Policies"] = "none";
 
         return _next(context);
     }

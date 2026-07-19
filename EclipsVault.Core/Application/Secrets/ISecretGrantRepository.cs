@@ -21,7 +21,4 @@ public interface ISecretGrantRepository
 
     /// <summary>Active grants for a user, joined to their still-accessible (non-shredded, non-expired) secrets.</summary>
     Task<IReadOnlyList<SharedSecretDto>> ListSharedWithUserAsync(Guid userId, DateTimeOffset asOfUtc, CancellationToken ct);
-
-    /// <summary>Active grants issued by a given grantor, joined to the (non-shredded) secrets they cover.</summary>
-    Task<IReadOnlyList<OutgoingShareDto>> ListIssuedByAsync(string grantorUsername, DateTimeOffset asOfUtc, CancellationToken ct);
 }

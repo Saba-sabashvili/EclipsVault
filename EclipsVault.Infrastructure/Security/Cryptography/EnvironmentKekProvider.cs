@@ -24,14 +24,6 @@ public sealed class CryptoOptions
     /// <summary>Development-only escape hatch; must stay false outside local dev.</summary>
     public bool AllowDevelopmentKekFallback { get; set; }
 
-    /// <summary>
-    /// Allows reading secrets sealed before payloads were bound to their row, and re-seals them on
-    /// the next start. A migration switch, not a setting: while it is on, the binding can be
-    /// bypassed by anyone who can write the database, because "read this row the old way" is then
-    /// selectable by editing the row's own Algorithm column. Turn it on, start once, turn it off.
-    /// </summary>
-    public bool AllowUnauthenticatedLegacyBlobs { get; set; }
-
     public string? DevelopmentKekBase64 { get; set; }
 
     /// <summary>Development-only retired keys (base64), used when the retired env var is unset.</summary>

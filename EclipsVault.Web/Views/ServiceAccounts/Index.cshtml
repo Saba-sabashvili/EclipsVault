@@ -1,4 +1,3 @@
-@using EclipsVault.Web.Extensions
 @model IReadOnlyList<ServiceAccountSummaryDto>
 @{
     ViewData["Title"] = "Service accounts";
@@ -43,7 +42,7 @@
                     {
                         <tr class="@(a.IsDisabled ? "row-muted" : "")">
                             <td class="mono cell-strong">@a.Name</td>
-                            <td><span class="badge sens-@((int)a.Clearance)">@a.Clearance.ToDisplayName()</span></td>
+                            <td><span class="badge sens-@((int)a.Clearance)">@a.Clearance</span></td>
                             <td>@a.ProjectKey</td>
                             <td>@a.ActiveKeyCount</td>
                             <td>

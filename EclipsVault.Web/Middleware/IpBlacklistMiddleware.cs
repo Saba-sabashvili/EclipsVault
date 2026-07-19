@@ -25,7 +25,7 @@ public sealed class IpBlacklistMiddleware
         </head>
         <body class="auth-body">
             <main class="auth-wrap">
-                <span class="brand auth-brand"><span class="brand-name">EclipsVault</span></span>
+                <span class="brand auth-brand"><span class="brand-mark">🌒</span><span class="brand-name">EclipsVault</span></span>
                 <section class="auth-card">
                     <h1>Access blocked</h1>
                     <p class="muted">
@@ -66,7 +66,7 @@ public sealed class IpBlacklistMiddleware
         var sourceIp = context.Connection.RemoteIpAddress;
         if (sourceIp is not null
             && !context.Request.Path.StartsWithSegments(RecoveryPath)
-            && await _blacklist.IsBlockedAsync(sourceIp, context.RequestAborted))
+            && _blacklist.IsBlocked(sourceIp))
         {
             _logger.LogWarning("Rejected request to {Path} from blacklisted source {SourceIp}", context.Request.Path, sourceIp);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;

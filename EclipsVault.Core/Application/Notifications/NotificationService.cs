@@ -81,43 +81,17 @@ public sealed class NotificationService : INotificationService
             return Task.FromResult<Draft?>(new Draft(email, "Your EclipsVault account is ready", body, "UserProvisioned"));
         }, ct);
 
-    public Task<bool> NotifyExpiringSecretAsync(
-        Guid ownerUserId, string secretName, DateTimeOffset expiresAtUtc, CancellationToken ct)
-        => SafeSendAsync(async () =>
-        {
-            var user = await _users.FindByIdAsync(ownerUserId, ct);
-            if (user is null)
-            {
-                return null;
-            }
-
-            var days = Math.Max(0, (int)Math.Ceiling((expiresAtUtc - _clock.GetUtcNow()).TotalDays));
-            var body = $"Hello {DisplayName(user)},\n\n" +
-                       $"The secret '{secretName}' expires on {expiresAtUtc:u} — about {days} day(s) from now.\n" +
-                       "Once the deadline passes the vault shreds its key material permanently; the value cannot be recovered.\n\n" +
-                       "To keep it, open the secret and rotate it with a renewal period. Rotating without one replaces the " +
-                       "value but leaves the deadline in place, so the new value would still be shredded on schedule.\n\n" +
-                       "— EclipsVault";
-
-            return new Draft(user.Email, $"'{secretName}' expires in {days} day(s)", body, "SecretExpiring");
-        }, ct);
-
     public async Task<IReadOnlyList<EmailLogDto>> ListRecentAsync(int max, CancellationToken ct)
         => (await _log.ListRecentAsync(max, ct)).Select(Map).ToList();
 
-    /// <summary>
-    /// Composes, delivers, and records one notification. Returns true once the outbox row is
-    /// written — the outbox, not the SMTP result, is the record of the notice, so a Failed send is
-    /// still "recorded" and the caller must not retry it into a loop.
-    /// </summary>
-    private async Task<bool> SafeSendAsync(Func<Task<Draft?>> compose, CancellationToken ct)
+    private async Task SafeSendAsync(Func<Task<Draft?>> compose, CancellationToken ct)
     {
         try
         {
             var draft = await compose();
             if (draft is null || string.IsNullOrWhiteSpace(draft.To))
             {
-                return false;
+                return;
             }
 
             var body = draft.Body.Length > MaxBodyLength ? draft.Body[..MaxBodyLength] : draft.Body;
@@ -150,13 +124,10 @@ public sealed class NotificationService : INotificationService
                 Error = error,
                 CreatedAtUtc = _clock.GetUtcNow()
             }, ct);
-
-            return true;
         }
         catch
         {
             // Fail-soft: a notification failure must never propagate into the caller.
-            return false;
         }
     }
 

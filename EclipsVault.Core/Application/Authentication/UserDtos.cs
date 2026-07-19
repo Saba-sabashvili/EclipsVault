@@ -1,4 +1,3 @@
-using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 
 namespace EclipsVault.Core.Application.Authentication;
@@ -11,17 +10,13 @@ public sealed record UserDto(
     ClearanceLevel Clearance,
     string ProjectKey,
     bool TotpEnabled,
-    bool IsDisabled)
+    bool IsDisabled);
+
+public enum CredentialStatus
 {
-    /// <summary>
-    /// The one place a <see cref="User"/> becomes a <see cref="UserDto"/>. It lives on the DTO
-    /// rather than privately inside whichever service happens to need it, because a second copy is
-    /// how the two disagree — and this is what a session's clearance and project are built from, so
-    /// the copy that forgets a field is a copy that silently changes what someone may read.
-    /// </summary>
-    public static UserDto From(User user) =>
-        new(user.Id, user.Username, user.DisplayName, user.Email,
-            user.Clearance, user.ProjectKey, user.TotpEnabled, user.IsDisabled);
+    Invalid = 0,
+    RequiresTotp = 1,
+    RequiresTotpEnrollment = 2
 }
 
 public sealed record CredentialCheckResult(CredentialStatus Status, UserDto? User)

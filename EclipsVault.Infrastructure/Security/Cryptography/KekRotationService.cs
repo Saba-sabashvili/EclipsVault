@@ -1,4 +1,3 @@
-using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -70,15 +69,17 @@ public sealed class KekRotationService : IKekRotationService
         var secrets = await _db.Secrets.Where(s => !s.IsShredded && s.KekId != current).ToListAsync(ct);
         foreach (var s in secrets)
         {
-            var rewrapped = await engine.RewrapAsync(s.ToSealedSecret(), ct);
-            s.ApplyEnvelope(rewrapped);
+            var rewrapped = engine.Rewrap(new SealedSecret(s.Ciphertext, s.WrappedDek, s.KekId, s.Algorithm));
+            s.WrappedDek = rewrapped.WrappedDek;
+            s.KekId = rewrapped.KekId;
         }
 
         var versions = await _db.SecretVersions.Where(v => v.KekId != current).ToListAsync(ct);
         foreach (var v in versions)
         {
-            var rewrapped = await engine.RewrapAsync(v.ToSealedSecret(), ct);
-            v.ApplyEnvelope(rewrapped);
+            var rewrapped = engine.Rewrap(new SealedSecret(v.Ciphertext, v.WrappedDek, v.KekId, v.Algorithm));
+            v.WrappedDek = rewrapped.WrappedDek;
+            v.KekId = rewrapped.KekId;
         }
 
         if (secrets.Count > 0 || versions.Count > 0)

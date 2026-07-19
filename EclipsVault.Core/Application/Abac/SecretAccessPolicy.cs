@@ -8,17 +8,11 @@ namespace EclipsVault.Core.Application.Abac;
 /// </summary>
 public static class SecretAccessPolicy
 {
-    /// <param name="kind">
-    /// Whether the caller wants the value or only to know the resource exists. Enumeration runs the
-    /// same rules — a name discloses what exists and what it is worth — with the single exception
-    /// noted at rule 6.
-    /// </param>
     public static AccessDecision Evaluate(
         SubjectAttributes subject,
         ResourceAttributes resource,
         RequestContext context,
-        ApiKeyScope? scope = null,
-        AccessKind kind = AccessKind.Read)
+        ApiKeyScope? scope = null)
     {
         var reasons = new List<string>();
 
@@ -61,9 +55,8 @@ public static class SecretAccessPolicy
                 reasons.Add($"This API key is scoped to project '{scope.ProjectScope}'.");
             }
 
-            // Rule 6: a metadata-only key may enumerate secrets but never read a value. This is the
-            // one rule enumeration drops — dropping it is what "metadata-only" means.
-            if (scope.MetadataOnly && kind == AccessKind.Read)
+            // Rule 6: a metadata-only key may enumerate secrets but never read a value.
+            if (scope.MetadataOnly)
             {
                 reasons.Add("This API key is limited to metadata only; it cannot read secret values.");
             }

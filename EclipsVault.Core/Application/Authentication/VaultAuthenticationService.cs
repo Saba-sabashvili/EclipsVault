@@ -76,7 +76,7 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
         }
 
         var status = user.TotpEnabled ? CredentialStatus.RequiresTotp : CredentialStatus.RequiresTotpEnrollment;
-        return new CredentialCheckResult(status, UserDto.From(user));
+        return new CredentialCheckResult(status, Map(user));
     }
 
     public async Task<UserDto?> VerifyTotpAsync(Guid userId, string code, CancellationToken ct)
@@ -101,7 +101,7 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
 
         await ResetLockoutAsync(user, ct);
         await AuditUserAsync(AuditAction.LoginSucceeded, user.Id, user.Username, "Password + TOTP", ct);
-        return UserDto.From(user);
+        return Map(user);
     }
 
     public async Task<UserDto?> VerifyRecoveryCodeAsync(Guid userId, string code, CancellationToken ct)
@@ -134,7 +134,7 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
         var remaining = await _recoveryCodes.CountUnusedAsync(userId, ct);
         await AuditUserAsync(AuditAction.RecoveryCodeUsed, user.Id, user.Username, $"Recovery code redeemed; {remaining} remaining", ct);
         await AuditUserAsync(AuditAction.LoginSucceeded, user.Id, user.Username, "Password + recovery code", ct);
-        return UserDto.From(user);
+        return Map(user);
     }
 
     /// <summary>
@@ -196,7 +196,7 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
         await _users.UpdateAsync(user, ct);
         await AuditUserAsync(AuditAction.TotpEnrolled, user.Id, user.Username, null, ct);
         await AuditUserAsync(AuditAction.LoginSucceeded, user.Id, user.Username, "Password + TOTP enrollment", ct);
-        return UserDto.From(user);
+        return Map(user);
     }
 
     /// <summary>Increments the failure counter, locking the account when the threshold is reached, then audits.</summary>
@@ -232,4 +232,6 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
         await _users.UpdateAsync(user, ct);
     }
 
+    private static UserDto Map(User user) =>
+        new(user.Id, user.Username, user.DisplayName, user.Email, user.Clearance, user.ProjectKey, user.TotpEnabled, user.IsDisabled);
 }

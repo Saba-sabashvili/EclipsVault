@@ -4,10 +4,8 @@ using EclipsVault.Core.Domain.Enums;
 
 namespace EclipsVault.Web.Models;
 
-/// <summary>
-/// One row of the secrets list, already narrowed to what the caller may know exists. There is no
-/// decoy marker because decoys never reach a list — see <see cref="ISecretService.ListAsync"/>.
-/// </summary>
+/// <summary>IsDecoy is only ever set for TopSecret administrators — ordinary users
+/// must see decoys as indistinguishable from real secrets.</summary>
 public sealed record SecretListItemViewModel(
     Guid Id,
     string Name,
@@ -15,7 +13,8 @@ public sealed record SecretListItemViewModel(
     SecretEnvironment Environment,
     SensitivityLevel Sensitivity,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? ExpiresAtUtc);
+    DateTimeOffset? ExpiresAtUtc,
+    bool IsDecoy);
 
 public sealed class SecretDetailsViewModel
 {
@@ -36,12 +35,6 @@ public sealed class SecretDetailsViewModel
     public DateTimeOffset? UpdatedAtUtc { get; init; }
 
     public DateTimeOffset? ExpiresAtUtc { get; init; }
-
-    /// <summary>True when the vault can change the real credential, not just the copy it stores.</summary>
-    public bool IsManaged { get; init; }
-
-    /// <summary>The backend principal this secret is the password for, when managed.</summary>
-    public string? RotationPrincipal { get; init; }
 
     /// <summary>Populated only for the single response following an authorized reveal.</summary>
     public string? RevealedValue { get; init; }
@@ -98,11 +91,6 @@ public sealed class RotateSecretViewModel
     [StringLength(256)]
     [Display(Name = "Change note (optional)")]
     public string? ChangeNote { get; set; }
-
-    /// <summary>Null leaves the existing expiry alone; a value resets it to that many days from now.</summary>
-    [Range(1, 3650)]
-    [Display(Name = "Renew for (days)")]
-    public int? RenewTtlDays { get; set; }
 }
 
 public sealed class CreateSecretViewModel

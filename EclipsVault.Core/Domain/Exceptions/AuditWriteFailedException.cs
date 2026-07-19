@@ -11,12 +11,4 @@ public sealed class AuditWriteFailedException : DomainException
         : base(message, innerException)
     {
     }
-
-    /// <summary>
-    /// For a refusal with no underlying error to report — the audit writer is shutting down, say.
-    /// Nothing went wrong; the row simply cannot be promised, which fails the caller just the same.
-    /// </summary>
-    public AuditWriteFailedException(string message) : base(message)
-    {
-    }
 }

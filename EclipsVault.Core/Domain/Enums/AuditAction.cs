@@ -47,9 +47,6 @@ public enum AuditAction
     UserEnabled = 62,
     UserForceLoggedOut = 63,
 
-    /// <summary>Self-service revocation of one of your own active sessions ("signed-in devices").</summary>
-    SessionRevokedByUser = 64,
-
     // Service accounts & API keys.
     ServiceAccountCreated = 70,
     ServiceAccountDeleted = 71,
@@ -75,42 +72,7 @@ public enum AuditAction
     AuditCheckpointCreated = 110,
     AuditBundleExported = 111,
 
-    /// <summary>A user downloaded a copy of their own account data (personal-data export).</summary>
-    PersonalDataExported = 112,
-
     // Step-up re-authentication for sensitive reveals.
     StepUpVerified = 120,
-    StepUpFailed = 121,
-
-    // Dynamic secrets: credentials minted on a backend and destroyed when their lease ends.
-    DynamicCredentialIssued = 130,
-    DynamicCredentialRevoked = 131,
-    DynamicCredentialExpired = 132,
-
-    /// <summary>The backend refused to destroy a credential — it may still be live. Critical.</summary>
-    DynamicCredentialRevocationFailed = 133,
-
-    /// <summary>The vault changed a real upstream credential and stored the new value.</summary>
-    SecretUpstreamRotated = 134,
-
-    /// <summary>
-    /// An upstream rotation left the stored value and the live credential out of step, and the
-    /// vault could not put it back. Someone has to reconcile it by hand. Critical.
-    /// </summary>
-    SecretUpstreamRotationDrifted = 135,
-
-    /// <summary>An identity provider's assertion was matched to a vault account.</summary>
-    SsoIdentityLinked = 140,
-
-    /// <summary>
-    /// The vault turned an SSO sign-in away. Routine when someone simply has no account here — and
-    /// the single most useful row in the trail when it isn't, because it is the IdP being told no.
-    /// </summary>
-    SsoSignInRefused = 141,
-
-    /// <summary>
-    /// The vault started without a valid license outside Development — a soft, one-per-startup marker
-    /// so an operator has a dated record. It never restricts the vault and is not a security event.
-    /// </summary>
-    LicenseInvalidProductionUse = 200
+    StepUpFailed = 121
 }

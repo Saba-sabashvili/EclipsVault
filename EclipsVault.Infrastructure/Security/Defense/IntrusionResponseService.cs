@@ -1,5 +1,6 @@
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Infrastructure.Persistence;
 using Microsoft.Extensions.Logging;
 
 namespace EclipsVault.Infrastructure.Security;
@@ -12,7 +13,7 @@ namespace EclipsVault.Infrastructure.Security;
 /// </summary>
 public sealed class IntrusionResponseService : IIntrusionResponseService
 {
-    private readonly IAuditSink _audit;
+    private readonly EclipsVaultDbContext _db;
     private readonly IIpBlacklist _blacklist;
     private readonly ISessionRevocationService _revocation;
     private readonly IAuditContext _actor;
@@ -20,14 +21,14 @@ public sealed class IntrusionResponseService : IIntrusionResponseService
     private readonly ILogger<IntrusionResponseService> _logger;
 
     public IntrusionResponseService(
-        IAuditSink audit,
+        EclipsVaultDbContext db,
         IIpBlacklist blacklist,
         ISessionRevocationService revocation,
         IAuditContext actor,
         TimeProvider clock,
         ILogger<IntrusionResponseService> logger)
     {
-        _audit = audit;
+        _db = db;
         _blacklist = blacklist;
         _revocation = revocation;
         _actor = actor;
@@ -43,12 +44,12 @@ public sealed class IntrusionResponseService : IIntrusionResponseService
 
         if (userId is { } id)
         {
-            await _revocation.RevokeAsync(id, now, ct);
+            _revocation.Revoke(id, now);
         }
 
         if (!string.IsNullOrEmpty(sourceIp))
         {
-            await _blacklist.BlockAsync(sourceIp, $"Honey-token '{secretName}' tripped", ct);
+            _blacklist.Block(sourceIp, $"Honey-token '{secretName}' tripped");
         }
 
         _logger.LogCritical(
@@ -58,25 +59,26 @@ public sealed class IntrusionResponseService : IIntrusionResponseService
 
         try
         {
-            await _audit.WriteAsync(new AuditEntry
+            _db.AuditLogs.Add(new AuditLog
             {
+                Id = Guid.NewGuid(),
+                TimestampUtc = now,
+                UserId = userId,
+                Username = _actor.Username ?? "anonymous",
+                SourceIp = sourceIp ?? "unknown",
                 Action = AuditAction.HoneyTokenTripped,
                 ResourceType = nameof(Secret),
                 ResourceId = secretId,
                 ResourceName = secretName,
                 Details = "Session revoked; source IP range blacklisted",
-                IsCritical = true,
-
-                // The trap can be tripped before a principal is resolved, so name the actor
-                // explicitly rather than letting the sink record its "system" default.
-                ActorUsername = _actor.Username ?? "anonymous"
-            }, ct);
+                IsCritical = true
+            });
+            await _db.SaveChangesAsync(ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The containment actions above already ran and the critical alert is in the
-            // structured log; a failed audit insert must not un-trip the trap. This is the one
-            // place that deliberately swallows the sink's fail-closed AuditWriteFailedException.
+            // structured log; a failed audit insert must not un-trip the trap.
             _logger.LogCritical(ex, "Failed to persist honey-token audit row for secret {SecretId}", secretId);
         }
     }

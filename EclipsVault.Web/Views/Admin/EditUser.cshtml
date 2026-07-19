@@ -1,4 +1,3 @@
-@using EclipsVault.Web.Extensions
 @model EditUserViewModel
 @{
     ViewData["Title"] = $"Edit {Model.Username}";
@@ -25,7 +24,7 @@
         <div class="field-row">
             <div class="field">
                 <label asp-for="Clearance"></label>
-                <select asp-for="Clearance" asp-items="EnumDisplay.ClearanceSelectList()"></select>
+                <select asp-for="Clearance" asp-items="Html.GetEnumSelectList<ClearanceLevel>()"></select>
             </div>
             <div class="field">
                 <label asp-for="ProjectKey"></label>

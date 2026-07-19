@@ -2,19 +2,12 @@
 // wired here through data attributes:
 //   form[data-confirm] / a[data-confirm]  → custom confirm dialog before proceeding
 //   [data-copy="#selector"]               → copy target's text to the clipboard
-//   [data-print]                          → print the current page (CSP forbids inline onclick)
 //   [data-flash]                          → dismissible, auto-hiding toast
 //   input[data-filter="#id"]              → live row filter for the referenced table
 //   tr[data-href]                         → make a whole table row clickable
-//   input[data-reveal]                    → adds a show/hide eye button inside the field
-//   input[data-strength]                  → adds a live strength meter below the field
-//   [data-command-source]                 → containers the ⌘K palette harvests its links from
-//   [data-command-open]                    → opens the ⌘K palette (the visible way in)
-//   [data-command-chord]                   → shows ⌘K, rewritten to Ctrl K off the Mac
 document.addEventListener('DOMContentLoaded', () => {
     wireConfirms();
     wireCopyButtons();
-    wirePrintButtons();
     wireFlashes();
     wireTableFilters();
     wireRowLinks();
@@ -22,9 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
     wireMenus();
     wirePasskeys();
     wirePasswordBreachCheck();
-    wireRevealToggles();
-    wirePasswordStrength();
-    wireCommandPalette();
     wireThemeToggle();
 });
 
@@ -107,12 +97,6 @@ function wireCopyButtons() {
     });
 }
 
-function wirePrintButtons() {
-    document.querySelectorAll('[data-print]').forEach((button) => {
-        button.addEventListener('click', () => window.print());
-    });
-}
-
 function wireFlashes() {
     document.querySelectorAll('[data-flash]').forEach((flash) => {
         flash.querySelector('[data-flash-close]')?.addEventListener('click', () => flash.remove());
@@ -157,35 +141,14 @@ function wireAutoSubmit() {
     });
 }
 
-// Dismiss any open <details> menu — clicking away, or Escape.
-//
-// The selector lists every menu flavour rather than matching bare `details`, because the nav
-// groups in the sidebar are <details> too and collapsing someone's open nav the moment they
-// click the page would be a poltergeist. New menu? Add it here; the alternative is a menu that
-// opens fine and then will not go away, which is exactly how .account-menu shipped its first
-// draft.
-const MENU_SELECTOR = 'details.row-menu[open], details.account-menu[open]';
-
+// Close any open row overflow menu when clicking elsewhere.
 function wireMenus() {
-    const closeAll = (predicate) =>
-        document.querySelectorAll(MENU_SELECTOR).forEach((menu) => {
-            if (predicate(menu)) menu.removeAttribute('open');
-        });
-
-    document.addEventListener('click', (event) => closeAll((menu) => !menu.contains(event.target)));
-    document.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape') return;
-        // Give focus back to the control that opened it, or Escape strands the keyboard at the
-        // top of the document.
-        closeAll((menu) => {
-            if (menu.contains(document.activeElement)) menu.querySelector('summary')?.focus();
-            return true;
+    document.addEventListener('click', (event) => {
+        document.querySelectorAll('details.row-menu[open]').forEach((menu) => {
+            if (!menu.contains(event.target)) menu.removeAttribute('open');
         });
     });
 }
-
-// Whether ⌘ is a key this keyboard actually has.
-const IS_APPLE = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 
 // --- Theme toggle ----------------------------------------------------------------
 // The server stamps <html data-theme> from the EclipsVault.Theme cookie so the first
@@ -197,19 +160,7 @@ function wireThemeToggle() {
             const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', next);
             document.cookie = `EclipsVault.Theme=${next}; path=/; max-age=31536000; SameSite=Strict; Secure`;
-            labelThemeToggles();
         });
-    });
-    labelThemeToggles();
-}
-
-// Name the destination, not the mechanism. A menu row saying "Switch appearance" makes you click
-// it to find out what happens; "Switch to light" has already told you. Only the menu row carries
-// a label — the icon-only toggles say it with the icon.
-function labelThemeToggles() {
-    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-    document.querySelectorAll('[data-theme-label]').forEach((el) => {
-        el.textContent = `Switch to ${next}`;
     });
 }
 
@@ -347,332 +298,6 @@ function setBreachStatus(el, message, isWarn) {
     el.textContent = message;
     el.classList.toggle('status-error', !!isWarn);
     el.classList.toggle('status-ok', !isWarn && message !== '');
-}
-
-// --- Show/hide password ----------------------------------------------------------
-// An input marked data-reveal gets an eye button inside it. Typing a long password blind
-// and finding out it was wrong only after submitting is how people end up choosing shorter
-// ones — the button is built here rather than in each view so no markup has to be repeated,
-// and so it can never be added to a field that is not opted in.
-function wireRevealToggles() {
-    document.querySelectorAll('input[data-reveal]').forEach((input) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'input-affix';
-        input.parentNode.insertBefore(wrap, input);
-        wrap.appendChild(input);
-
-        const button = document.createElement('button');
-        button.type = 'button';                 // never submits the form it lives in
-        button.className = 'affix-button';
-        button.setAttribute('aria-label', 'Show password');
-        button.innerHTML = EYE_OPEN;
-        wrap.appendChild(button);
-
-        button.addEventListener('click', () => {
-            const shown = input.type === 'text';
-            input.type = shown ? 'password' : 'text';
-            button.innerHTML = shown ? EYE_OPEN : EYE_CLOSED;
-            button.setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
-            // Put the caret back where it was; toggling type resets it to the start.
-            const end = input.value.length;
-            input.focus();
-            input.setSelectionRange(end, end);
-        });
-    });
-}
-
-const EYE_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
-const EYE_CLOSED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7c2 0 3.8.7 5.2 1.6M22 12s-3.6 7-10 7c-2 0-3.8-.7-5.2-1.6"/><path d="m4 4 16 16"/></svg>';
-
-// --- Password strength meter ------------------------------------------------------
-// Deliberately advisory, not a gate. The vault enforces exactly two rules — at least 12
-// characters, and not in the breach corpus (NIST 800-63B 5.1.1.2) — and those are the two
-// shown as pass/fail. Everything else here is an estimate of how much guessing the password
-// would cost, shown as a bar.
-//
-// It does NOT demand an uppercase letter and a symbol. The same NIST guidance this vault
-// screens against advises against composition rules: they push people towards Password1!
-// and away from length, which is what actually helps. A checklist insisting on a symbol
-// would also be claiming a rule the server does not enforce — telling a user their password
-// is invalid when the vault would accept it.
-//
-// Everything is computed in the browser. The breach check already talks to the server; there
-// is no reason for the shape of a candidate password to make a second trip.
-function wirePasswordStrength() {
-    document.querySelectorAll('input[data-strength]').forEach((input) => {
-        const meter = document.createElement('div');
-        meter.className = 'strength';
-        meter.hidden = true;
-        meter.innerHTML = `
-            <div class="strength-track" role="img">
-                <span class="strength-fill"></span>
-            </div>
-            <p class="strength-label"></p>`;
-        // After the affix wrapper if there is one, so the meter sits under the whole field.
-        const anchor = input.closest('.input-affix') || input;
-        anchor.parentNode.insertBefore(meter, anchor.nextSibling);
-
-        const fill = meter.querySelector('.strength-fill');
-        const label = meter.querySelector('.strength-label');
-        const track = meter.querySelector('.strength-track');
-
-        input.addEventListener('input', () => {
-            const value = input.value;
-            if (!value) { meter.hidden = true; return; }
-            meter.hidden = false;
-
-            const { score, text } = scorePassword(value);
-            fill.style.width = `${(score + 1) * 20}%`;
-            meter.dataset.score = String(score);
-            label.textContent = text;
-            track.setAttribute('aria-label', `Password strength: ${text}`);
-        });
-    });
-}
-
-// A rough guessing-cost estimate: variety widens the alphabet, length multiplies it, and the
-// obvious shapes (one repeated character, a straight run off the keyboard) are discounted
-// because an attacker tries those first. Not a substitute for the server's corpus screen —
-// that catches the passwords that are weak for reasons no formula can see.
-function scorePassword(value) {
-    let alphabet = 0;
-    if (/[a-z]/.test(value)) alphabet += 26;
-    if (/[A-Z]/.test(value)) alphabet += 26;
-    if (/[0-9]/.test(value)) alphabet += 10;
-    if (/[^A-Za-z0-9]/.test(value)) alphabet += 33;
-
-    let bits = value.length * Math.log2(Math.max(alphabet, 2));
-
-    const distinct = new Set(value).size;
-    if (distinct <= 2) bits *= 0.35;                       // "aaaaaaaaaaaa"
-    else if (distinct / value.length < 0.4) bits *= 0.7;   // heavy repetition
-    if (/^(?:0123456789|abcdefghij|qwertyuiop)/i.test(value)) bits *= 0.4;
-
-    if (value.length < 12) {
-        return { score: 0, text: `Too short — ${12 - value.length} more character${value.length === 11 ? '' : 's'} needed` };
-    }
-    if (bits < 60) return { score: 1, text: 'Weak — predictable for its length' };
-    if (bits < 80) return { score: 2, text: 'Fair' };
-    if (bits < 110) return { score: 3, text: 'Strong' };
-    return { score: 4, text: 'Very strong' };
-}
-
-// --- Command palette (⌘K / Ctrl+K) ------------------------------------------------
-// Two sources, and neither of them is a list maintained here.
-//
-// Navigation is harvested from the sidebar's own <a> elements. That is not a shortcut — it is
-// what makes the palette safe. The sidebar is already rendered per-caller (an admin-only entry
-// is simply not in the DOM for anyone else), so reading it back means the palette offers exactly
-// the routes this user was already offered. A hardcoded command list here would be a second
-// copy of the navigation *and* of its authorization, and the copy would rot: the day someone
-// adds an admin page, the palette would happily show it to everyone.
-//
-// Secrets come from /Secrets/Search, which runs the same ABAC enumeration filter as the Secrets
-// list. See the comment on SecretsController.Search — a name is a disclosure, and the palette
-// is not allowed to be a way around that.
-function wireCommandPalette() {
-    // Every marked container, not just the nav: Profile lives in the account menu at the foot of
-    // the sidebar, and harvesting only the nav would leave it out of the palette entirely.
-    const sources = [...document.querySelectorAll('[data-command-source]')];
-    if (!sources.length) return;   // signed-out pages have no shell and nothing to command
-
-    const searchUrl = sources.find((s) => s.dataset.commandSearch)?.dataset.commandSearch;
-    const commands = sources
-        .flatMap((s) => [...s.querySelectorAll('a[href]')])
-        .map((a) => ({
-            kind: 'Go to',
-            label: a.textContent.trim(),
-            url: a.getAttribute('href'),
-        }))
-        .filter((c) => c.label);
-
-    let backdrop = null;
-    let opener = null;
-    let seq = 0;
-    let timer;
-
-    document.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-            e.preventDefault();
-            backdrop ? close() : open();
-        }
-    });
-
-    // The visible way in. Without this the palette is a rumour.
-    document.querySelectorAll('[data-command-open]').forEach((trigger) => {
-        trigger.addEventListener('click', () => { if (!backdrop) open(); });
-    });
-
-    // ⌘ is a Mac key. Telling a Windows user to press ⌘K is telling them to press a key their
-    // keyboard does not have, which is worse than saying nothing.
-    if (!IS_APPLE) {
-        document.querySelectorAll('[data-command-chord]').forEach((el) => { el.textContent = 'Ctrl K'; });
-    }
-
-    function close() {
-        if (!backdrop) return;
-        backdrop.remove();
-        backdrop = null;
-        clearTimeout(timer);
-        seq++;                       // any in-flight search result is now stale
-
-        // Hand focus back where it came from. Dismissing a dialog that dumps focus on <body>
-        // sends a keyboard user back to the top of the document to find their place again.
-        if (opener && document.contains(opener)) opener.focus();
-        opener = null;
-    }
-
-    function open() {
-        opener = document.activeElement;
-        backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop palette-backdrop';
-        backdrop.innerHTML = `
-            <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
-                <div class="palette-field">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                    <input type="text" class="palette-input" role="combobox" aria-expanded="true"
-                           aria-controls="palette-list" aria-autocomplete="list"
-                           placeholder="Search secrets, or jump to a page…" autocomplete="off" spellcheck="false" />
-                </div>
-                <ul class="palette-list" id="palette-list" role="listbox" aria-label="Results"></ul>
-                <p class="palette-hint">
-                    <span><kbd>↑</kbd><kbd>↓</kbd> to move</span>
-                    <span><kbd>↵</kbd> to open</span>
-                    <span><kbd>esc</kbd> to close</span>
-                </p>
-            </div>`;
-        document.body.appendChild(backdrop);
-
-        const input = backdrop.querySelector('.palette-input');
-        const list = backdrop.querySelector('.palette-list');
-        let items = [];
-        let active = 0;
-
-        backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-
-        function render(results) {
-            items = results;
-            active = 0;
-            list.innerHTML = '';
-
-            if (!results.length) {
-                const empty = document.createElement('li');
-                empty.className = 'palette-empty';
-                empty.textContent = input.value.trim()
-                    ? 'Nothing matches that.'
-                    : 'Type to search.';
-                list.appendChild(empty);
-                return;
-            }
-
-            results.forEach((r, i) => {
-                const li = document.createElement('li');
-                li.className = i === 0 ? 'palette-item is-active' : 'palette-item';
-                li.setAttribute('role', 'option');
-                li.setAttribute('aria-selected', String(i === 0));
-
-                const kind = document.createElement('span');
-                kind.className = 'palette-kind';
-                kind.textContent = r.kind;
-
-                // textContent, never innerHTML: a secret's name is user-supplied data and this is
-                // the one place it would be trivially easy to hand it to the parser.
-                const label = document.createElement('span');
-                label.className = 'palette-label';
-                label.textContent = r.label;
-
-                li.append(kind, label);
-
-                if (r.meta) {
-                    const meta = document.createElement('span');
-                    meta.className = 'palette-meta';
-                    meta.textContent = r.meta;
-                    li.appendChild(meta);
-                }
-                if (r.sensitivity) {
-                    const badge = document.createElement('span');
-                    badge.className = `badge sens-${r.sensitivity}`;
-                    badge.textContent = r.sensitivityName;
-                    li.appendChild(badge);
-                }
-
-                li.addEventListener('click', () => activate(i));
-                li.addEventListener('mousemove', () => highlight(i));
-                list.appendChild(li);
-            });
-        }
-
-        function highlight(i) {
-            if (i === active) return;
-            active = i;
-            [...list.children].forEach((li, n) => {
-                li.classList.toggle('is-active', n === i);
-                li.setAttribute('aria-selected', String(n === i));
-            });
-            list.children[i]?.scrollIntoView({ block: 'nearest' });
-        }
-
-        function activate(i) {
-            const item = items[i];
-            if (!item) return;
-            close();
-            window.location.assign(item.url);
-        }
-
-        function localMatches(q) {
-            const needle = q.toLowerCase();
-            return commands.filter((c) => c.label.toLowerCase().includes(needle));
-        }
-
-        async function search() {
-            const q = input.value.trim();
-            const local = localMatches(q);
-
-            // Pages resolve instantly and offline; secrets need the server. Show what is already
-            // known rather than making the whole palette wait on a round trip.
-            render(q ? local : commands);
-            if (q.length < 2 || !searchUrl) return;
-
-            const mine = ++seq;
-            try {
-                const res = await fetch(`${searchUrl}?q=${encodeURIComponent(q)}`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                if (!res.ok || mine !== seq || !backdrop) return;
-                const secrets = await res.json();
-                if (mine !== seq || !backdrop) return;   // a later keystroke already won
-
-                render([
-                    ...secrets.map((s) => ({
-                        kind: 'Secret',
-                        label: s.name,
-                        meta: `${s.project} · ${s.environment}`,
-                        sensitivity: s.sensitivity,
-                        sensitivityName: s.sensitivityName,
-                        url: s.url,
-                    })),
-                    ...local,
-                ]);
-            } catch {
-                // Offline or refused: the navigation half still works, so leave it standing.
-            }
-        }
-
-        input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 160); });
-
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') { e.preventDefault(); close(); }
-            else if (e.key === 'ArrowDown') { e.preventDefault(); highlight(Math.min(active + 1, items.length - 1)); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(Math.max(active - 1, 0)); }
-            else if (e.key === 'Enter') { e.preventDefault(); activate(active); }
-            // The input is the dialog's only focusable element, so holding it is the whole trap:
-            // without this, Tab walks focus out into the page behind an open modal.
-            else if (e.key === 'Tab') { e.preventDefault(); }
-        });
-
-        render(commands);
-        input.focus();
-    }
 }
 
 function passkeyPost(url, body) {

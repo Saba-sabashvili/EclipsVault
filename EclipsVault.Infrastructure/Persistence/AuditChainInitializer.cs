@@ -5,12 +5,10 @@ using Microsoft.Extensions.Logging;
 namespace EclipsVault.Infrastructure.Persistence;
 
 /// <summary>
-/// Back-fills sequence numbers and hashes onto any audit rows written before chaining existed, so
-/// the whole history becomes verifiable. Runs once at startup, before any request.
-///
-/// There is nothing to seed: <see cref="AuditChain"/> reads its head from the database on every
-/// write, which is what lets replicas share one chain. A start-up snapshot would be stale the
-/// moment another node appended.
+/// Prepares the audit hash chain at startup: it back-fills sequence numbers and hashes onto any
+/// rows written before chaining existed (so the whole history becomes verifiable), then seeds the
+/// in-memory <see cref="AuditChain"/> head from the persisted tail — so after a restart the next
+/// audit row continues the existing chain instead of colliding with it. Runs once, before any request.
 /// </summary>
 public static class AuditChainInitializer
 {
@@ -18,6 +16,7 @@ public static class AuditChainInitializer
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EclipsVaultDbContext>();
+        var chain = scope.ServiceProvider.GetRequiredService<AuditChain>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<EclipsVaultDbContext>>();
 
         var unchained = await db.AuditLogs
@@ -43,6 +42,9 @@ public static class AuditChainInitializer
             await db.SaveChangesAsync();
             logger.LogInformation("Audit chain: back-filled {Count} pre-existing entries into the hash chain", unchained.Count);
         }
+
+        var head = await LoadTailAsync(db);
+        chain.Seed(head?.Sequence ?? 0, head?.EntryHash);
     }
 
     private static Task<Core.Domain.Entities.AuditLog?> LoadTailAsync(EclipsVaultDbContext db)

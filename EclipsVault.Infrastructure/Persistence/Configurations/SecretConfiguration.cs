@@ -21,9 +21,6 @@ public sealed class SecretConfiguration : IEntityTypeConfiguration<Secret>
         builder.Property(s => s.Ciphertext).IsRequired();
         builder.Property(s => s.WrappedDek).IsRequired();
         builder.Property(s => s.KekId).HasMaxLength(64).IsRequired();
-
-        // A backend principal name — SQL Server caps identifiers at 128.
-        builder.Property(s => s.RotationPrincipal).HasMaxLength(128);
         builder.Property(s => s.Algorithm).HasMaxLength(32).IsRequired();
 
         builder.HasIndex(s => s.ExpiresAtUtc);

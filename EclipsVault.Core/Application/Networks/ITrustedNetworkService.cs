@@ -19,4 +19,7 @@ public interface ITrustedNetworkService
     Task<TrustedNetworkDto> AddAsync(string cidrOrIp, string label, CancellationToken ct);
 
     Task<bool> RemoveAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Writes the audit entry for lifting an intrusion-defence IP block.</summary>
+    Task RecordUnblockedAsync(string network, CancellationToken ct);
 }

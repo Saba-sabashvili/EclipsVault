@@ -10,8 +10,8 @@ namespace EclipsVault.Infrastructure.Security;
 /// Process-local blacklist of offending hosts. By default a block covers the exact host; it widens
 /// to the surrounding /24 (IPv4) or /64 (IPv6) only when <see cref="IntrusionResponseOptions.BlockSurroundingRange"/>
 /// is set. Loopback is always pinned to its exact address. Administrators can inspect and lift
-/// blocks from the Networks console. Multi-node deployments use the Redis-backed implementation so
-/// a block raised on one node is enforced by every node.
+/// blocks from the Networks console. Swap for a distributed store behind the same interface when
+/// running multiple nodes.
 /// </summary>
 public sealed class InMemoryIpBlacklist : IIpBlacklist
 {
@@ -29,12 +29,12 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
         _blockSurroundingRange = options.Value.BlockSurroundingRange;
     }
 
-    public Task BlockAsync(string sourceIp, string reason, CancellationToken ct = default)
+    public void Block(string sourceIp, string reason)
     {
         if (!IPAddress.TryParse(sourceIp, out var address))
         {
             _logger.LogWarning("Cannot blacklist unparseable source address {SourceIp}", sourceIp);
-            return Task.CompletedTask;
+            return;
         }
 
         var network = NetworkRules.ToBlockRange(address, _blockSurroundingRange);
@@ -45,39 +45,36 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
         {
             _logger.LogCritical("Source range {Network} blacklisted — {Reason}", key, reason);
         }
-
-        return Task.CompletedTask;
     }
 
-    public Task<bool> IsBlockedAsync(IPAddress address, CancellationToken ct = default)
+    public bool IsBlocked(IPAddress address)
     {
         foreach (var entry in _blocked.Values)
         {
             if (NetworkRules.Contains(entry.Network, address))
             {
-                return Task.FromResult(true);
+                return true;
             }
         }
 
-        return Task.FromResult(false);
+        return false;
     }
 
-    public Task<IReadOnlyList<BlockedRangeDto>> ListAsync(CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<BlockedRangeDto>>(
-            _blocked.Values.Select(e => e.Dto).OrderByDescending(d => d.BlockedAtUtc).ToList());
+    public IReadOnlyList<BlockedRangeDto> List()
+        => _blocked.Values.Select(e => e.Dto).OrderByDescending(d => d.BlockedAtUtc).ToList();
 
-    public Task<bool> UnblockAsync(string network, CancellationToken ct = default)
+    public bool Unblock(string network)
     {
         if (_blocked.TryRemove(network.Trim(), out _))
         {
             _logger.LogWarning("Blacklisted range {Network} was unblocked by an administrator", network);
-            return Task.FromResult(true);
+            return true;
         }
 
-        return Task.FromResult(false);
+        return false;
     }
 
-    public Task<bool> UnblockAddressAsync(IPAddress address, CancellationToken ct = default)
+    public bool UnblockAddress(IPAddress address)
     {
         var removed = false;
         foreach (var (key, entry) in _blocked)
@@ -89,6 +86,6 @@ public sealed class InMemoryIpBlacklist : IIpBlacklist
             }
         }
 
-        return Task.FromResult(removed);
+        return removed;
     }
 }

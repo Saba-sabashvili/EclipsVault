@@ -6,6 +6,7 @@ namespace EclipsVault.Core.Application.Dashboard;
 public sealed class DashboardService : IDashboardService
 {
     private const int RecentEventCount = 10;
+    private const int ExpirySoonDays = 7;
     private const int ExpiringListLimit = 8;
 
     private readonly ISecretRepository _secrets;
@@ -30,8 +31,7 @@ public sealed class DashboardService : IDashboardService
         var recent = await _audit.ListRecentAsync(RecentEventCount, restrictActivityToUsername, ct);
         var criticalLast24h = await _audit.CountCriticalSinceAsync(now.AddHours(-24), ct);
 
-        // Same horizon the lifecycle worker emails on — see SecretExpiry.
-        var expiryCutoff = SecretExpiry.SoonCutoff(now);
+        var expiryCutoff = now.AddDays(ExpirySoonDays);
         var expiringSoon = secrets
             .Where(s => s.ExpiresAtUtc is { } e && e <= expiryCutoff)
             .OrderBy(s => s.ExpiresAtUtc)
