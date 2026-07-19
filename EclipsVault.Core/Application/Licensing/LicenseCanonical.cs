@@ -22,7 +22,8 @@ public static class LicenseCanonical
             c.IssuedAtUtc.UtcTicks.ToString(),
             c.NotAfterUtc is { } na ? na.UtcTicks.ToString() : "-",
             c.MaxNodes.ToString(),
-            string.Join(',', c.Features)));
+            string.Join(',', c.Features),
+            c.UpdatesUntilUtc is { } uu ? uu.UtcTicks.ToString() : "-"));
 
     public static bool TryDeserialize(ReadOnlySpan<byte> payload, out LicenseClaims? claims)
     {
@@ -32,7 +33,7 @@ public static class LicenseCanonical
         catch { return false; }
 
         var f = text.Split(Sep);
-        if (f.Length != 8) return false;
+        if (f.Length != 9) return false;
 
         if (string.IsNullOrEmpty(f[0])) return false;
         if (!int.TryParse(f[1], out var tierValue) || !Enum.IsDefined((LicenseTier)tierValue)) return false;
@@ -48,10 +49,16 @@ public static class LicenseCanonical
         }
         if (!int.TryParse(f[6], out var maxNodes)) return false;
         var features = f[7].Length == 0 ? [] : f[7].Split(',');
+        DateTimeOffset? updatesUntil = null;
+        if (f[8] != "-")
+        {
+            if (!TryTicks(f[8], out var uu)) return false;
+            updatesUntil = uu;
+        }
 
         claims = new LicenseClaims(
             f[0], (LicenseTier)tierValue, issuedTo!, contact,
-            issuedAt, notAfter, maxNodes, features);
+            issuedAt, notAfter, updatesUntil, maxNodes, features);
         return true;
     }
 

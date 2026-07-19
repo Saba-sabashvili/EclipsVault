@@ -21,8 +21,8 @@ public static class HelpPrinter
     {
         Console.WriteLine("EclipsVault license tool");
         Console.WriteLine("  keygen");
-        Console.WriteLine("  mint --tier <Community|Pro|Enterprise> --to <name> [--contact <email>]");
-        Console.WriteLine("       [--nodes <n>] [--years <n>] [--features a,b,c] [--id <id>]");
+        Console.WriteLine("  mint --tier <Community|Max> --to <name> [--contact <email>]");
+        Console.WriteLine("       [--nodes <n>] [--years <n>] [--expires <n>] [--features a,b,c] [--id <id>]");
         Console.WriteLine($"  mint reads the private key (base64 PKCS#8) from ${MintCommand.SigningKeyEnvVar}.");
     }
 
@@ -35,11 +35,12 @@ public static class HelpPrinter
         Console.WriteLine($"  {Theme.Fg(Theme.Accent)}{Theme.Bold}{"mint",-10}{Theme.Reset} {Theme.Fg(Theme.Muted)}sign a license token from claims{Theme.Reset}");
 
         Render.SectionHeader("mint options");
-        Option("--tier",     "Community | Pro | Enterprise   (required)");
+        Option("--tier",     "Community | Max                (required)");
         Option("--to",       "customer / licensee name       (required)");
         Option("--contact",  "customer email");
         Option("--nodes",    "node allowance (0 = unlimited)");
-        Option("--years",    "term length in years (default 1; ignored for Community)");
+        Option("--years",    "update window in years (default 1; the licence stays perpetual)");
+        Option("--expires",  "hard expiry in years for a time-limited licence, e.g. an eval (default: perpetual)");
         Option("--features", "comma list to override the tier default");
         Option("--id",       "license id (default: random)");
         Console.WriteLine();

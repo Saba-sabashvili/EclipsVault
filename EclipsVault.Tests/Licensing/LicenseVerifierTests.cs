@@ -12,7 +12,7 @@ public class LicenseVerifierTests
 
     private static LicenseClaims Claims(DateTimeOffset? notAfter) => new(
         "lic-1", LicenseTier.Max, "Acme Ltd", "ops@acme.example",
-        new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), notAfter, 3, []);
+        new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), notAfter, null, 3, []);
 
     [Fact]
     public void A_correctly_signed_unexpired_token_is_valid()
@@ -68,9 +68,10 @@ public class LicenseVerifierTests
     }
 
     [Theory]
-    [InlineData("9000000000000000000", "-")] // issuedAt ticks parse as long but exceed DateTime range
-    [InlineData("0", "9000000000000000000")]  // notAfter ticks parse as long but exceed DateTime range
-    public void A_token_with_out_of_range_ticks_is_malformed_not_a_crash(string issuedTicks, string notAfterTicks)
+    [InlineData("9000000000000000000", "-", "-")] // issuedAt ticks parse as long but exceed DateTime range
+    [InlineData("0", "9000000000000000000", "-")]  // notAfter ticks parse as long but exceed DateTime range
+    [InlineData("0", "-", "9000000000000000000")]  // updatesUntil ticks parse as long but exceed DateTime range
+    public void A_token_with_out_of_range_ticks_is_malformed_not_a_crash(string issuedTicks, string notAfterTicks, string updatesUntilTicks)
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -81,7 +82,7 @@ public class LicenseVerifierTests
         var issuedTo = Convert.ToBase64String(Encoding.UTF8.GetBytes("Acme Ltd"));
         var payloadText = string.Join(sep,
             "lic-1", ((int)LicenseTier.Max).ToString(), issuedTo, "",
-            issuedTicks, notAfterTicks, "3", "");
+            issuedTicks, notAfterTicks, "3", "", updatesUntilTicks);
         var payload = Encoding.UTF8.GetBytes(payloadText);
         var signature = key.SignData(payload, HashAlgorithmName.SHA256);
         var token = LicenseToken.Encode(payload, signature);

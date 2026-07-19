@@ -8,7 +8,7 @@ public class LicenseFeaturesTests
 {
     private static LicenseClaims Claims(LicenseTier tier, params string[] features)
         => new("lic-1", tier, "Acme Ltd", null,
-               DateTimeOffset.UnixEpoch, null, 0, features);
+               DateTimeOffset.UnixEpoch, null, null, 0, features);
 
     [Fact]
     public void Community_grants_no_premium_features()

@@ -8,6 +8,11 @@
         LicenseStatus.Missing => "muted",
         _ => "danger"
     };
+
+    // A lapsed update window never disables anything — the licence is perpetual — so this is a
+    // renewal nudge, computed against the current time rather than the startup snapshot.
+    var updatesUntil = Model.Claims?.UpdatesUntilUtc;
+    var updatesLapsed = updatesUntil is { } uu && uu < DateTimeOffset.UtcNow;
 }
 
 <div class="page-header">
@@ -36,10 +41,22 @@
             <dt>License id</dt><dd class="mono">@c.LicenseId</dd>
             <dt>Issued</dt><dd>@c.IssuedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'")</dd>
             <dt>Expires</dt>
-            <dd>@(c.NotAfterUtc is { } exp ? exp.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") : "never")</dd>
+            <dd>@(c.NotAfterUtc is { } exp ? exp.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") : "never — perpetual")</dd>
+            <dt>Updates included until</dt>
+            <dd>@(updatesUntil?.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "—")</dd>
             <dt>Node allowance</dt>
             <dd>@(c.MaxNodes == 0 ? "unlimited" : c.MaxNodes.ToString())</dd>
         </dl>
+    }
+
+    @if (updatesLapsed)
+    {
+        <div class="notice notice-warn">
+            <span>
+                <strong>Your update window has ended.</strong> The vault keeps working and still
+                receives security patches; renew to receive new feature releases.
+            </span>
+        </div>
     }
 
     @if (Model.PremiumFeaturesBeyondTier.Count > 0)
