@@ -9,7 +9,7 @@ public class LicenseTokenTests
 {
     private static LicenseClaims Sample() => new(
         LicenseId: "9f1c2d3e",
-        Tier: LicenseTier.Pro,
+        Tier: LicenseTier.Max,
         IssuedTo: "Acme Ltd — Ünïcode & separators\tok",
         Contact: "ops@acme.example",
         IssuedAtUtc: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),

@@ -30,7 +30,7 @@ public sealed class MintCommand : Command
 
         var tierText = options.Get("tier");
         if (tierText is null || !Enum.TryParse<LicenseTier>(tierText, ignoreCase: true, out var tier))
-            return Fail("--tier must be Community, Pro, or Enterprise.");
+            return Fail("--tier must be Community or Max.");
 
         var issuedTo = options.Get("to");
         if (string.IsNullOrWhiteSpace(issuedTo))
