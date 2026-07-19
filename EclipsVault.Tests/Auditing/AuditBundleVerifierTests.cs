@@ -147,4 +147,57 @@ public class AuditBundleVerifierTests
         var result = AuditBundleVerifier.Verify(rewritten);
         Assert.False(result.IsValid);
     }
+
+    // ---- Key pinning ------------------------------------------------------------------------
+    // The gap pinning closes: an insider who holds no private key can still mint a wholly new,
+    // internally consistent chain, sign it with a keypair THEY generated, and embed that public
+    // key. Every self-consistency check passes. Only pinning the key the auditor trusts rejects it.
+
+    [Fact]
+    public void A_rewritten_chain_resigned_with_the_attackers_own_key_verifies_when_unpinned()
+    {
+        using var attackerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        // Freshly forged chain, signed by and carrying the attacker's own public key.
+        var forged = Bundle(Chain(5, tag: "forged"), attackerKey);
+
+        // Unpinned, this is "valid" — which is exactly why a pinned key is necessary.
+        Assert.True(AuditBundleVerifier.Verify(forged).IsValid);
+    }
+
+    [Fact]
+    public void A_rewritten_chain_resigned_with_the_attackers_own_key_is_rejected_when_the_key_is_pinned()
+    {
+        using var realKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var attackerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        var forged = Bundle(Chain(5, tag: "forged"), attackerKey);
+
+        var result = AuditBundleVerifier.Verify(forged, realKey.ExportSubjectPublicKeyInfo());
+        Assert.False(result.IsValid);
+        Assert.False(result.SignatureValid);
+    }
+
+    [Fact]
+    public void A_genuine_bundle_verifies_when_the_correct_key_is_pinned()
+    {
+        using var realKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var genuine = Bundle(Chain(5), realKey);
+
+        var result = AuditBundleVerifier.Verify(genuine, realKey.ExportSubjectPublicKeyInfo());
+        Assert.True(result.IsValid);
+        Assert.True(result.SignatureValid);
+        Assert.Equal(5, result.RowsVerified);
+    }
+
+    [Fact]
+    public void Pinning_a_different_key_rejects_an_otherwise_genuine_bundle()
+    {
+        using var realKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var genuine = Bundle(Chain(5), realKey);
+
+        var result = AuditBundleVerifier.Verify(genuine, otherKey.ExportSubjectPublicKeyInfo());
+        Assert.False(result.IsValid);
+    }
 }

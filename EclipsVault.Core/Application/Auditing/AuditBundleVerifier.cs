@@ -15,13 +15,27 @@ public sealed record AuditBundleVerification(
 /// <summary>
 /// Verifies an <see cref="AuditBundle"/> with no dependency on the vault, its database, or its
 /// private key. It (1) re-walks the hash chain, recomputing each row's hash exactly as the
-/// vault did, (2) confirms the signed checkpoint matches the chain head, and (3) checks the
-/// ECDSA signature against the public key embedded in the bundle. Pure BCL, so the very same
-/// code runs inside the app and in the standalone <c>EclipsVault.AuditVerifier</c> tool.
+/// vault did, (2) confirms the signed checkpoint matches the chain head, (3) — when the caller
+/// supplies one — checks the bundle's embedded public key against a pinned expected key, and
+/// (4) checks the ECDSA signature. Pure BCL, so the very same code runs inside the app and in
+/// the standalone <c>EclipsVault.AuditVerifier</c> tool.
+///
+/// Pinning matters: without an expected key, a valid result proves only that the bundle is
+/// internally self-consistent and signed by <em>whatever</em> key it carries. An insider who
+/// rewrote the chain and re-signed it with their own keypair — embedding their own public key —
+/// would pass every other check. Pinning the key the auditor obtained out-of-band is what turns
+/// "internally consistent" into "signed by the vault's key".
 /// </summary>
 public static class AuditBundleVerifier
 {
-    public static AuditBundleVerification Verify(AuditBundle bundle)
+    /// <summary>Verifies a bundle for self-consistency and a valid signature by its own embedded key.</summary>
+    public static AuditBundleVerification Verify(AuditBundle bundle) => Verify(bundle, expectedPublicKeySpki: null);
+
+    /// <summary>
+    /// Verifies a bundle and, when <paramref name="expectedPublicKeySpki"/> is supplied, additionally
+    /// requires that the bundle's embedded public key is exactly that key (SubjectPublicKeyInfo bytes).
+    /// </summary>
+    public static AuditBundleVerification Verify(AuditBundle bundle, byte[]? expectedPublicKeySpki)
     {
         var rows = bundle.Rows.OrderBy(r => r.Sequence).ToList();
 
@@ -55,15 +69,27 @@ public static class AuditBundleVerifier
                 "The signed checkpoint does not match the chain head in this bundle (rows may have been dropped after signing).");
         }
 
-        // (3) The signature must verify against the bundle's own public key.
+        // (3) When a key is pinned, the bundle's embedded key must be exactly it — otherwise a
+        // chain rewritten and re-signed with an attacker's own keypair would still verify at (4).
+        if (expectedPublicKeySpki is not null &&
+            !CryptographicOperations.FixedTimeEquals(bundle.PublicKeySpki, expectedPublicKeySpki))
+        {
+            return new AuditBundleVerification(false, verified, null, false,
+                "The bundle's signing key does not match the expected key. The trail may have been rewritten and re-signed with a different key.");
+        }
+
+        // (4) The signature must verify against the bundle's own public key (now pinned, if supplied).
         if (!SignatureIsValid(bundle))
         {
             return new AuditBundleVerification(false, verified, null, false,
                 "The checkpoint signature is not valid for the supplied public key.");
         }
 
+        var trust = expectedPublicKeySpki is null
+            ? "(unpinned — this proves the bundle is self-consistent and signed by its own embedded key, not that the key is the vault's)"
+            : "(key pinned to the expected value)";
         return new AuditBundleVerification(true, verified, null, true,
-            $"Chain intact across {verified} row(s); checkpoint at sequence {headSequence} is validly signed by key {bundle.Checkpoint.SigningKeyId}.");
+            $"Chain intact across {verified} row(s); checkpoint at sequence {headSequence} is validly signed by key {bundle.Checkpoint.SigningKeyId} {trust}.");
     }
 
     private static bool SignatureIsValid(AuditBundle bundle)
