@@ -5,10 +5,11 @@ namespace EclipsVault.Core.Application.Abstractions;
 public sealed record BlockedRangeDto(string Network, string Reason, DateTimeOffset BlockedAtUtc);
 
 /// <summary>
-/// Source-address blacklist consulted by middleware on every request. Blocking an
-/// address blocks its surrounding range (/24 for IPv4, /64 for IPv6). Administrators
-/// can inspect and lift blocks at runtime. Backed by a shared store (Redis) in
-/// multi-node deployments so a block raised on one node is enforced by every node.
+/// Source-address blacklist consulted by middleware on every request. Blocking an address blocks
+/// the exact host by default, or its surrounding range (/24 for IPv4, /64 for IPv6) when range
+/// blocking is enabled — see <c>IntrusionResponseOptions.BlockSurroundingRange</c>. Administrators
+/// can inspect and lift blocks at runtime. Backed by a shared store (Redis) in multi-node
+/// deployments so a block raised on one node is enforced by every node.
 /// </summary>
 public interface IIpBlacklist
 {

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using EclipsVault.Core.Application.Networks;
 using EclipsVault.Infrastructure.Distributed;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -8,11 +9,11 @@ using StackExchange.Redis;
 namespace EclipsVault.Infrastructure.Security;
 
 /// <summary>
-/// Redis-backed source-range blacklist shared by every node. A block is keyed by the
-/// canonical range for the offending address (<see cref="NetworkRules.ToBlockRange"/> —
-/// /24, /64, or the exact loopback host). Because that mapping is a pure function of the
-/// address, the per-request "is this IP blocked?" check is a single O(1) key lookup on the
-/// same canonical range, with no need to scan every stored block. Blocks persist until an
+/// Redis-backed blacklist shared by every node. A block is keyed by the canonical range for the
+/// offending address (<see cref="NetworkRules.ToBlockRange"/> — the exact host by default, or the
+/// /24 / /64 when range blocking is enabled). Because that mapping is a pure, globally-configured
+/// function of the address, the per-request "is this IP blocked?" check is a single O(1) key lookup
+/// on the same canonical range, with no need to scan every stored block. Blocks persist until an
 /// administrator (or break-glass recovery) lifts them, surviving restarts.
 /// </summary>
 public sealed class RedisIpBlacklist : IIpBlacklist
@@ -22,15 +23,18 @@ public sealed class RedisIpBlacklist : IIpBlacklist
     private readonly IConnectionMultiplexer _redis;
     private readonly string _prefix;
     private readonly ILogger<RedisIpBlacklist> _logger;
+    private readonly bool _blockSurroundingRange;
 
     public RedisIpBlacklist(
         IConnectionMultiplexer redis,
         IOptions<RedisOptions> options,
+        IOptions<IntrusionResponseOptions> intrusionOptions,
         ILogger<RedisIpBlacklist> logger)
     {
         _redis = redis;
         _prefix = options.Value.InstanceName;
         _logger = logger;
+        _blockSurroundingRange = intrusionOptions.Value.BlockSurroundingRange;
     }
 
     public async Task BlockAsync(string sourceIp, string reason, CancellationToken ct = default)
@@ -41,7 +45,7 @@ public sealed class RedisIpBlacklist : IIpBlacklist
             return;
         }
 
-        var network = NetworkRules.ToBlockRange(address).ToString();
+        var network = NetworkRules.ToBlockRange(address, _blockSurroundingRange).ToString();
         var record = JsonSerializer.Serialize(new BlockRecord(reason, DateTimeOffset.UtcNow));
 
         // First-write-wins so re-tripping the same range keeps the original timestamp/reason.
@@ -54,7 +58,7 @@ public sealed class RedisIpBlacklist : IIpBlacklist
 
     public async Task<bool> IsBlockedAsync(IPAddress address, CancellationToken ct = default)
     {
-        var network = NetworkRules.ToBlockRange(address).ToString();
+        var network = NetworkRules.ToBlockRange(address, _blockSurroundingRange).ToString();
         return await _redis.GetDatabase().KeyExistsAsync(Key(network));
     }
 
@@ -98,7 +102,7 @@ public sealed class RedisIpBlacklist : IIpBlacklist
     {
         // An address is only ever blocked under its own canonical range, so lifting that
         // one key fully unblocks it (break-glass recovery).
-        var network = NetworkRules.ToBlockRange(address).ToString();
+        var network = NetworkRules.ToBlockRange(address, _blockSurroundingRange).ToString();
         var removed = await _redis.GetDatabase().KeyDeleteAsync(Key(network));
         if (removed)
         {

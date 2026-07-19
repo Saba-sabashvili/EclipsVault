@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.Configure<LifecycleOptions>(configuration.GetSection(LifecycleOptions.SectionName));
         services.Configure<DynamicLeaseOptions>(configuration.GetSection(DynamicLeaseOptions.SectionName));
         services.Configure<AuthThrottleOptions>(configuration.GetSection(AuthThrottleOptions.SectionName));
+        services.Configure<IntrusionResponseOptions>(configuration.GetSection(IntrusionResponseOptions.SectionName));
         services.Configure<WebAuthnOptions>(configuration.GetSection(WebAuthnOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));

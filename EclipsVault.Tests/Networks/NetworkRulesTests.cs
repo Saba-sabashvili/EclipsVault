@@ -36,16 +36,28 @@ public class NetworkRulesTests
         => Assert.Equal(IPAddress.Parse("203.0.113.7"), NetworkRules.Normalize(IPAddress.Parse("203.0.113.7").MapToIPv6()));
 
     [Fact]
-    public void ToBlockRange_contains_the_offending_ipv4_in_a_slash24()
-        => Assert.Equal("10.20.30.0/24", NetworkRules.ToBlockRange(IPAddress.Parse("10.20.30.40")).ToString());
+    public void ToBlockRange_pins_the_offending_ipv4_to_its_exact_host_by_default()
+        => Assert.Equal("10.20.30.40/32", NetworkRules.ToBlockRange(IPAddress.Parse("10.20.30.40")).ToString());
+
+    [Fact]
+    public void ToBlockRange_pins_the_offending_ipv6_to_its_exact_host_by_default()
+        => Assert.Equal("2001:db8:abcd:1234::1/128", NetworkRules.ToBlockRange(IPAddress.Parse("2001:db8:abcd:1234::1")).ToString());
+
+    [Fact]
+    public void ToBlockRange_widens_the_ipv4_to_a_slash24_when_range_blocking_is_enabled()
+        => Assert.Equal("10.20.30.0/24", NetworkRules.ToBlockRange(IPAddress.Parse("10.20.30.40"), blockSurroundingRange: true).ToString());
+
+    [Fact]
+    public void ToBlockRange_widens_the_ipv6_to_a_slash64_when_range_blocking_is_enabled()
+        => Assert.Equal("2001:db8:abcd:1234::/64", NetworkRules.ToBlockRange(IPAddress.Parse("2001:db8:abcd:1234::1"), blockSurroundingRange: true).ToString());
 
     [Fact]
     public void ToBlockRange_pins_loopback_to_its_exact_host()
         => Assert.Equal("127.0.0.1/32", NetworkRules.ToBlockRange(IPAddress.Loopback).ToString());
 
     [Fact]
-    public void ToBlockRange_uses_a_slash64_for_ipv6()
-        => Assert.Equal("2001:db8:abcd:1234::/64", NetworkRules.ToBlockRange(IPAddress.Parse("2001:db8:abcd:1234::1")).ToString());
+    public void ToBlockRange_pins_loopback_to_its_exact_host_even_when_range_blocking_is_enabled()
+        => Assert.Equal("127.0.0.1/32", NetworkRules.ToBlockRange(IPAddress.Loopback, blockSurroundingRange: true).ToString());
 
     [Theory]
     [InlineData("203.0.113.7", "203.0.113.7/32")]
