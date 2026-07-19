@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
@@ -14,11 +14,12 @@ namespace EclipsVault.Web.Controllers;
 /// resets, runtime trusted networks, and intrusion-defence block management.
 /// </summary>
 [Authorize(Policy = VaultPolicies.AdminOnly)]
-public sealed class AdminController : Controller
+public sealed class AdminController : VaultController
 {
     private readonly IUserAdminService _userAdmin;
     private readonly ITrustedNetworkService _trustedNetworks;
     private readonly IIpBlacklist _blacklist;
+    private readonly IAuditSink _audit;
     private readonly AbacOptions _abacOptions;
     private readonly ILogger<AdminController> _logger;
 
@@ -26,12 +27,14 @@ public sealed class AdminController : Controller
         IUserAdminService userAdmin,
         ITrustedNetworkService trustedNetworks,
         IIpBlacklist blacklist,
+        IAuditSink audit,
         IOptions<AbacOptions> abacOptions,
         ILogger<AdminController> logger)
     {
         _userAdmin = userAdmin;
         _trustedNetworks = trustedNetworks;
         _blacklist = blacklist;
+        _audit = audit;
         _abacOptions = abacOptions.Value;
         _logger = logger;
     }
@@ -284,9 +287,15 @@ public sealed class AdminController : Controller
     [HttpPost]
     public async Task<IActionResult> Unblock(string network, CancellationToken ct)
     {
-        if (_blacklist.Unblock(network))
+        if (await _blacklist.UnblockAsync(network, ct))
         {
-            await _trustedNetworks.RecordUnblockedAsync(network, ct);
+            await _audit.WriteAsync(new AuditEntry
+            {
+                Action = AuditAction.IpRangeUnblocked,
+                ResourceType = "TrustedNetwork",
+                ResourceName = network,
+                Details = "Intrusion-defence block lifted"
+            }, ct);
             _logger.LogWarning("Administrator {Username} lifted the intrusion-defence block on {Network}", User.Identity?.Name, network);
             this.FlashSuccess($"Block on {network} lifted.");
         }
@@ -315,10 +324,8 @@ public sealed class AdminController : Controller
             CurrentIpTrusted = trusted,
             ConfiguredCidrs = _abacOptions.TrustedIpCidrs,
             DynamicNetworks = await _trustedNetworks.ListAsync(ct),
-            BlockedRanges = _blacklist.List()
+            BlockedRanges = await _blacklist.ListAsync(ct)
         };
     }
 
-    private Guid CurrentUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

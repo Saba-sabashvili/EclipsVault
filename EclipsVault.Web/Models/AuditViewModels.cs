@@ -53,6 +53,7 @@ public static class AuditDisplay
         AuditAction.PasswordChanged => ("Password changed", "ok"),
         AuditAction.SelfMfaReset => ("MFA reset (self)", "warn"),
         AuditAction.SessionsRevokedSelf => ("Signed out everywhere", "muted"),
+        AuditAction.SessionRevokedByUser => ("Device signed out", "warn"),
         AuditAction.UserRoleChanged => ("Role changed", "warn"),
         AuditAction.UserDisabled => ("Account disabled", "danger"),
         AuditAction.UserEnabled => ("Account enabled", "ok"),
@@ -65,6 +66,19 @@ public static class AuditDisplay
         AuditAction.ApiKeyRevoked => ("API key revoked", "warn"),
         AuditAction.AuditCheckpointCreated => ("Checkpoint signed", "ok"),
         AuditAction.AuditBundleExported => ("Audit exported", "muted"),
+        AuditAction.PersonalDataExported => ("Data exported", "muted"),
+        AuditAction.PasskeyRegistered => ("Passkey added", "ok"),
+        AuditAction.PasskeyRemoved => ("Passkey removed", "warn"),
+        AuditAction.PasskeyLogin => ("Passkey sign-in", "ok"),
+        AuditAction.AccessRequested => ("Access requested", "muted"),
+        AuditAction.AccessRequestApproved => ("Access approved", "ok"),
+        AuditAction.AccessRequestRejected => ("Access rejected", "warn"),
+        AuditAction.AccessRequestCancelled => ("Access cancelled", "muted"),
+        AuditAction.KekRotated => ("KEK rotated", "warn"),
+        AuditAction.RecoveryCodesGenerated => ("Recovery codes issued", "ok"),
+        AuditAction.RecoveryCodeUsed => ("Recovery code used", "warn"),
+        AuditAction.StepUpVerified => ("Step-up verified", "ok"),
+        AuditAction.StepUpFailed => ("Step-up failed", "warn"),
         _ => (action.ToString(), "muted")
     };
 

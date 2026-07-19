@@ -20,7 +20,7 @@
 
         <div class="field">
             <label asp-for="Password"></label>
-            <input asp-for="Password" autocomplete="current-password" />
+            <input asp-for="Password" autocomplete="current-password" data-reveal />
             <span asp-validation-for="Password" class="field-error"></span>
         </div>
 
@@ -32,4 +32,12 @@
         Sign in with a passkey
     </button>
     <p class="passkey-status" data-passkey-status role="status" aria-live="polite"></p>
+
+    @if (Model.SsoEnabled)
+    {
+        <div class="auth-divider"><span>or</span></div>
+        <form asp-action="ExternalLogin" method="post">
+            <button type="submit" class="button wide">Sign in with @Model.SsoDisplayName</button>
+        </form>
+    }
 </section>

@@ -1,3 +1,4 @@
+@using EclipsVault.Web.Extensions
 @model CreateServiceAccountViewModel
 @{
     ViewData["Title"] = "New service account";
@@ -26,7 +27,7 @@
         <div class="field-row">
             <div class="field">
                 <label asp-for="Clearance"></label>
-                <select asp-for="Clearance" asp-items="Html.GetEnumSelectList<ClearanceLevel>()"></select>
+                <select asp-for="Clearance" asp-items="EnumDisplay.ClearanceSelectList()"></select>
             </div>
             <div class="field">
                 <label asp-for="ProjectKey"></label>

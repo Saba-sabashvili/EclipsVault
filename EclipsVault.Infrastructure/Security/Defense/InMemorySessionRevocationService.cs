@@ -4,8 +4,10 @@ using Microsoft.Extensions.Logging;
 namespace EclipsVault.Infrastructure.Security;
 
 /// <summary>
-/// Tracks the most recent revocation instant per user. Any session issued at or
-/// before that instant is rejected by cookie validation on its next request.
+/// Tracks the most recent revocation instant per user in process memory. Any session
+/// issued at or before that instant is rejected by cookie validation on its next
+/// request. Suitable for a single node; multi-node deployments use the Redis-backed
+/// implementation so a revocation reaches every node.
 /// </summary>
 public sealed class InMemorySessionRevocationService : ISessionRevocationService
 {
@@ -14,15 +16,16 @@ public sealed class InMemorySessionRevocationService : ISessionRevocationService
 
     public InMemorySessionRevocationService(ILogger<InMemorySessionRevocationService> logger) => _logger = logger;
 
-    public void Revoke(Guid userId, DateTimeOffset revokedAtUtc)
+    public Task RevokeAsync(Guid userId, DateTimeOffset revokedAtUtc, CancellationToken ct = default)
     {
         _revokedAt.AddOrUpdate(
             userId,
             revokedAtUtc,
             (_, existing) => revokedAtUtc > existing ? revokedAtUtc : existing);
         _logger.LogWarning("All sessions for user {UserId} issued at or before {RevokedAtUtc} are now revoked", userId, revokedAtUtc);
+        return Task.CompletedTask;
     }
 
-    public bool IsRevoked(Guid userId, DateTimeOffset sessionIssuedAtUtc)
-        => _revokedAt.TryGetValue(userId, out var revokedAt) && sessionIssuedAtUtc <= revokedAt;
+    public Task<bool> IsRevokedAsync(Guid userId, DateTimeOffset sessionIssuedAtUtc, CancellationToken ct = default)
+        => Task.FromResult(_revokedAt.TryGetValue(userId, out var revokedAt) && sessionIssuedAtUtc <= revokedAt);
 }
