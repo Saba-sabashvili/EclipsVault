@@ -38,11 +38,18 @@ public sealed class MintCommand : Command
 
         var now = DateTimeOffset.UtcNow;
         var nodes = options.GetInt("nodes");
-        var years = options.GetInt("years", 1);
+        var updateYears = options.GetInt("years", 1);
         var featuresText = options.Get("features");
         var features = string.IsNullOrEmpty(featuresText)
             ? Array.Empty<string>()
             : featuresText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        // A Max licence is perpetual (NotAfterUtc null) and carries an update window (default one
+        // year, renewable). --expires <years> is the exception: it sets a hard expiry for a genuinely
+        // time-limited licence (an evaluation), whose features are meant to stop.
+        var expiresYears = options.GetInt("expires", 0);
+        DateTimeOffset? notAfter = expiresYears > 0 ? now.AddYears(expiresYears) : null;
+        DateTimeOffset? updatesUntil = tier == LicenseTier.Community ? null : now.AddYears(updateYears);
 
         var claims = new LicenseClaims(
             LicenseId: options.Get("id") ?? Guid.NewGuid().ToString("N")[..12],
@@ -50,7 +57,8 @@ public sealed class MintCommand : Command
             IssuedTo: issuedTo,
             Contact: options.Get("contact"),
             IssuedAtUtc: now,
-            NotAfterUtc: tier == LicenseTier.Community ? null : now.AddYears(years),
+            NotAfterUtc: notAfter,
+            UpdatesUntilUtc: updatesUntil,
             MaxNodes: nodes,
             Features: features);
 
@@ -86,8 +94,9 @@ public sealed class MintCommand : Command
             ("Tier",        claims.Tier.ToString(), Theme.Accent),
             ("License id",  claims.LicenseId, Theme.Muted),
             ("Issued",      claims.IssuedAtUtc.ToString("u"), Theme.Muted),
-            ("Expires",     claims.NotAfterUtc?.ToString("u") ?? "never",
+            ("Expires",     claims.NotAfterUtc?.ToString("u") ?? "never (perpetual)",
                             claims.NotAfterUtc is null ? Theme.Positive : Theme.Text),
+            ("Updates until", claims.UpdatesUntilUtc?.ToString("u") ?? "—", Theme.Muted),
             ("Nodes",       claims.MaxNodes == 0 ? "unlimited" : claims.MaxNodes.ToString(), Theme.Muted),
             ("Features",    effective.Count == 0 ? "—" : string.Join(", ", effective), Theme.Muted),
         ]);

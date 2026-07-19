@@ -14,6 +14,7 @@ public class LicenseTokenTests
         Contact: "ops@acme.example",
         IssuedAtUtc: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
         NotAfterUtc: new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        UpdatesUntilUtc: new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
         MaxNodes: 3,
         Features: []);
 
@@ -31,6 +32,7 @@ public class LicenseTokenTests
         Assert.Equal(claims.Contact, back.Contact);
         Assert.Equal(claims.IssuedAtUtc, back.IssuedAtUtc);
         Assert.Equal(claims.NotAfterUtc, back.NotAfterUtc);
+        Assert.Equal(claims.UpdatesUntilUtc, back.UpdatesUntilUtc);
         Assert.Equal(claims.MaxNodes, back.MaxNodes);
     }
 

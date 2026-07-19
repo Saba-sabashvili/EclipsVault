@@ -36,8 +36,9 @@ public class LicenseServiceTests
     public void A_valid_max_token_reports_valid_and_grants_every_paid_feature()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        // Perpetual Max (no hard expiry) with an update window a year out.
         var claims = new LicenseClaims("lic-1", LicenseTier.Max, "Acme", null,
-            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1), 3, []);
+            DateTimeOffset.UtcNow.AddDays(-1), null, DateTimeOffset.UtcNow.AddYears(1), 3, []);
         var token = LicenseSigner.Sign(claims, key);
         var pub = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
 
@@ -63,8 +64,9 @@ public class LicenseServiceTests
     public void An_expired_token_reports_expired_and_grants_no_features()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        // A genuinely time-limited licence (an evaluation) whose hard expiry has passed.
         var claims = new LicenseClaims("lic-2", LicenseTier.Max, "Globex", null,
-            DateTimeOffset.UtcNow.AddYears(-2), DateTimeOffset.UtcNow.AddDays(-1), 0, []);
+            DateTimeOffset.UtcNow.AddYears(-2), DateTimeOffset.UtcNow.AddDays(-1), null, 0, []);
         var token = LicenseSigner.Sign(claims, key);
         var pub = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
 
