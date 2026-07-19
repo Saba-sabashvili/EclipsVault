@@ -18,22 +18,13 @@ public class LicenseFeaturesTests
     }
 
     [Fact]
-    public void Pro_grants_the_operational_features_not_the_enterprise_ones()
+    public void Max_grants_every_paid_feature()
     {
-        var effective = LicenseTierFeatures.Effective(Claims(LicenseTier.Pro));
+        var effective = LicenseTierFeatures.Effective(Claims(LicenseTier.Max));
         Assert.Contains(LicenseFeatures.Sso, effective);
         Assert.Contains(LicenseFeatures.Kms, effective);
         Assert.Contains(LicenseFeatures.RedisHa, effective);
         Assert.Contains(LicenseFeatures.DynamicSecrets, effective);
-        Assert.DoesNotContain(LicenseFeatures.ManagedRotation, effective);
-        Assert.DoesNotContain(LicenseFeatures.AuditAttestation, effective);
-    }
-
-    [Fact]
-    public void Enterprise_grants_everything_pro_has_plus_the_enterprise_features()
-    {
-        var effective = LicenseTierFeatures.Effective(Claims(LicenseTier.Enterprise));
-        Assert.Contains(LicenseFeatures.Sso, effective);
         Assert.Contains(LicenseFeatures.ManagedRotation, effective);
         Assert.Contains(LicenseFeatures.AuditAttestation, effective);
     }

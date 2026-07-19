@@ -18,20 +18,24 @@ public static class LicenseFeatures
 /// Maps a tier to the features it grants, and resolves the <em>effective</em> feature set for a
 /// license: the explicit <see cref="LicenseClaims.Features"/> if the vendor set any, otherwise the
 /// tier default. Base secret management (local KEK, TOTP, passkeys, audit chain, ABAC) is never
-/// listed here — it is the product and is never gated or nudged.
+/// listed here — it is the product and is never gated or nudged. Max grants every paid feature;
+/// Community grants none. A per-claim feature list still lets a bespoke deal grant a single extra.
 /// </summary>
 public static class LicenseTierFeatures
 {
-    private static readonly string[] Pro =
-        [LicenseFeatures.Sso, LicenseFeatures.Kms, LicenseFeatures.RedisHa, LicenseFeatures.DynamicSecrets];
-
-    private static readonly string[] Enterprise =
-        [.. Pro, LicenseFeatures.ManagedRotation, LicenseFeatures.AuditAttestation];
+    private static readonly string[] Max =
+    [
+        LicenseFeatures.Sso,
+        LicenseFeatures.Kms,
+        LicenseFeatures.RedisHa,
+        LicenseFeatures.DynamicSecrets,
+        LicenseFeatures.ManagedRotation,
+        LicenseFeatures.AuditAttestation
+    ];
 
     public static IReadOnlyList<string> For(LicenseTier tier) => tier switch
     {
-        LicenseTier.Pro => Pro,
-        LicenseTier.Enterprise => Enterprise,
+        LicenseTier.Max => Max,
         _ => []
     };
 

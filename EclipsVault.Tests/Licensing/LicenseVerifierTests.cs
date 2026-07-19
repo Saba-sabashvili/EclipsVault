@@ -11,7 +11,7 @@ public class LicenseVerifierTests
     private static readonly DateTimeOffset Now = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
     private static LicenseClaims Claims(DateTimeOffset? notAfter) => new(
-        "lic-1", LicenseTier.Pro, "Acme Ltd", "ops@acme.example",
+        "lic-1", LicenseTier.Max, "Acme Ltd", "ops@acme.example",
         new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), notAfter, 3, []);
 
     [Fact]
@@ -80,7 +80,7 @@ public class LicenseVerifierTests
         const char sep = '';
         var issuedTo = Convert.ToBase64String(Encoding.UTF8.GetBytes("Acme Ltd"));
         var payloadText = string.Join(sep,
-            "lic-1", ((int)LicenseTier.Pro).ToString(), issuedTo, "",
+            "lic-1", ((int)LicenseTier.Max).ToString(), issuedTo, "",
             issuedTicks, notAfterTicks, "3", "");
         var payload = Encoding.UTF8.GetBytes(payloadText);
         var signature = key.SignData(payload, HashAlgorithmName.SHA256);
