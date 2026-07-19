@@ -1,5 +1,7 @@
-using System.Security.Claims;
+using EclipsVault.Core.Application.Sso;
+using EclipsVault.Infrastructure.Security;
 using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Web.Authentication;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
@@ -8,7 +10,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace EclipsVault.Web.Controllers;
 
@@ -17,7 +19,7 @@ namespace EclipsVault.Web.Controllers;
 /// cookie; the full session principal (with ABAC attribute claims) is granted after
 /// TOTP verification or first-time TOTP enrollment.
 /// </summary>
-[EnableRateLimiting(RateLimitPolicies.Authentication)]
+[ServiceFilter(typeof(AuthThrottleFilter))]
 public sealed class AccountController : Controller
 {
     /// <summary>Session key holding the challenge issued for an in-flight passkey sign-in.</summary>
@@ -26,20 +28,29 @@ public sealed class AccountController : Controller
     private readonly IVaultAuthenticationService _auth;
     private readonly IPasskeyService _passkeys;
     private readonly IIpBlacklist _blacklist;
+    private readonly ISessionRegistry _sessions;
     private readonly IAuditSink _audit;
+    private readonly ISsoSignInService _sso;
+    private readonly SsoOptions _ssoOptions;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         IVaultAuthenticationService auth,
         IPasskeyService passkeys,
         IIpBlacklist blacklist,
+        ISessionRegistry sessions,
         IAuditSink audit,
+        ISsoSignInService sso,
+        IOptions<SsoOptions> ssoOptions,
         ILogger<AccountController> logger)
     {
         _auth = auth;
         _passkeys = passkeys;
         _blacklist = blacklist;
+        _sessions = sessions;
         _audit = audit;
+        _sso = sso;
+        _ssoOptions = ssoOptions.Value;
         _logger = logger;
     }
 
@@ -51,7 +62,15 @@ public sealed class AccountController : Controller
     public IActionResult Login()
         => User.Identity?.IsAuthenticated == true
             ? RedirectToAction("Index", "Secrets")
-            : View(new LoginViewModel());
+            : View(Decorate(new LoginViewModel()));
+
+    /// <summary>Stamps the SSO button's state onto the model — it is not part of the posted form.</summary>
+    private LoginViewModel Decorate(LoginViewModel model)
+    {
+        model.SsoEnabled = _ssoOptions.Enabled;
+        model.SsoDisplayName = _ssoOptions.DisplayName;
+        return model;
+    }
 
     [AllowAnonymous]
     [HttpPost]
@@ -59,7 +78,7 @@ public sealed class AccountController : Controller
     {
         if (!ModelState.IsValid)
         {
-            return View(model);
+            return View(Decorate(model));
         }
 
         var result = await _auth.ValidateCredentialsAsync(model.Username, model.Password, ct);
@@ -68,16 +87,11 @@ public sealed class AccountController : Controller
             _logger.LogWarning("Password stage failed for {Username} from {SourceIp}",
                 model.Username, HttpContext.Connection.RemoteIpAddress);
             ModelState.AddModelError(string.Empty, "Invalid username or password.");
-            return View(model);
+            return View(Decorate(model));
         }
 
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, result.User.Id.ToString()),
-                new Claim(ClaimTypes.Name, result.User.Username)
-            ],
-            AuthSchemes.MfaPending);
-        await HttpContext.SignInAsync(AuthSchemes.MfaPending, new ClaimsPrincipal(identity));
+        var principal = VaultClaimsFactory.CreatePendingMfaPrincipal(result.User);
+        await HttpContext.SignInAsync(AuthSchemes.MfaPending, principal);
 
         return RedirectToAction(result.Status == CredentialStatus.RequiresTotpEnrollment
             ? nameof(EnrollTotp)
@@ -271,7 +285,7 @@ public sealed class AccountController : Controller
             return View(model);
         }
 
-        var blockLifted = sourceIp is not null && _blacklist.UnblockAddress(sourceIp);
+        var blockLifted = sourceIp is not null && await _blacklist.UnblockAddressAsync(sourceIp, ct);
         await AuditRecoveryAsync(
             AuditAction.BreakGlassRecovery, user.Id, user.Username,
             $"Break-glass recovery from {sourceIp}; block lifted: {blockLifted}", ct);
@@ -314,32 +328,88 @@ public sealed class AccountController : Controller
         return View(model);
     }
 
+    /// <summary>Hands off to the identity provider. Nothing is decided here.</summary>
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public IActionResult ExternalLogin()
+        => Challenge(
+            new AuthenticationProperties { RedirectUri = Url.Action(nameof(ExternalCallback)) },
+            AuthSchemes.Oidc);
+
+    /// <summary>
+    /// Back from the identity provider. It has proved who they are; everything about whether they
+    /// may in — and whether they are finished authenticating — is the vault's call, made in Core by
+    /// <see cref="ISsoSignInService"/> and audited there, refusals included.
+    /// </summary>
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExternalCallback(CancellationToken ct)
+    {
+        var result = await HttpContext.AuthenticateAsync(AuthSchemes.OidcCorrelation);
+        // The correlation principal exists only to carry the IdP's answer across this one redirect.
+        // Drop it immediately: it is not a session and must never be mistaken for one.
+        await HttpContext.SignOutAsync(AuthSchemes.OidcCorrelation);
+
+        if (!result.Succeeded || result.Principal is null)
+        {
+            this.FlashError("Single sign-on did not complete. Please try again.");
+            return RedirectToAction(nameof(Login));
+        }
+
+        var identity = ExternalIdentityReader.Read(result.Principal);
+        var decision = await _sso.SignInAsync(identity, ct);
+
+        if (decision.Outcome != SsoOutcome.Linked || decision.User is null)
+        {
+            // One message for every refusal. The trail records exactly which it was; the sign-in
+            // page must not tell an anonymous caller whether an address has an account here.
+            _logger.LogWarning("SSO sign-in refused ({Outcome}) for subject {Subject} from {Issuer}",
+                decision.Outcome, identity.Subject, identity.Issuer);
+            this.FlashError("Single sign-on did not grant access to this vault. Contact an administrator.");
+            return RedirectToAction(nameof(Login));
+        }
+
+        var user = decision.User;
+        if (decision.SecondFactorSatisfied)
+        {
+            await CompleteSignInAsync(user);
+            return RedirectToAction("Index", "Dashboard");
+        }
+
+        // The IdP proved one factor; this vault wants its own. Rejoin the ordinary flow rather than
+        // inventing a second one — TOTP, enrollment and recovery codes all already live there.
+        var pending = VaultClaimsFactory.CreatePendingMfaPrincipal(user);
+        await HttpContext.SignInAsync(AuthSchemes.MfaPending, pending);
+        return RedirectToAction(user.TotpEnabled ? nameof(Totp) : nameof(EnrollTotp));
+    }
+
     private async Task CompleteSignInAsync(UserDto user)
     {
         await HttpContext.SignOutAsync(AuthSchemes.MfaPending);
 
-        var authTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(VaultClaimTypes.Display, string.IsNullOrWhiteSpace(user.DisplayName) ? user.Username : user.DisplayName),
-                new Claim(VaultClaimTypes.AvatarVersion, DateTimeOffset.UtcNow.Ticks.ToString()),
-                new Claim(VaultClaimTypes.Clearance, ((int)user.Clearance).ToString()),
-                new Claim(VaultClaimTypes.Project, user.ProjectKey),
-                new Claim(VaultClaimTypes.AuthTime, authTime)
-            ],
-            CookieAuthenticationDefaults.AuthenticationScheme);
+        // A fresh per-session id lets this device be revoked on its own, distinct from the
+        // account-wide "sign out everywhere" kill switch. It rides in the cookie as a claim.
+        var sessionId = Guid.NewGuid();
+        var principal = VaultClaimsFactory.CreateSessionPrincipal(user, sessionId, DateTimeOffset.UtcNow);
 
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity),
+            principal,
             new AuthenticationProperties { IsPersistent = false });
+
+        var now = DateTimeOffset.UtcNow;
+        await _sessions.RecordSeenAsync(new SessionObservation(
+            user.Id,
+            sessionId,
+            UserAgentSummary.Describe(Request.Headers.UserAgent.ToString()),
+            HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            now,
+            now + SessionDefaults.InteractiveLifetime), HttpContext.RequestAborted);
 
         _logger.LogInformation("User {Username} ({UserId}) completed multi-factor sign-in from {SourceIp}",
             user.Username, user.Id, HttpContext.Connection.RemoteIpAddress);
     }
 
-    private Guid? GetMfaPendingUserId()
-        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+    private Guid? GetMfaPendingUserId() => User.GetUserIdOrNull();
 }

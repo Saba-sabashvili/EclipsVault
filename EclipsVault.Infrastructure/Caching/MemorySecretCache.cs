@@ -13,9 +13,10 @@ public sealed class CacheOptions
 }
 
 /// <summary>
-/// Cache-aside store for encrypted envelopes backed by IMemoryCache. Only ciphertext
-/// and attribute metadata ever enter the cache — never decrypted values. Entries use
-/// a short absolute TTL and are evicted eagerly by the service layer on every write.
+/// Cache-aside store for encrypted envelopes backed by IMemoryCache (single node). Only
+/// ciphertext and attribute metadata ever enter the cache — never decrypted values.
+/// Entries use a short absolute TTL and are evicted eagerly by the service layer on every
+/// write. Multi-node deployments use the Redis-backed cache so an eviction is global.
 /// </summary>
 public sealed class MemorySecretCache : ISecretCache
 {
@@ -30,19 +31,26 @@ public sealed class MemorySecretCache : ISecretCache
         _logger = logger;
     }
 
-    public bool TryGet(Guid secretId, out EncryptedSecretEnvelope? envelope)
-        => _cache.TryGetValue(Key(secretId), out envelope);
+    public Task<EncryptedSecretEnvelope?> GetAsync(Guid secretId, CancellationToken ct = default)
+    {
+        _cache.TryGetValue(Key(secretId), out EncryptedSecretEnvelope? envelope);
+        return Task.FromResult(envelope);
+    }
 
-    public void Set(EncryptedSecretEnvelope envelope)
-        => _cache.Set(Key(envelope.Id), envelope, new MemoryCacheEntryOptions
+    public Task SetAsync(EncryptedSecretEnvelope envelope, CancellationToken ct = default)
+    {
+        _cache.Set(Key(envelope.Id), envelope, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = _ttl
         });
+        return Task.CompletedTask;
+    }
 
-    public void Evict(Guid secretId)
+    public Task EvictAsync(Guid secretId, CancellationToken ct = default)
     {
         _cache.Remove(Key(secretId));
         _logger.LogDebug("Evicted cached envelope for secret {SecretId}", secretId);
+        return Task.CompletedTask;
     }
 
     private static string Key(Guid secretId) => $"secret-envelope:{secretId:N}";

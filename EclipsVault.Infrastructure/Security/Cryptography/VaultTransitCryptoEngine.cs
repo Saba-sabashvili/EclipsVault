@@ -42,16 +42,14 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
 {
     public const string EngineName = "VaultTransit";
 
-    private const int NonceSize = 12;
-    private const int TagSize = 16;
-    private const int DekSize = 32;
-
     private readonly HttpClient _http;
     private readonly VaultOptions _options;
+    private readonly CryptoOptions _crypto;
 
-    public VaultTransitCryptoEngine(HttpClient http, IOptions<VaultOptions> options)
+    public VaultTransitCryptoEngine(HttpClient http, IOptions<VaultOptions> options, IOptions<CryptoOptions> crypto)
     {
         _options = options.Value;
+        _crypto = crypto.Value;
         _http = http;
         _http.BaseAddress = new Uri(_options.Address);
 
@@ -73,15 +71,16 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
 
     public string EngineId => EngineName;
 
-    public SealedSecret Seal(byte[] plaintext)
+    public async Task<SealedSecret> SealAsync(byte[] plaintext, byte[] associatedData, CancellationToken ct)
     {
-        var dek = RandomNumberGenerator.GetBytes(DekSize);
+        var dek = RandomNumberGenerator.GetBytes(GcmBlob.DekSize);
         try
         {
-            var ciphertext = EncryptBlob(dek, plaintext);
+            var ciphertext = GcmBlob.Encrypt(dek, plaintext, associatedData);
             // Vault wraps the DEK; the KEK that does it never leaves Vault.
-            var wrappedDek = TransitCall("encrypt", new { plaintext = Convert.ToBase64String(dek) }, "ciphertext");
-            return new SealedSecret(ciphertext, Encoding.UTF8.GetBytes(wrappedDek), KekId(wrappedDek), "AES-256-GCM+VaultTransit");
+            var wrappedDek = await TransitCallAsync("encrypt", new { plaintext = Convert.ToBase64String(dek) }, "ciphertext", ct);
+            return new SealedSecret(
+                ciphertext, Encoding.UTF8.GetBytes(wrappedDek), KekId(wrappedDek), SealAlgorithms.AesGcmVaultTransit);
         }
         finally
         {
@@ -89,14 +88,19 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
         }
     }
 
-    public byte[] Unseal(SealedSecret sealedSecret)
+    public async Task<byte[]> UnsealAsync(SealedSecret sealedSecret, byte[] associatedData, CancellationToken ct)
     {
+        // Materialised to an array rather than kept as the ReadOnlySpan the policy returns: a ref
+        // struct cannot live across the await below. This also runs the legacy-blob refusal before we
+        // spend a Vault round-trip, so an unbound blob fails fast rather than after a decrypt call.
+        byte[] binding = LegacyBlobPolicy.BindingFor(sealedSecret.Algorithm, associatedData, _crypto).ToArray();
+
         var wrappedDek = Encoding.UTF8.GetString(sealedSecret.WrappedDek); // "vault:v1:…"
-        var dekBase64 = TransitCall("decrypt", new { ciphertext = wrappedDek }, "plaintext");
+        var dekBase64 = await TransitCallAsync("decrypt", new { ciphertext = wrappedDek }, "plaintext", ct);
         var dek = Convert.FromBase64String(dekBase64);
         try
         {
-            return DecryptBlob(dek, sealedSecret.Ciphertext);
+            return GcmBlob.Decrypt(dek, sealedSecret.Ciphertext, binding);
         }
         finally
         {
@@ -104,11 +108,11 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
         }
     }
 
-    public SealedSecret Rewrap(SealedSecret sealedSecret)
+    public async Task<SealedSecret> RewrapAsync(SealedSecret sealedSecret, CancellationToken ct)
     {
         var wrappedDek = Encoding.UTF8.GetString(sealedSecret.WrappedDek);
         // Vault re-wraps the DEK under its latest key version without exposing the DEK.
-        var rewrapped = TransitCall("rewrap", new { ciphertext = wrappedDek }, "ciphertext");
+        var rewrapped = await TransitCallAsync("rewrap", new { ciphertext = wrappedDek }, "ciphertext", ct);
         if (string.Equals(rewrapped, wrappedDek, StringComparison.Ordinal))
         {
             return sealedSecret; // already under the latest key version
@@ -121,24 +125,25 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
     public string KekId(string vaultCiphertext) => VaultTransitFormat.KekId(_options.KeyName, vaultCiphertext);
 
     /// <summary>
-    /// Calls a Transit operation and returns the named string field of <c>data</c>. Synchronous by
-    /// design: <see cref="ICryptoEngine"/> is a synchronous contract and this engine is opt-in, so
-    /// the HTTP round-trip is awaited inline (safe in ASP.NET Core, which has no sync-context deadlock).
+    /// Calls a Transit operation and returns the named string field of <c>data</c>. Genuinely async:
+    /// the HTTP round-trip to Vault is awaited, so a reveal under this engine never blocks a
+    /// thread-pool thread — which, on a vault where every reveal wraps or unwraps a DEK, is the whole
+    /// reason <see cref="ICryptoEngine"/> is an asynchronous contract.
     /// </summary>
-    private string TransitCall(string operation, object body, string dataField)
+    private async Task<string> TransitCallAsync(string operation, object body, string dataField, CancellationToken ct)
     {
         var path = $"v1/{_options.Mount}/{operation}/{_options.KeyName}";
         HttpResponseMessage response;
         try
         {
-            response = _http.PostAsJsonAsync(path, body).GetAwaiter().GetResult();
+            response = await _http.PostAsJsonAsync(path, body, ct);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             throw new CryptoConfigurationException($"Vault Transit '{operation}' call failed: {ex.Message}");
         }
 
-        var json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var json = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
             throw new CryptoConfigurationException($"Vault Transit '{operation}' returned {(int)response.StatusCode}: {json}");
@@ -149,33 +154,6 @@ public sealed class VaultTransitCryptoEngine : ICryptoEngine
                ?? throw new CryptoConfigurationException($"Vault Transit '{operation}' response missing '{dataField}'.");
     }
 
-    private static byte[] EncryptBlob(byte[] key, byte[] plaintext)
-    {
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
-        var tag = new byte[TagSize];
-        var ciphertext = new byte[plaintext.Length];
-
-        using var gcm = new AesGcm(key, TagSize);
-        gcm.Encrypt(nonce, plaintext, ciphertext, tag);
-
-        var blob = new byte[NonceSize + TagSize + ciphertext.Length];
-        nonce.CopyTo(blob, 0);
-        tag.CopyTo(blob, NonceSize);
-        ciphertext.CopyTo(blob, NonceSize + TagSize);
-        return blob;
-    }
-
-    private static byte[] DecryptBlob(byte[] key, byte[] blob)
-    {
-        var nonce = blob.AsSpan(0, NonceSize);
-        var tag = blob.AsSpan(NonceSize, TagSize);
-        var ciphertext = blob.AsSpan(NonceSize + TagSize);
-        var plaintext = new byte[ciphertext.Length];
-
-        using var gcm = new AesGcm(key, TagSize);
-        gcm.Decrypt(nonce, ciphertext, tag, plaintext);
-        return plaintext;
-    }
 }
 
 /// <summary>Pure parsing of Vault Transit ciphertext, split out so it can be unit-tested without a server.</summary>

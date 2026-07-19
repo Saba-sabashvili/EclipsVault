@@ -1,3 +1,4 @@
+@using EclipsVault.Web.Extensions
 @model AccessDeniedViewModel
 @{
     ViewData["Title"] = "Access denied";
@@ -32,7 +33,7 @@
     }
     <div class="button-row">
         <a class="button" asp-controller="Secrets" asp-action="Index">Back to secrets</a>
-        @if (User.HasClaim(VaultClaimTypes.Clearance, ((int)ClearanceLevel.TopSecret).ToString()))
+        @if (User.IsAdmin())
         {
             <a class="button" asp-controller="Admin" asp-action="Networks">Manage trusted networks</a>
         }

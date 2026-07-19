@@ -14,9 +14,11 @@ public sealed class LifecycleOptions
 }
 
 /// <summary>
-/// Background reaper for expired secrets: wakes on a fixed interval, shreds key
-/// material past its TTL (keeping an auditable tombstone), evicts stale cache
-/// entries, and documents every shred. A failed sweep never kills the worker.
+/// Background custodian of the secret lifecycle. Wakes on a fixed interval and makes two passes:
+/// it warns the owner of a secret whose TTL is nearly up (once per deadline), then shreds key
+/// material past its TTL (keeping an auditable tombstone) and evicts stale cache entries. Warning
+/// runs before reaping so a secret can never be shredded in the same sweep that first warns about
+/// it. A failed sweep never kills the worker.
 /// </summary>
 public sealed class SecretLifecycleWorker : BackgroundService
 {
@@ -71,15 +73,62 @@ public sealed class SecretLifecycleWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ISecretRepository>();
         var cache = scope.ServiceProvider.GetRequiredService<ISecretCache>();
+        var notifications = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
         var now = _clock.GetUtcNow();
+
+        await WarnExpiringAsync(repository, notifications, now, ct);
+        await ReapExpiredAsync(repository, cache, now, ct);
+    }
+
+    /// <summary>
+    /// Emails the owner of every secret whose deadline has entered the warning window and that has
+    /// not already been warned about <i>this</i> deadline. The marker is only stamped once the
+    /// notice is recorded in the outbox, so a notification outage retries rather than going silent —
+    /// and once recorded it never re-sends, even though this sweep runs every minute.
+    /// </summary>
+    private async Task WarnExpiringAsync(
+        ISecretRepository repository, INotificationService notifications, DateTimeOffset now, CancellationToken ct)
+    {
+        var expiring = await repository.ListExpiringAsync(now, SecretExpiry.SoonCutoff(now), ct);
+
+        foreach (var secret in expiring)
+        {
+            if (!SecretExpiry.NeedsExpiryNotice(secret, now))
+            {
+                continue;
+            }
+
+            var recorded = await notifications.NotifyExpiringSecretAsync(
+                secret.CreatedByUserId, secret.Name, secret.ExpiresAtUtc!.Value, ct);
+
+            if (!recorded)
+            {
+                _logger.LogWarning(
+                    "Expiry notice for secret {SecretId} ({SecretName}) was not recorded; will retry next sweep",
+                    secret.Id, secret.Name);
+                continue;
+            }
+
+            secret.ExpiryNoticeSentForUtc = secret.ExpiresAtUtc;
+            await repository.MarkExpiryNoticeSentAsync(secret, ct); // marker-only write — deliberately not audited
+
+            _logger.LogInformation(
+                "Expiry notice sent for secret {SecretId} ({SecretName}); TTL elapses at {ExpiresAtUtc}",
+                secret.Id, secret.Name, secret.ExpiresAtUtc);
+        }
+    }
+
+    private async Task ReapExpiredAsync(
+        ISecretRepository repository, ISecretCache cache, DateTimeOffset now, CancellationToken ct)
+    {
         var expired = await repository.ListExpiredAsync(now, ct);
 
         foreach (var secret in expired)
         {
             secret.Shred(now);
             await repository.ShredAsync(secret, ct); // purges archived versions + records SecretShredded atomically
-            cache.Evict(secret.Id);
+            await cache.EvictAsync(secret.Id, ct);
 
             _logger.LogInformation(
                 "Shredded expired secret {SecretId} ({SecretName}); TTL elapsed at {ExpiresAtUtc}",

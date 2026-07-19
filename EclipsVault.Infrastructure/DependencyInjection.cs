@@ -1,12 +1,17 @@
+using EclipsVault.Core.Application.Abstractions;
+using EclipsVault.Core.Application.Sso;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Auditing;
 using EclipsVault.Infrastructure.Caching;
+using EclipsVault.Infrastructure.Distributed;
 using EclipsVault.Infrastructure.Media;
 using EclipsVault.Infrastructure.Notifications;
 using EclipsVault.Infrastructure.Persistence;
 using EclipsVault.Infrastructure.Persistence.Interceptors;
+using EclipsVault.Infrastructure.Persistence.Locking;
 using EclipsVault.Infrastructure.Persistence.Repositories;
 using EclipsVault.Infrastructure.Security;
+using EclipsVault.Infrastructure.Security.Licensing;
 using EclipsVault.Infrastructure.Security.WebAuthn;
 using EclipsVault.Infrastructure.Workers;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +19,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 namespace EclipsVault.Infrastructure;
 
@@ -26,10 +32,14 @@ public static class DependencyInjection
         services.Configure<Argon2Options>(configuration.GetSection(Argon2Options.SectionName));
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
         services.Configure<LifecycleOptions>(configuration.GetSection(LifecycleOptions.SectionName));
+        services.Configure<DynamicLeaseOptions>(configuration.GetSection(DynamicLeaseOptions.SectionName));
+        services.Configure<AuthThrottleOptions>(configuration.GetSection(AuthThrottleOptions.SectionName));
+        services.Configure<IntrusionResponseOptions>(configuration.GetSection(IntrusionResponseOptions.SectionName));
         services.Configure<WebAuthnOptions>(configuration.GetSection(WebAuthnOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
-        services.Configure<IntrusionResponseOptions>(configuration.GetSection(IntrusionResponseOptions.SectionName));
+        services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
+        services.Configure<LicenseOptions>(configuration.GetSection(LicenseOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddMemoryCache();
@@ -66,11 +76,25 @@ public static class DependencyInjection
                 "Database connection string 'DefaultConnection' is not configured. Set the " +
                 "ConnectionStrings__DefaultConnection environment variable (or a secret store).");
 
+        // Which database to run on. SQL Server stays the default so existing deployments are
+        // unaffected; PostgreSQL exists because a paid database is a line item on every self-hosted
+        // deployment, and the vault should not be the reason for one.
+        var provider = configuration.GetValue<string?>("Database:Provider") ?? DatabaseProvider.SqlServer;
+
         services.AddDbContext<EclipsVaultDbContext>((sp, options) => options
-            .UseSqlServer(connectionString)
+            .UseVaultDatabase(provider, connectionString)
             .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
 
-        // The one place audit rows are written (fail-closed).
+        // The one database-specific thing in the chain: the lock that serialises appends to it.
+        services.AddSingleton<IAuditChainLocker>(_ => DatabaseProvider.IsPostgres(provider)
+            ? new PostgresAuditChainLocker()
+            : new SqlServerAuditChainLocker());
+
+        // The one place standalone audit rows are written (fail-closed). It commits through the
+        // group committer, which is why the same instance is both a singleton and the hosted
+        // service: the queue and the loop draining it are one object.
+        services.AddSingleton<AuditGroupCommitter>();
+        services.AddHostedService(sp => sp.GetRequiredService<AuditGroupCommitter>());
         services.AddScoped<IAuditSink, AuditSink>();
 
         services.AddScoped<ISecretRepository, SecretRepository>();
@@ -81,6 +105,8 @@ public static class DependencyInjection
         services.AddScoped<IMfaRecoveryCodeRepository, MfaRecoveryCodeRepository>();
         services.AddScoped<IAccessRequestRepository, AccessRequestRepository>();
         services.AddScoped<IEmailLogRepository, EmailLogRepository>();
+        services.AddScoped<ITrustedNetworkRepository, TrustedNetworkRepository>();
+        services.AddScoped<IDynamicSecretRepository, DynamicSecretRepository>();
 
         // Security primitives.
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
@@ -92,15 +118,47 @@ public static class DependencyInjection
         services.AddSingleton<AesGcmCryptoEngine>();
         // Opt-in KMS engine: constructed lazily (and only reaches Vault) when Crypto:Engine=VaultTransit.
         services.Configure<VaultOptions>(configuration.GetSection(VaultOptions.SectionName));
-        services.AddSingleton(sp => new VaultTransitCryptoEngine(new HttpClient(), sp.GetRequiredService<IOptions<VaultOptions>>()));
+        services.AddSingleton(sp => new VaultTransitCryptoEngine(
+            new HttpClient(),
+            sp.GetRequiredService<IOptions<VaultOptions>>(),
+            sp.GetRequiredService<IOptions<CryptoOptions>>()));
         services.AddSingleton<ICryptoEngineFactory, CryptoEngineFactory>();
         services.AddScoped<IKekRotationService, KekRotationService>();
 
-        // Resilience & active defence.
-        services.AddSingleton<ISecretCache, MemorySecretCache>();
-        services.AddSingleton<IIpBlacklist, InMemoryIpBlacklist>();
-        services.AddSingleton<ISessionRevocationService, InMemorySessionRevocationService>();
+        // Resilience & active defence. Session revocation, the intrusion IP blacklist, and the
+        // encrypted-envelope cache all hold shared runtime state. Back them with Redis when it is
+        // configured — mandatory for multi-node scale-out so a revocation or block on one node is
+        // honoured by every node — or with the in-process stores for a zero-infrastructure single node.
+        services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
+        var redisOptions = configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
+        if (redisOptions.Enabled)
+        {
+            RedisConnectionGuard.RequireAuthentication(redisOptions);
+
+            // One multiplexer per process (the expensive, thread-safe singleton). Connecting here
+            // fails fast at startup if the shared store is unreachable — it now holds security state.
+            services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisOptions.Configuration));
+            services.AddSingleton<ISecretCache, RedisSecretCache>();
+            services.AddSingleton<IIpBlacklist, RedisIpBlacklist>();
+            services.AddSingleton<ISessionRevocationService, RedisSessionRevocationService>();
+            services.AddSingleton<ISessionRegistry, RedisSessionRegistry>();
+            services.AddSingleton<IAuthThrottle, RedisAuthThrottle>();
+        }
+        else
+        {
+            services.AddSingleton<ISecretCache, MemorySecretCache>();
+            services.AddSingleton<IIpBlacklist, InMemoryIpBlacklist>();
+            services.AddSingleton<ISessionRevocationService, InMemorySessionRevocationService>();
+            services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
+            services.AddSingleton<IAuthThrottle, InMemoryAuthThrottle>();
+        }
         services.AddScoped<IIntrusionResponseService, IntrusionResponseService>();
+
+        // Dynamic secrets: one backend per DynamicSecretBackend value; the service picks by role.
+        services.AddScoped<SqlServerBackend>();
+        services.AddScoped<IDynamicSecretBackend>(sp => sp.GetRequiredService<SqlServerBackend>());
+        services.AddScoped<IManagedSecretBackend>(sp => sp.GetRequiredService<SqlServerBackend>());
+        services.AddScoped<IDynamicSecretService, DynamicSecretService>();
 
         // Runtime-managed trusted networks + audit reading.
         services.AddScoped<ITrustedNetworkService, TrustedNetworkService>();
@@ -110,6 +168,10 @@ public static class DependencyInjection
         services.AddSingleton<IAuditCheckpointSigner, EcdsaAuditCheckpointSigner>();
         services.AddScoped<IAuditCheckpointService, AuditCheckpointService>();
 
+        // Licensing: resolve and verify the license once at startup (soft — it only informs the nudge
+        // surfaces). A singleton so the token is read and verified exactly once per process.
+        services.AddSingleton<ILicenseState, LicenseService>();
+
         // Application services (pure Core classes, composed here).
         services.AddScoped<ISecretService, SecretService>();
         services.AddScoped<ISecretGrantService, SecretGrantService>();
@@ -118,10 +180,22 @@ public static class DependencyInjection
         services.AddScoped<IServiceAccountService>(sp => sp.GetRequiredService<ServiceAccountService>());
         services.AddScoped<IApiKeyAuthenticator>(sp => sp.GetRequiredService<ServiceAccountService>());
         services.AddScoped<IVaultAuthenticationService, VaultAuthenticationService>();
+
+        // SSO: the IdP proves who you are, this decides whether you may in. The policy is a Core
+        // type bound from configuration here, so Core keeps no dependency on a config binder.
+        var ssoSection = configuration.GetSection(SsoOptions.SectionName).Get<SsoOptions>();
+        services.AddSingleton(ssoSection is null
+            ? SsoPolicy.Default
+            : new SsoPolicy(ssoSection.TrustIdpMultiFactor));
+        services.AddScoped<ISsoSignInService, SsoSignInService>();
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IMfaRecoveryService, MfaRecoveryService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<ISignInHistoryService, SignInHistoryService>();
+        services.AddScoped<ISecurityCheckupService, SecurityCheckupService>();
+        services.AddScoped<IPersonalDataExportService, PersonalDataExportService>();
         services.AddScoped<IPasskeyService, PasskeyService>();
 
         // Notifications: pick the email transport by config, mirror Email:Enabled into the

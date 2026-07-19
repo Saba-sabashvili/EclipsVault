@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Every branch, not just main. Work here lands on stacked feature branches that may sit for a
+  # while before they are merged or ever see a pull request — CI that only watches main is CI that
+  # tells you a week late.
   push:
-    branches: [ main, master ]
   pull_request:
 
 jobs:
@@ -27,10 +29,48 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal
 
+  # The vault targets two database engines, so every model change needs a migration in BOTH sets.
+  # One that reaches only one engine leaves the schemas silently different, and nothing notices
+  # until a deployment on the other engine hits a column that was never created. Neither check
+  # needs a database — they compare the model to the committed snapshot.
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      - name: Install EF tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: SQL Server migrations match the model
+        run: dotnet ef migrations has-pending-model-changes -p EclipsVault.Infrastructure -s EclipsVault.Web -c EclipsVaultDbContext
+
+      - name: PostgreSQL migrations match the model
+        env:
+          ECLIPSVAULT_DESIGN_PROVIDER: Postgres
+        run: dotnet ef migrations has-pending-model-changes -p EclipsVault.Migrations.Postgres -s EclipsVault.Web -c EclipsVaultDbContext
+
   security-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # appsettings.Development.json holds the dev KEK fallback and the seed passwords. It is
+      # git-ignored, but an ignore rule is a convention and this is a vault — make it a gate.
+      - name: Dev settings are not committed
+        run: |
+          if git ls-files --error-unmatch EclipsVault.Web/appsettings.Development.json > /dev/null 2>&1; then
+            echo "::error::appsettings.Development.json is tracked — it carries the dev KEK and seed passwords"
+            exit 1
+          fi
+          echo "OK — appsettings.Development.json is not tracked"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -48,3 +88,30 @@ jobs:
             echo "::error::Vulnerable packages detected"
             exit 1
           fi
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install CycloneDX
+        run: dotnet tool install --global CycloneDX
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      # A software bill of materials for the deployed app: every transitive dependency, so a
+      # consumer can audit what ships. Fits the pin-and-prove supply-chain posture.
+      - name: Generate SBOM
+        run: dotnet CycloneDX EclipsVault.Web/EclipsVault.Web.csproj -o sbom -fn sbom.json -F Json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/sbom.json

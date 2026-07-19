@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>eclipsvault-license</AssemblyName>
+    <RootNamespace>EclipsVault.LicenseForge</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- References ONLY Core: shares the canonical form + signer, has no dependency on the app,
+         the database, or any private key (the key is supplied at runtime, never compiled in). -->
+    <ProjectReference Include="..\EclipsVault.Core\EclipsVault.Core.csproj" />
+  </ItemGroup>
+
+</Project>
