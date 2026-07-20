@@ -47,4 +47,28 @@ public class AuditCheckpointServiceTests
         Assert.Null(result); // empty chain → nothing to sign
         Assert.Equal(LicenseFeatures.AuditAttestation, Assert.Single(usage.Recorded));
     }
+
+    [Fact]
+    public async Task Exporting_a_bundle_records_premium_usage()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddDbContext<EclipsVaultDbContext>(o => o.UseSqlite(connection));
+        await using var provider = services.BuildServiceProvider();
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EclipsVaultDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var usage = new RecordingPremiumFeatureUsage();
+        var service = new AuditCheckpointService(db, new FakeSigner(), new NoOpAuditSink(), TimeProvider.System, usage);
+
+        var bundle = await service.ExportAsync(CancellationToken.None);
+
+        Assert.Empty(bundle.Rows); // empty chain → no rows
+        Assert.Equal(LicenseFeatures.AuditAttestation, Assert.Single(usage.Recorded));
+    }
 }

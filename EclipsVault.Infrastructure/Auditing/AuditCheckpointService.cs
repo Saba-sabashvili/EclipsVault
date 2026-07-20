@@ -67,6 +67,9 @@ public sealed class AuditCheckpointService : IAuditCheckpointService
 
     public async Task<AuditBundle> ExportAsync(CancellationToken ct)
     {
+        // Soft licensing signal — never blocks the export.
+        await _premiumUsage.RecordUseAsync(LicenseFeatures.AuditAttestation, ct);
+
         // Snapshot the chained rows, then sign exactly the head we exported so the bundle is
         // internally consistent (the "export" audit row written below lands after this head).
         var rows = await _db.AuditLogs.AsNoTracking()
