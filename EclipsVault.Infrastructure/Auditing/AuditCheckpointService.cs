@@ -1,3 +1,4 @@
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure.Persistence;
@@ -17,19 +18,24 @@ public sealed class AuditCheckpointService : IAuditCheckpointService
     private readonly IAuditCheckpointSigner _signer;
     private readonly IAuditSink _audit;
     private readonly TimeProvider _clock;
+    private readonly IPremiumFeatureUsage _premiumUsage;
 
-    public AuditCheckpointService(EclipsVaultDbContext db, IAuditCheckpointSigner signer, IAuditSink audit, TimeProvider clock)
+    public AuditCheckpointService(EclipsVaultDbContext db, IAuditCheckpointSigner signer, IAuditSink audit, TimeProvider clock, IPremiumFeatureUsage premiumUsage)
     {
         _db = db;
         _signer = signer;
         _audit = audit;
         _clock = clock;
+        _premiumUsage = premiumUsage;
     }
 
     public string SigningKeyId => _signer.KeyId;
 
     public async Task<AuditCheckpointDto?> CreateCheckpointAsync(CancellationToken ct)
     {
+        // Soft licensing signal — never blocks checkpointing.
+        await _premiumUsage.RecordUseAsync(LicenseFeatures.AuditAttestation, ct);
+
         var head = await HeadAsync(ct);
         if (head is null)
         {
