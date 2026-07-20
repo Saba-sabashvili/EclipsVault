@@ -112,5 +112,12 @@ public enum AuditAction
     /// The vault started without a valid license outside Development — a soft, one-per-startup marker
     /// so an operator has a dated record. It never restricts the vault and is not a security event.
     /// </summary>
-    LicenseInvalidProductionUse = 200
+    LicenseInvalidProductionUse = 200,
+
+    /// <summary>
+    /// A Max-only feature was exercised on a vault whose license does not grant it (a Community/
+    /// unlicensed deployment, or a feature switched on beyond the current tier). Soft and
+    /// deduplicated — a licensing reminder, never a restriction and never a security event.
+    /// </summary>
+    LicenseFeatureUnlicensed = 201
 }

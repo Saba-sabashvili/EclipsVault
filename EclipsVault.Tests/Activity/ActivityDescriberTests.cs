@@ -66,4 +66,17 @@ public class ActivityDescriberTests
         Assert.Equal(ActivitySeverity.Routine, description.Severity);
         Assert.False(string.IsNullOrWhiteSpace(description.Title));
     }
+
+    [Fact]
+    public void Describes_the_unlicensed_premium_feature_action()
+    {
+        var description = ActivityDescriber.Describe(AuditAction.LicenseFeatureUnlicensed);
+
+        Assert.Equal(
+            new ActivityDescription(
+                ActivityCategory.Administration,
+                "Used a premium feature without a license",
+                ActivitySeverity.Notable),
+            description);
+    }
 }
