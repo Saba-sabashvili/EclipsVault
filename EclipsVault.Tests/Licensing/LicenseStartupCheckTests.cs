@@ -110,7 +110,7 @@ public class LicenseStartupCheckTests
     [Fact]
     public async Task A_valid_license_with_no_extra_features_writes_no_row()
         => Assert.Equal(0, await RowsAfterStartup(
-            Environments.Production, LicenseStatus.Valid, NoFeatures(), AuditAction.LicenseInvalidProductionUse));
+            Environments.Production, LicenseStatus.Valid, NoFeatures(), AuditAction.LicenseFeatureUnlicensed));
 
     [Fact]
     public async Task A_valid_license_using_a_feature_beyond_its_tier_writes_one_feature_row()

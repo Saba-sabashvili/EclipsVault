@@ -9,9 +9,10 @@ using Microsoft.Extensions.Logging;
 namespace EclipsVault.Infrastructure.Workers;
 
 /// <summary>
-/// Announces the resolved license once, at startup: logs its status, and — only outside Development
-/// and only when the license is not Valid — records a single soft audit row so an operator has a
-/// dated marker that the vault came up unlicensed.
+/// Announces the resolved license once, at startup: logs its status, and — only outside Development —
+/// records a single soft audit row for either of two conditions: the license is not Valid (a dated
+/// marker that the vault came up unlicensed), or the license is Valid but the config-active premium
+/// features exceed what it grants (a dated marker of exactly which features are beyond its tier).
 ///
 /// It runs as a hosted service, not inline after <c>app.Build()</c>, for one concrete reason: the
 /// audit sink is fail-closed and only completes once <see cref="Persistence.AuditGroupCommitter"/>
