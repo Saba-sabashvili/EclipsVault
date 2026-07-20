@@ -69,7 +69,12 @@ public class PremiumFeatureUsageRecorderTests
 
             await using var read = provider.CreateAsyncScope();
             return await read.ServiceProvider.GetRequiredService<EclipsVaultDbContext>()
-                .AuditLogs.CountAsync(a => a.Action == AuditAction.LicenseFeatureUnlicensed && a.ResourceName == feature);
+                .AuditLogs.CountAsync(a =>
+                    a.Action == AuditAction.LicenseFeatureUnlicensed
+                    && a.ResourceName == feature
+                    && a.ResourceType == "License"
+                    && !a.IsCritical
+                    && a.Username == "system");
         }
         finally
         {
