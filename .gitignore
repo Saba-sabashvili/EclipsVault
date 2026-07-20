@@ -22,3 +22,6 @@ appsettings.*.Local.json
 *.pfx
 *.key
 secrets.json
+
+# Session handoff scratch note (kept on disk for cross-session context, not versioned)
+docs/HANDOFF.md
