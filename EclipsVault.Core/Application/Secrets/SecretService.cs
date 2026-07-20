@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
@@ -21,6 +22,7 @@ public sealed class SecretService : ISecretService
     private readonly IAuditContext _actor;
     private readonly IReadOnlyCollection<IManagedSecretBackend> _managedBackends;
     private readonly TimeProvider _clock;
+    private readonly IPremiumFeatureUsage _premiumUsage;
 
     public SecretService(
         ISecretRepository repository,
@@ -30,7 +32,8 @@ public sealed class SecretService : ISecretService
         IAuditSink audit,
         IAuditContext actor,
         IEnumerable<IManagedSecretBackend> managedBackends,
-        TimeProvider clock)
+        TimeProvider clock,
+        IPremiumFeatureUsage premiumUsage)
     {
         _repository = repository;
         _cryptoFactory = cryptoFactory;
@@ -40,6 +43,7 @@ public sealed class SecretService : ISecretService
         _actor = actor;
         _managedBackends = [.. managedBackends];
         _clock = clock;
+        _premiumUsage = premiumUsage;
     }
 
     private Task AuditSecretAsync(Guid id, string name, AuditAction action, CancellationToken ct)
@@ -168,6 +172,9 @@ public sealed class SecretService : ISecretService
                 $"'{entity.Name}' is not bound to a backend principal, so the vault cannot change the real credential. " +
                 "Rotate it with a new value instead.");
         }
+
+        // Soft licensing signal — never blocks rotation.
+        await _premiumUsage.RecordUseAsync(LicenseFeatures.ManagedRotation, ct);
 
         var backend = _managedBackends.FirstOrDefault(b => b.Backend == entity.RotationBackend)
             ?? throw new VaultAdminException($"No backend is configured for '{entity.RotationBackend}'.");
