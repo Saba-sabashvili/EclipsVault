@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using EclipsVault.Core.Application.Abstractions;
-using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Infrastructure;
 using EclipsVault.Infrastructure.Logging;
@@ -8,6 +7,7 @@ using EclipsVault.Infrastructure.Persistence;
 using EclipsVault.Infrastructure.Workers;
 using EclipsVault.Web.Authentication;
 using EclipsVault.Infrastructure.Security;
+using EclipsVault.Infrastructure.Security.Licensing;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Middleware;
 using EclipsVault.Web.Security;
@@ -42,21 +42,12 @@ try
     // came up unlicensed outside Development. It never blocks startup.
     builder.Services.AddHostedService<LicenseStartupCheck>();
 
-    // Precompute the licensing-banner inputs once: the status, plus any premium feature switched on in
-    // configuration that the current tier does not cover. Soft — it only decides what the banner says.
+    // Precompute the licensing-banner inputs once from the single config-active feature source. Soft —
+    // it only decides what the banner says; it never changes what the vault does.
     builder.Services.AddSingleton(sp =>
     {
         var license = sp.GetRequiredService<ILicenseState>();
-        var cfg = sp.GetRequiredService<IConfiguration>();
-
-        var active = new List<string>();
-        if (string.Equals(cfg["Crypto:Engine"], "VaultTransit", StringComparison.OrdinalIgnoreCase))
-            active.Add(LicenseFeatures.Kms);
-        if (cfg.GetValue<bool>("Redis:Enabled"))
-            active.Add(LicenseFeatures.RedisHa);
-        if (!string.IsNullOrWhiteSpace(cfg["Sso:Authority"]))
-            active.Add(LicenseFeatures.Sso);
-
+        var active = sp.GetRequiredService<ConfiguredPremiumFeatures>().Active;
         return LicenseNudgeState.From(license, active);
     });
 

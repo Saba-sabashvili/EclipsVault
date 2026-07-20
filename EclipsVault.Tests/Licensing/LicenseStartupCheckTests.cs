@@ -1,13 +1,17 @@
 using EclipsVault.Core.Application.Abstractions;
 using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
+using EclipsVault.Infrastructure.Distributed;
 using EclipsVault.Infrastructure.Persistence;
+using EclipsVault.Infrastructure.Security;
+using EclipsVault.Infrastructure.Security.Licensing;
 using EclipsVault.Infrastructure.Workers;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace EclipsVault.Tests.Licensing;
@@ -43,7 +47,17 @@ public class LicenseStartupCheckTests
         public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
     }
 
-    private static async Task<int> SoftRowsAfterStartup(string environment, LicenseStatus status)
+    private static ConfiguredPremiumFeatures NoFeatures()
+        => new(Options.Create(new CryptoOptions()), Options.Create(new RedisOptions()), Options.Create(new SsoOptions()));
+
+    private static ConfiguredPremiumFeatures RedisActive()
+        => new(Options.Create(new CryptoOptions()), Options.Create(new RedisOptions { Enabled = true }), Options.Create(new SsoOptions()));
+
+    private static async Task<int> RowsAfterStartup(
+        string environment,
+        LicenseStatus status,
+        ConfiguredPremiumFeatures features,
+        AuditAction countAction)
     {
         using var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
@@ -67,6 +81,7 @@ public class LicenseStartupCheckTests
             var check = new LicenseStartupCheck(
                 new FakeLicense { Status = status, Message = status.ToString() },
                 new FakeEnv { EnvironmentName = environment },
+                features,
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<LicenseStartupCheck>.Instance);
 
@@ -74,7 +89,7 @@ public class LicenseStartupCheckTests
 
             await using var read = provider.CreateAsyncScope();
             return await read.ServiceProvider.GetRequiredService<EclipsVaultDbContext>()
-                .AuditLogs.CountAsync(a => a.Action == AuditAction.LicenseInvalidProductionUse && !a.IsCritical);
+                .AuditLogs.CountAsync(a => a.Action == countAction && !a.IsCritical);
         }
         finally
         {
@@ -84,19 +99,21 @@ public class LicenseStartupCheckTests
 
     [Fact]
     public async Task Unlicensed_in_production_writes_one_soft_audit_row()
-    {
-        Assert.Equal(1, await SoftRowsAfterStartup(Environments.Production, LicenseStatus.Missing));
-    }
+        => Assert.Equal(1, await RowsAfterStartup(
+            Environments.Production, LicenseStatus.Missing, NoFeatures(), AuditAction.LicenseInvalidProductionUse));
 
     [Fact]
     public async Task Development_writes_no_row_even_when_unlicensed()
-    {
-        Assert.Equal(0, await SoftRowsAfterStartup(Environments.Development, LicenseStatus.Missing));
-    }
+        => Assert.Equal(0, await RowsAfterStartup(
+            Environments.Development, LicenseStatus.Missing, NoFeatures(), AuditAction.LicenseInvalidProductionUse));
 
     [Fact]
-    public async Task A_valid_license_in_production_writes_no_row()
-    {
-        Assert.Equal(0, await SoftRowsAfterStartup(Environments.Production, LicenseStatus.Valid));
-    }
+    public async Task A_valid_license_with_no_extra_features_writes_no_row()
+        => Assert.Equal(0, await RowsAfterStartup(
+            Environments.Production, LicenseStatus.Valid, NoFeatures(), AuditAction.LicenseInvalidProductionUse));
+
+    [Fact]
+    public async Task A_valid_license_using_a_feature_beyond_its_tier_writes_one_feature_row()
+        => Assert.Equal(1, await RowsAfterStartup(
+            Environments.Production, LicenseStatus.Valid, RedisActive(), AuditAction.LicenseFeatureUnlicensed));
 }

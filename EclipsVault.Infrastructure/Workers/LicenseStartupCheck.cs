@@ -1,6 +1,7 @@
 using EclipsVault.Core.Application.Abstractions;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
+using EclipsVault.Infrastructure.Security.Licensing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -24,17 +25,20 @@ public sealed class LicenseStartupCheck : IHostedService
 {
     private readonly ILicenseState _license;
     private readonly IHostEnvironment _environment;
+    private readonly ConfiguredPremiumFeatures _premiumFeatures;
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<LicenseStartupCheck> _logger;
 
     public LicenseStartupCheck(
         ILicenseState license,
         IHostEnvironment environment,
+        ConfiguredPremiumFeatures premiumFeatures,
         IServiceScopeFactory scopes,
         ILogger<LicenseStartupCheck> logger)
     {
         _license = license;
         _environment = environment;
+        _premiumFeatures = premiumFeatures;
         _scopes = scopes;
         _logger = logger;
     }
@@ -44,13 +48,43 @@ public sealed class LicenseStartupCheck : IHostedService
         _logger.LogInformation("License check: {Status} — {Message}", _license.Status, _license.Message);
 
         // Development runs unlicensed by design (no pinned key), so it is never nagged or recorded.
-        if (_environment.IsDevelopment() || _license.Status == LicenseStatus.Valid)
+        if (_environment.IsDevelopment())
             return;
 
-        _logger.LogWarning(
-            "EclipsVault is running without a valid license ({Status}). This does not restrict the vault — " +
-            "it is a licensing reminder.", _license.Status);
+        if (_license.Status != LicenseStatus.Valid)
+        {
+            _logger.LogWarning(
+                "EclipsVault is running without a valid license ({Status}). This does not restrict the vault — " +
+                "it is a licensing reminder.", _license.Status);
 
+            await WriteSoftRowAsync(
+                AuditAction.LicenseInvalidProductionUse,
+                _license.Status.ToString(),
+                _license.Message,
+                cancellationToken);
+            return;
+        }
+
+        // A valid license can still be a lower tier than the features switched on (e.g. Community with
+        // Redis HA). Surface exactly which config-active features it does not grant.
+        var beyondTier = _premiumFeatures.Active.Where(feature => !_license.Allows(feature)).ToArray();
+        if (beyondTier.Length == 0)
+            return;
+
+        var features = string.Join(", ", beyondTier);
+        _logger.LogWarning(
+            "EclipsVault has premium features active that the current license does not grant: {Features}. " +
+            "This does not restrict the vault — it is a licensing reminder.", features);
+
+        await WriteSoftRowAsync(
+            AuditAction.LicenseFeatureUnlicensed,
+            features,
+            $"Config-active premium features beyond the current license: {features}.",
+            cancellationToken);
+    }
+
+    private async Task WriteSoftRowAsync(AuditAction action, string resourceName, string details, CancellationToken ct)
+    {
         try
         {
             // The sink is scoped; take a scope of our own since a hosted service is a singleton.
@@ -59,21 +93,20 @@ public sealed class LicenseStartupCheck : IHostedService
             await sink.WriteAsync(
                 new AuditEntry
                 {
-                    Action = AuditAction.LicenseInvalidProductionUse,
+                    Action = action,
                     ResourceType = "License",
-                    ResourceName = _license.Status.ToString(),
-                    Details = _license.Message,
-                    // Not critical: IsCritical flags genuine security incidents (honey-token, revocation
-                    // failure). A licensing reminder must never masquerade as one of those.
+                    ResourceName = resourceName,
+                    Details = details,
+                    // A licensing reminder must never masquerade as a genuine security incident.
                     IsCritical = false,
                     ActorUsername = "system"
                 },
-                cancellationToken);
+                ct);
         }
         catch (AuditWriteFailedException ex)
         {
             _logger.LogWarning(ex,
-                "Could not record the unlicensed-startup audit row — continuing (licensing never blocks the vault).");
+                "Could not record the licensing audit row — continuing (licensing never blocks the vault).");
         }
     }
 
