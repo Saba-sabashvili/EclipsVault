@@ -176,6 +176,9 @@ public static class DependencyInjection
         // attestation). Singleton so its per-feature dedup is process-wide.
         services.AddSingleton<IPremiumFeatureUsage, PremiumFeatureUsageRecorder>();
 
+        // Single source of truth for config-activated premium features (banner + startup check read it).
+        services.AddSingleton<ConfiguredPremiumFeatures>();
+
         // Application services (pure Core classes, composed here).
         services.AddScoped<ISecretService, SecretService>();
         services.AddScoped<ISecretGrantService, SecretGrantService>();
