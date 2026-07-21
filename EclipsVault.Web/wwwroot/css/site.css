@@ -252,6 +252,15 @@ button { font-family: inherit; }
     letter-spacing: -0.02em;
 }
 .brand:hover { color: var(--text); }
+/* Eclipse logomark — the favicon's twin: a dark disc haloed by the accent ring. */
+.brand-mark {
+    width: 1.05em;
+    height: 1.05em;
+    border-radius: 50%;
+    background: #05060a;
+    border: 1.5px solid var(--accent);
+    flex-shrink: 0;
+}
 
 /* ---- Command trigger (the ⌘K front door) -------------------------- */
 /* Dressed as a search field because that is the shape people already know how to read: a
