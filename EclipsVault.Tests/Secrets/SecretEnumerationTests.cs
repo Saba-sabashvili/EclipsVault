@@ -5,6 +5,7 @@ using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Tests.Fakes;
+using EclipsVault.Tests.TestDoubles;
 using Xunit;
 
 namespace EclipsVault.Tests.Secrets;
@@ -107,7 +108,7 @@ public class SecretEnumerationTests
 
     private static SecretService Build(ISecretRepository repository, IIntrusionResponseService? intrusion = null)
         => new(repository, new FakeCryptoEngine(), new NullCache(), intrusion ?? new UnusedIntrusionResponse(),
-               new NullAuditSink(), new StubActor(), [], TimeProvider.System);
+               new NullAuditSink(), new StubActor(), [], TimeProvider.System, new RecordingPremiumFeatureUsage());
 
     [Fact]
     public async Task Listing_never_returns_a_decoy()

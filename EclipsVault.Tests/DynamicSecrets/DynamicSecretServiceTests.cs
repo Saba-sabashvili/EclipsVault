@@ -1,8 +1,10 @@
 using EclipsVault.Core.Application.Abstractions;
 using EclipsVault.Core.Application.DynamicSecrets;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
+using EclipsVault.Tests.TestDoubles;
 using Xunit;
 
 namespace EclipsVault.Tests.DynamicSecrets;
@@ -109,8 +111,22 @@ public class DynamicSecretServiceTests
         IsEnabled = enabled
     };
 
-    private static DynamicSecretService Build(FakeRepository repository, FakeBackend backend)
-        => new(repository, [backend], new StubActor(), TimeProvider.System);
+    private static DynamicSecretService Build(FakeRepository repository, FakeBackend backend, IPremiumFeatureUsage? usage = null)
+        => new(repository, [backend], new StubActor(), TimeProvider.System, usage ?? new RecordingPremiumFeatureUsage());
+
+    [Fact]
+    public async Task Issuing_records_premium_usage_and_still_leases()
+    {
+        var role = Role();
+        var repository = new FakeRepository(role);
+        var backend = new FakeBackend();
+        var usage = new RecordingPremiumFeatureUsage();
+
+        var issued = await Build(repository, backend, usage).IssueAsync(role.Id, null, CancellationToken.None);
+
+        Assert.Equal(LicenseFeatures.DynamicSecrets, Assert.Single(usage.Recorded));
+        Assert.NotEmpty(issued.Secret); // behaviour unchanged: a lease was still issued
+    }
 
     [Fact]
     public async Task Issuing_mints_a_credential_and_opens_a_lease()

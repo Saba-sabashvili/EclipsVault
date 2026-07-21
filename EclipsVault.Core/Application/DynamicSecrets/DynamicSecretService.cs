@@ -1,3 +1,4 @@
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
@@ -15,17 +16,20 @@ public sealed class DynamicSecretService : IDynamicSecretService
     private readonly IReadOnlyDictionary<DynamicSecretBackend, IDynamicSecretBackend> _backends;
     private readonly IAuditContext _actor;
     private readonly TimeProvider _clock;
+    private readonly IPremiumFeatureUsage _premiumUsage;
 
     public DynamicSecretService(
         IDynamicSecretRepository repository,
         IEnumerable<IDynamicSecretBackend> backends,
         IAuditContext actor,
-        TimeProvider clock)
+        TimeProvider clock,
+        IPremiumFeatureUsage premiumUsage)
     {
         _repository = repository;
         _backends = backends.ToDictionary(b => b.Backend);
         _actor = actor;
         _clock = clock;
+        _premiumUsage = premiumUsage;
     }
 
     public async Task<IReadOnlyList<DynamicSecretRoleDto>> ListRolesAsync(CancellationToken ct)
@@ -46,6 +50,9 @@ public sealed class DynamicSecretService : IDynamicSecretService
         {
             throw new VaultAdminException($"The role '{role.Name}' is disabled and cannot issue credentials.");
         }
+
+        // Soft licensing signal — never blocks issuing.
+        await _premiumUsage.RecordUseAsync(LicenseFeatures.DynamicSecrets, ct);
 
         var backend = ResolveBackend(role);
         var now = _clock.GetUtcNow();

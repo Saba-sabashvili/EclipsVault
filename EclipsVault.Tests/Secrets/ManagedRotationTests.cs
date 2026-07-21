@@ -1,10 +1,12 @@
 using System.Text;
 using EclipsVault.Core.Application.Abstractions;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Entities;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Tests.Fakes;
+using EclipsVault.Tests.TestDoubles;
 using Xunit;
 
 namespace EclipsVault.Tests.Secrets;
@@ -158,8 +160,11 @@ public class ManagedRotationTests
     }
 
     private static SecretService Build(FakeRepository repository, RecordingAuditSink audit, params IManagedSecretBackend[] backends)
+        => Build(repository, audit, new RecordingPremiumFeatureUsage(), backends);
+
+    private static SecretService Build(FakeRepository repository, RecordingAuditSink audit, RecordingPremiumFeatureUsage usage, params IManagedSecretBackend[] backends)
         => new(repository, new FakeCryptoEngine(), new NullCache(), new UnusedIntrusionResponse(),
-               audit, new StubActor(), backends, TimeProvider.System);
+               audit, new StubActor(), backends, TimeProvider.System, usage);
 
     private static string StoredValue(Secret secret)
         => Encoding.UTF8.GetString(FakeCryptoEngine.ValueOf(secret.Ciphertext));
@@ -324,5 +329,18 @@ public class ManagedRotationTests
         var drift = Assert.Single(audit.Entries, e => e.Action == AuditAction.SecretUpstreamRotationDrifted);
         Assert.DoesNotContain(applied, drift.Details);
         Assert.DoesNotContain(OriginalPassword, drift.Details);
+    }
+
+    [Fact]
+    public async Task Rotating_a_managed_secret_records_premium_usage()
+    {
+        var secret = ManagedSecret();
+        var repository = new FakeRepository(secret);
+        var usage = new RecordingPremiumFeatureUsage();
+
+        await Build(repository, new RecordingAuditSink(), usage, new FakeBackend())
+            .RotateManagedAsync(SecretId, null, CancellationToken.None);
+
+        Assert.Equal(LicenseFeatures.ManagedRotation, Assert.Single(usage.Recorded));
     }
 }
