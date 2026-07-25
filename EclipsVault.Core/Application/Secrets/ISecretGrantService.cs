@@ -50,7 +50,14 @@ public interface ISecretGrantService
     /// <summary>Grants a user (by username or email) access to a secret. Throws SharingException on invalid input.</summary>
     Task GrantAsync(Guid secretId, string secretName, string granteeUsernameOrEmail, int? ttlDays, CancellationToken ct);
 
-    Task<bool> RevokeAsync(Guid grantId, CancellationToken ct);
+    /// <summary>
+    /// Revokes a grant that belongs to <paramref name="secretId"/>. The secret is a required
+    /// parameter rather than context the caller is trusted to have checked: a caller is authorised
+    /// against a <em>secret</em>, so revoking by grant id alone would let anyone who may share one
+    /// secret revoke a grant on any other — including secrets they cannot see. Returns false when the
+    /// grant is gone or belongs to a different secret, without distinguishing the two.
+    /// </summary>
+    Task<bool> RevokeAsync(Guid grantId, Guid secretId, CancellationToken ct);
 
     /// <summary>
     /// Revokes a grant only if the caller is the one who issued it. Returns false when the grant is

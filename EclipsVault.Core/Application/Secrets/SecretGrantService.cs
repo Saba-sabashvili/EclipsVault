@@ -90,10 +90,16 @@ public sealed class SecretGrantService : ISecretGrantService
         }, ct);
     }
 
-    public async Task<bool> RevokeAsync(Guid grantId, CancellationToken ct)
+    public async Task<bool> RevokeAsync(Guid grantId, Guid secretId, CancellationToken ct)
     {
         var grant = await _grants.FindAsync(grantId, ct);
-        if (grant is null)
+
+        // Not found, or it belongs to a different secret → refuse without distinguishing the two.
+        // The caller was authorised against `secretId`, never against this grant, so accepting a
+        // grant id from another secret would turn "may share one secret" into "may revoke any grant
+        // in the vault" — including on secrets the caller cannot see. Same refusal shape as
+        // RevokeIssuedAsync, and for the same reason: it must not double as a grant-id probe.
+        if (grant is null || grant.SecretId != secretId)
         {
             return false;
         }

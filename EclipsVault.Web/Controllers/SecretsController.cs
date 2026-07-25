@@ -388,7 +388,7 @@ public sealed class SecretsController : VaultController
             return Forbid();
         }
 
-        if (await _grants.RevokeAsync(grantId, ct))
+        if (await _grants.RevokeAsync(grantId, id, ct))
         {
             this.FlashSuccess("Access revoked.");
         }

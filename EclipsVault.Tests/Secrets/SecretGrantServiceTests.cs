@@ -142,4 +142,45 @@ public class SecretGrantServiceTests
         Assert.Equal(0, grants.RemoveCalls);
         Assert.Equal(0, sink.Writes);
     }
+
+    [Fact]
+    public async Task Revokes_a_grant_that_belongs_to_the_secret()
+    {
+        var grant = Grant(grantedBy: "alice");
+        var (service, grants, sink) = NewService(grant);
+
+        Assert.True(await service.RevokeAsync(grant.Id, grant.SecretId, CancellationToken.None));
+        Assert.Equal(1, grants.RemoveCalls);
+        Assert.Equal(1, sink.Writes);
+    }
+
+    /// <summary>
+    /// The owner-side revoke is reached from a secret's sharing panel, where the caller has been
+    /// authorized against <em>that secret</em> and nothing else. Accepting a grant id belonging to a
+    /// different secret would turn "may share one secret" into "may revoke any grant in the vault",
+    /// including on secrets in projects the caller cannot see or enumerate.
+    /// </summary>
+    [Fact]
+    public async Task Refuses_a_grant_that_belongs_to_a_different_secret()
+    {
+        var grant = Grant(grantedBy: "alice");
+        var (service, grants, sink) = NewService(grant);
+
+        var someOtherSecret = Guid.NewGuid();
+        Assert.NotEqual(grant.SecretId, someOtherSecret);
+
+        Assert.False(await service.RevokeAsync(grant.Id, someOtherSecret, CancellationToken.None));
+        Assert.Equal(0, grants.RemoveCalls); // nothing removed
+        Assert.Equal(0, sink.Writes);        // nothing audited
+    }
+
+    [Fact]
+    public async Task Returns_false_for_a_missing_grant_on_the_owner_side_too()
+    {
+        var (service, grants, sink) = NewService(grant: null);
+
+        Assert.False(await service.RevokeAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None));
+        Assert.Equal(0, grants.RemoveCalls);
+        Assert.Equal(0, sink.Writes);
+    }
 }
