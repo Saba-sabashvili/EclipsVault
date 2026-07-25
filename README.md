@@ -410,23 +410,30 @@ Shipped so far — both built on the existing seams and each verified end-to-end
 
 ## Pricing & licensing
 
-EclipsVault is **self-hosted**: you run it in your own environment and hold your own keys — the vendor never sees your secrets or your servers. A production license is an **annual subscription per production deployment** (one install, however many replicas). It buys three things: the legal right to run in production, ongoing security patches, and best-effort email support. Enforcement is soft — an unlicensed or lapsed vault shows an admin banner and records it, but **never** stops serving secrets.
+EclipsVault is **self-hosted**: you run it in your own environment and hold your own keys — the vendor never sees your secrets or your servers. There are two tiers, **Community** and **Max**. Baseline secret management is complete and **identical in both**; **Max** licenses the six advanced capabilities below for production, plus ongoing updates and best-effort email support. Enforcement is **soft** — every feature always runs; a missing or lapsed licence shows an admin banner and records the use, but it **never** disables a feature or stops serving secrets.
 
 | Tier | Price | For |
 |---|---|---|
-| **Community** | Free | Non-production — homelab, personal, and a 30-day production evaluation. All features present (source-available). |
-| **Pro** | **$249/year** per production deployment | SSO, PostgreSQL, dynamic secrets, Redis HA, and the KMS engine, plus best-effort email support. |
-| **Enterprise / Support** | Custom (annual) | Everything in Pro plus managed rotation, signed audit attestation, priority security patches, an MSA/DPA, and deployment help. Invoice billing. |
+| **Community** | Free | Non-production — homelab, personal, and a 30-day production evaluation. The complete vault on SQL Server *or* PostgreSQL, source-available. |
+| **Max** | **$899 one-time** · per production instance · perpetual licence + 12 months of updates | Production use, plus the six licensed capabilities — **SSO/OIDC, external KMS (Vault Transit), Redis HA, dynamic secrets, managed rotation, and signed audit attestation** — and best-effort email support. |
 
-_Launch offer: a one-time **$99 lifetime Pro** license for the first handful of adopters._
+A Max licence is **perpetual** — buy once, run forever. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free. (Pricing is indicative and finalised at launch.)
+
+**What one licence covers.** One **production deployment** — however many replicas, users, or secrets it holds. Specifically:
+
+- **Replicas don't multiply the licence.** A Redis-backed HA deployment is *one* production deployment, whatever the node count. Running Max's own multi-node feature must never cost extra; a licence that penalised turning on high availability would be arguing against itself.
+- **Seats are unlimited.** Onboarding the whole team costs the same as onboarding one person, so the bill never grows as you hire.
+- **Non-production is free.** Development, staging, CI, and a standby you have not cut over to are not production deployments and are not licensed separately.
+
+A second *production* vault — a separate environment serving different users, or one deployed for a different client — is a second deployment. Note that verification is offline and enforcement is soft, so none of this is technically metered: no instance count is measured, reported, or enforced. It is the licence you are agreeing to, honoured on your word, which is why it is written to be easy to honour.
 
 **Continuity:** if maintenance ever stops, the intent is that customers keep the source and the right to run and patch what they have deployed — a paused project never strands a running vault.
 
-**Buy / renew:** _&lt;Merchant-of-Record link — Polar or Lemon Squeezy — added at launch&gt;_. Contact `sabashvili13@icloud.com` for Enterprise or an invoice.
+**Buy:** _&lt;Merchant-of-Record checkout — added at launch&gt;_. Contact `sabashvili13@icloud.com` for a licence or an invoice.
 
 ### Installing your license
 
-Set the token you receive at purchase as `ECLIPSVAULT_LICENSE`, or place it in a `license.key` file in the app's content root, then restart. The admin **License** page shows your status, tier, and expiry.
+Set the token you receive at purchase as the `ECLIPSVAULT_LICENSE` environment variable (how a container injects it), or point `License:FilePath` at a file that holds the token (e.g. a mounted secret), then restart. The admin **License** page shows your status, tier, and update window.
 
 ## Licence
 
