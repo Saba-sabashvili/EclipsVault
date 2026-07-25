@@ -51,9 +51,14 @@ implication.
 - Fees are those in the Order. Payment is collected by **[Payment processor / Merchant of Record]**,
   which acts as merchant of record and is responsible for charging and remitting any applicable sales
   tax or VAT.
-- **Refunds:** [state your policy — e.g. "a full refund within 14 days of purchase if the Software has
-  not been put into Production Use," or the payment processor's standard policy]. State it plainly here
-  and match it to what the processor enforces.
+- **Refunds:** the Licensor offers a **14-day money-back guarantee** — a Customer may request a full
+  refund within **14 days** of the purchase date, for any reason, by emailing the address below. Refunds
+  are processed by the Merchant of Record named above, per its standard mechanism. A refund
+  **terminates the licence**: because enforcement is soft and licence verification runs entirely offline
+  (there is no remote "kill switch"), the Software keeps running — it is the Customer's to remove — but
+  any Production Use of paid features after a refund is **unlicensed** (see §11). Renewals are subject to
+  the same 14-day policy measured from each renewal date. This policy states plainly what the Licensor
+  will honor; the Merchant of Record's checkout terms are matched to it.
 
 ### 5. Support
 

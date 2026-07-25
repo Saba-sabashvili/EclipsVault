@@ -85,8 +85,13 @@ want. Community is limited by *which features it has*, not *how much it holds*.
 - [ ] Confirm the tier split and the two Community decisions above.
 - [ ] Collapse `LicenseTier` to **{ Community, Max }** (keep an internal `Enterprise`/custom value if
       you want room for bespoke deals, but sell two). `Max` grants **all six** features.
-- [ ] Finalize price. Starting point: **Max $399 one-time / organization** (perpetual + 12 mo
-      updates), renewal ~$180/yr for continued updates. Revisit after the first 10 sales.
+- [x] Finalize price. **Max $899 one-time, per production instance, unlimited seats** (perpetual +
+      12 mo updates). Set against the category's anchors, not against free tools: Passbolt is
+      ~€4.50/user/mo self-hosted on a 10-user minimum (~€540/yr, forever) and ManageEngine PMP's
+      perpetual tiers start at $1,495 — so a one-time $899 sits below the floor of what this
+      category already pays, while the perpetual + unlimited-seat shape is the actual wedge.
+      **Launch is one-time only**; the annual continuing-updates add-on waits for the self-serve
+      renewal portal. Revisit after the first 10 sales.
 - **Deliverable:** a one-page pricing + feature-matrix decision, and an updated tier enum.
 - **Why first:** every downstream task (gating, store, landing copy) depends on this line.
 
