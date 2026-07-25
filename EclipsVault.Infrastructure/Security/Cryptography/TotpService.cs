@@ -24,8 +24,10 @@ public sealed class TotpService : ITotpService
     public string GenerateSecret()
         => Base32.Encode(RandomNumberGenerator.GetBytes(SecretBytes));
 
-    public bool ValidateCode(string secretBase32, string code)
+    public bool TryValidateCode(string secretBase32, string code, long? lastUsedStep, out long matchedStep)
     {
+        matchedStep = 0;
+
         code = code.Trim();
         if (code.Length != Digits || !code.All(char.IsAsciiDigit))
         {
@@ -47,9 +49,19 @@ public sealed class TotpService : ITotpService
 
         for (var drift = -DriftSteps; drift <= DriftSteps; drift++)
         {
-            var expected = Encoding.ASCII.GetBytes(ComputeCode(key, currentStep + drift));
+            var step = currentStep + drift;
+
+            // Single-use: a step at or below the last accepted one has already been spent. Checked
+            // before the comparison so a replay costs the same work as a wrong code.
+            if (lastUsedStep is { } last && step <= last)
+            {
+                continue;
+            }
+
+            var expected = Encoding.ASCII.GetBytes(ComputeCode(key, step));
             if (CryptographicOperations.FixedTimeEquals(expected, provided))
             {
+                matchedStep = step;
                 return true;
             }
         }

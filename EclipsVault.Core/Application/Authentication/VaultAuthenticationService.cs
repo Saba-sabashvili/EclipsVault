@@ -93,11 +93,16 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
             return null;
         }
 
-        if (!_totp.ValidateCode(user.TotpSecret, code))
+        // A code already spent is refused here exactly like a wrong one — including the failure
+        // count — so replaying an observed code is no cheaper than guessing.
+        if (!_totp.TryValidateCode(user.TotpSecret, code, user.LastTotpStep, out var step))
         {
             await RegisterFailureAsync(user, AuditAction.TotpFailed, "TOTP verification failed", ct);
             return null;
         }
+
+        user.LastTotpStep = step;
+        await _users.UpdateAsync(user, ct);
 
         await ResetLockoutAsync(user, ct);
         await AuditUserAsync(AuditAction.LoginSucceeded, user.Id, user.Username, "Password + TOTP", ct);
@@ -184,13 +189,16 @@ public sealed class VaultAuthenticationService : IVaultAuthenticationService
             return null;
         }
 
-        if (!_totp.ValidateCode(user.TotpSecret, code))
+        if (!_totp.TryValidateCode(user.TotpSecret, code, user.LastTotpStep, out var step))
         {
             await AuditUserAsync(AuditAction.TotpFailed, user.Id, user.Username, "Enrollment confirmation failed", ct);
             return null;
         }
 
         user.TotpEnabled = true;
+        // Enrollment spends a step like any other use: the code just typed to prove the authenticator
+        // works must not then be replayable as the first sign-in.
+        user.LastTotpStep = step;
         user.FailedAccessCount = 0;
         user.LockedUntilUtc = null;
         await _users.UpdateAsync(user, ct);
