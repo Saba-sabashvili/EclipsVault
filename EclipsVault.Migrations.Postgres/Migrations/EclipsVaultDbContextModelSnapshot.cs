@@ -194,6 +194,11 @@ namespace EclipsVault.Migrations.Postgres.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int>("HashVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<bool>("IsCritical")
                         .HasColumnType("boolean");
 
@@ -743,6 +748,9 @@ namespace EclipsVault.Migrations.Postgres.Migrations
 
                     b.Property<bool>("IsDisabled")
                         .HasColumnType("boolean");
+
+                    b.Property<long?>("LastTotpStep")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset?>("LockedUntilUtc")
                         .HasColumnType("timestamp with time zone");
