@@ -151,7 +151,16 @@ public static class WebAuthnVerifier
         attested = (flags & FlagAttestedCredentialData) != 0;
     }
 
-    /// <summary>Reads exactly one CBOR data item (the COSE key) and returns its raw encoding, ignoring any trailing extensions.</summary>
+    /// <summary>
+    /// Reads exactly one CBOR data item (the COSE key) and returns its raw encoding, ignoring any
+    /// trailing extensions.
+    ///
+    /// Catches the same set as the attestation parse above rather than only
+    /// <see cref="CborContentException"/>: a key that is absent or cut short surfaces from
+    /// <c>CborReader</c> as <see cref="InvalidOperationException"/>/<see cref="ArgumentException"/>,
+    /// and letting either escape would turn a malformed registration — attacker-supplied input —
+    /// into a 500 instead of the clean refusal every other failure here produces.
+    /// </summary>
     private static byte[] ReadSingleCborItem(ReadOnlyMemory<byte> data)
     {
         try
@@ -159,7 +168,7 @@ public static class WebAuthnVerifier
             var reader = new CborReader(data, CborConformanceMode.Lax, allowMultipleRootLevelValues: true);
             return reader.ReadEncodedValue().ToArray();
         }
-        catch (CborContentException)
+        catch (Exception ex) when (ex is CborContentException or InvalidOperationException or ArgumentException)
         {
             throw new WebAuthnException("Malformed credential public key.");
         }

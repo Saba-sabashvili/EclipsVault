@@ -231,4 +231,36 @@ public class AesGcmCryptoEngineTests
         await Assert.ThrowsAsync<AuthenticationTagMismatchException>(
             () => Engine(options, "kek-a", key).UnsealAsync(relabelled, BindingB, default));
     }
+
+    /// <summary>
+    /// A damaged envelope — truncated by a partial write, a bad restore, or an edit — must fail the
+    /// same way a tampered one does. Before the length check it fell out of a span slice as an
+    /// ArgumentOutOfRangeException, which reads like a fault in the vault rather than a refusal, and
+    /// told anyone probing which kind of damage they had caused.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]   // empty
+    [InlineData(11)]  // shorter than the nonce
+    [InlineData(12)]  // nonce only
+    [InlineData(27)]  // one byte short of nonce + tag
+    public async Task A_truncated_envelope_is_refused_like_a_tampered_one(int length)
+    {
+        var key = Key();
+        var sealed_ = await Engine("kek-a", key).SealAsync(Encoding.UTF8.GetBytes("prod-root-key"), BindingA, default);
+        var truncated = sealed_ with { Ciphertext = sealed_.Ciphertext[..length] };
+
+        await Assert.ThrowsAsync<AuthenticationTagMismatchException>(
+            () => Engine("kek-a", key).UnsealAsync(truncated, BindingA, default));
+    }
+
+    [Fact]
+    public async Task A_truncated_wrapped_dek_is_refused_the_same_way()
+    {
+        var key = Key();
+        var sealed_ = await Engine("kek-a", key).SealAsync(Encoding.UTF8.GetBytes("prod-root-key"), BindingA, default);
+        var truncated = sealed_ with { WrappedDek = sealed_.WrappedDek[..8] };
+
+        await Assert.ThrowsAsync<AuthenticationTagMismatchException>(
+            () => Engine("kek-a", key).UnsealAsync(truncated, BindingA, default));
+    }
 }

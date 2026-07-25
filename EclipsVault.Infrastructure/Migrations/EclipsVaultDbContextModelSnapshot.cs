@@ -194,6 +194,11 @@ namespace EclipsVault.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<int>("HashVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<bool>("IsCritical")
                         .HasColumnType("bit");
 
@@ -743,6 +748,9 @@ namespace EclipsVault.Infrastructure.Migrations
 
                     b.Property<bool>("IsDisabled")
                         .HasColumnType("bit");
+
+                    b.Property<long?>("LastTotpStep")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset?>("LockedUntilUtc")
                         .HasColumnType("datetimeoffset");

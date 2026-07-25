@@ -36,6 +36,17 @@ public class PremiumFeatureUsageRecorderTests
             => throw new AuditWriteFailedException("boom");
     }
 
+    /// <summary>
+    /// Anything that is not the sink's own failure signal — resolving a service or creating a scope
+    /// during shutdown, for instance, raises <see cref="ObjectDisposedException"/>. The recorder sits
+    /// on the secret path, so this must be swallowed exactly like an audit failure.
+    /// </summary>
+    private sealed class UnexpectedlyThrowingAuditSink : IAuditSink
+    {
+        public Task WriteAsync(AuditEntry entry, CancellationToken ct)
+            => throw new ObjectDisposedException(nameof(UnexpectedlyThrowingAuditSink));
+    }
+
     // Writes through the real fail-closed AuditSink/AuditGroupCommitter (as the app does), then counts
     // the LicenseFeatureUnlicensed rows recorded for a feature after N RecordUseAsync calls.
     private static async Task<int> RowsAfter(ILicenseState license, string feature, int calls)
@@ -111,6 +122,29 @@ public class PremiumFeatureUsageRecorderTests
             NullLogger<PremiumFeatureUsageRecorder>.Instance);
 
         // Must not throw.
+        await recorder.RecordUseAsync(LicenseFeatures.Kms, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The class promises it never throws, because it runs on the path that serves secrets. That has
+    /// to hold for every failure, not only the audit sink's own — a narrower catch would let a
+    /// shutdown-time ObjectDisposedException travel up into the operation and make a licensing
+    /// reminder capable of failing a reveal.
+    /// </summary>
+    [Fact]
+    public async Task An_unexpected_failure_is_swallowed_too()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<IAuditSink, UnexpectedlyThrowingAuditSink>();
+        await using var provider = services.BuildServiceProvider();
+
+        var recorder = new PremiumFeatureUsageRecorder(
+            new FakeLicense(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<PremiumFeatureUsageRecorder>.Instance);
+
+        // Must not throw — licensing never blocks the vault.
         await recorder.RecordUseAsync(LicenseFeatures.Kms, CancellationToken.None);
     }
 }

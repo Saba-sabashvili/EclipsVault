@@ -40,6 +40,16 @@ internal static class GcmBlob
     /// </summary>
     public static byte[] Decrypt(byte[] key, byte[] blob, ReadOnlySpan<byte> associatedData)
     {
+        // A blob too short to hold a nonce and a tag is a damaged or truncated envelope — a partial
+        // write, a bad restore, or an edit. Slicing it would throw ArgumentOutOfRangeException, which
+        // reads like a fault in the vault rather than a refusal, and would distinguish "truncated"
+        // from "tampered" to anyone probing. Fail the same way a bad tag does, so every damaged
+        // envelope produces one indistinguishable outcome.
+        if (blob.Length < NonceSize + TagSize)
+        {
+            throw new AuthenticationTagMismatchException();
+        }
+
         var nonce = blob.AsSpan(0, NonceSize);
         var tag = blob.AsSpan(NonceSize, TagSize);
         var ciphertext = blob.AsSpan(NonceSize + TagSize);

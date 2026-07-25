@@ -60,7 +60,13 @@ public sealed class PremiumFeatureUsageRecorder : IPremiumFeatureUsage
                 },
                 ct);
         }
-        catch (AuditWriteFailedException ex)
+        // Deliberately catch everything. The audit sink signals its own failure as
+        // AuditWriteFailedException, but this also creates a scope and resolves a service — during
+        // shutdown either can throw something else entirely (ObjectDisposedException, for one), and
+        // that would travel up into the secret operation that called this. A licensing reminder must
+        // never be able to affect an operation, which is the invariant the whole class exists for,
+        // so the catch has to be as wide as the promise.
+        catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "Could not record the unlicensed-feature-use audit row for '{Feature}' — continuing " +
