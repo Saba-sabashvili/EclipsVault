@@ -112,7 +112,9 @@ Console.WriteLine($"Bundle     : {bundlePath}");
 Console.WriteLine($"Schema     : {bundle.SchemaVersion}");
 Console.WriteLine($"Exported   : {bundle.ExportedAtUtc:u}");
 Console.WriteLine($"Rows       : {bundle.Rows.Count}");
-Console.WriteLine($"Checkpoint : sequence {bundle.Checkpoint.Sequence}, key {bundle.Checkpoint.SigningKeyId}");
+// The key id is recomputed from the bundle's public key rather than read from the checkpoint: the
+// stored label is not covered by the signature, so only the derived value is trustworthy.
+Console.WriteLine($"Checkpoint : sequence {bundle.Checkpoint.Sequence}, key {AuditSigningKeyId.For(bundle.PublicKeySpki)}");
 Console.WriteLine($"Key pinned : {(expectedSpki is null ? "no" : "yes")}");
 Console.WriteLine();
 Console.WriteLine(result.IsValid ? "RESULT: VALID" : "RESULT: INVALID");

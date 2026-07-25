@@ -58,8 +58,9 @@ public sealed class EcdsaAuditCheckpointSigner : IAuditCheckpointSigner, IDispos
         }
 
         PublicKeySpki = _ecdsa.ExportSubjectPublicKeyInfo();
-        // Short, stable id = first 4 bytes of SHA-256(public key), matching the KEK id convention.
-        KeyId = "sig-" + Convert.ToHexString(SHA256.HashData(PublicKeySpki).AsSpan(0, 4)).ToLowerInvariant();
+        // Derived from the key, and derived by the same helper the verifier uses, so the id a
+        // checkpoint carries and the id an auditor recomputes can never disagree.
+        KeyId = AuditSigningKeyId.For(PublicKeySpki);
     }
 
     public byte[] PublicKeySpki { get; }

@@ -36,6 +36,9 @@ public static class AuditChainInitializer
                 seq++;
                 row.Sequence = seq;
                 row.PreviousHash = prev;
+                // Back-filling seals a row for the first time, so it gets the current scheme —
+                // this never re-hashes a row that already carries an EntryHash.
+                row.HashVersion = AuditRowHasher.CurrentVersion;
                 row.EntryHash = AuditRowHasher.Compute(row, prev);
                 prev = row.EntryHash;
             }

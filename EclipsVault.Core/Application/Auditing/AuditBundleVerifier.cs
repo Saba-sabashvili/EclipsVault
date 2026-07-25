@@ -88,8 +88,17 @@ public static class AuditBundleVerifier
         var trust = expectedPublicKeySpki is null
             ? "(unpinned — this proves the bundle is self-consistent and signed by its own embedded key, not that the key is the vault's)"
             : "(key pinned to the expected value)";
+
+        // Report the id derived from the key that actually verified the signature, not the one the
+        // bundle claims: SigningKeyId is not covered by the signature, so an edited bundle could
+        // name any key. A disagreement is worth surfacing — nothing legitimate produces one.
+        var keyId = AuditSigningKeyId.For(bundle.PublicKeySpki);
+        var claimed = string.Equals(bundle.Checkpoint.SigningKeyId, keyId, StringComparison.Ordinal)
+            ? string.Empty
+            : $" NOTE: the bundle labels this key '{bundle.Checkpoint.SigningKeyId}', which is not the id of the key that signed it — that label is not covered by the signature and has been edited or was written by an older build.";
+
         return new AuditBundleVerification(true, verified, null, true,
-            $"Chain intact across {verified} row(s); checkpoint at sequence {headSequence} is validly signed by key {bundle.Checkpoint.SigningKeyId} {trust}.");
+            $"Chain intact across {verified} row(s); checkpoint at sequence {headSequence} is validly signed by key {keyId} {trust}.{claimed}");
     }
 
     private static bool SignatureIsValid(AuditBundle bundle)
@@ -124,6 +133,8 @@ public static class AuditBundleVerifier
         ResourceId = r.ResourceId,
         ResourceName = r.ResourceName,
         Details = r.Details,
-        IsCritical = r.IsCritical
+        IsCritical = r.IsCritical,
+        // 0 means the bundle predates the field; those rows were sealed under version 1.
+        HashVersion = r.HashVersion == 0 ? AuditRowHasher.LegacyVersion : r.HashVersion
     };
 }

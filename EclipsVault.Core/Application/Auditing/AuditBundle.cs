@@ -1,6 +1,12 @@
 namespace EclipsVault.Core.Application.Auditing;
 
-/// <summary>One audit row as carried in an exported bundle — every field the row hash binds.</summary>
+/// <summary>
+/// One audit row as carried in an exported bundle — every field the row hash binds.
+///
+/// <paramref name="HashVersion"/> is last and defaulted so that a bundle exported before the field
+/// existed still deserialises: it arrives as 0 and is read as version 1, which is what those rows
+/// were sealed with. An auditor's older bundle must never stop verifying because we added a field.
+/// </summary>
 public sealed record AuditBundleRow(
     long Sequence,
     Guid Id,
@@ -15,7 +21,8 @@ public sealed record AuditBundleRow(
     string? Details,
     bool IsCritical,
     string PreviousHash,
-    string EntryHash);
+    string EntryHash,
+    int HashVersion = AuditRowHasher.LegacyVersion);
 
 /// <summary>The signed checkpoint as carried in a bundle.</summary>
 public sealed record AuditBundleCheckpoint(
