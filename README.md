@@ -417,7 +417,15 @@ EclipsVault is **self-hosted**: you run it in your own environment and hold your
 | **Community** | Free | Non-production — homelab, personal, and a 30-day production evaluation. The complete vault on SQL Server *or* PostgreSQL, source-available. |
 | **Max** | **$899 one-time** · per production instance · perpetual licence + 12 months of updates | Production use, plus the six licensed capabilities — **SSO/OIDC, external KMS (Vault Transit), Redis HA, dynamic secrets, managed rotation, and signed audit attestation** — and best-effort email support. |
 
-A Max licence is **perpetual** — buy once, run forever. It is priced **per production instance with unlimited seats**: onboarding the whole team costs the same as onboarding one person, so the bill never grows as you hire. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free. (Pricing is indicative and finalised at launch.)
+A Max licence is **perpetual** — buy once, run forever. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free. (Pricing is indicative and finalised at launch.)
+
+**What one licence covers.** One **production deployment** — however many replicas, users, or secrets it holds. Specifically:
+
+- **Replicas don't multiply the licence.** A Redis-backed HA deployment is *one* production deployment, whatever the node count. Running Max's own multi-node feature must never cost extra; a licence that penalised turning on high availability would be arguing against itself.
+- **Seats are unlimited.** Onboarding the whole team costs the same as onboarding one person, so the bill never grows as you hire.
+- **Non-production is free.** Development, staging, CI, and a standby you have not cut over to are not production deployments and are not licensed separately.
+
+A second *production* vault — a separate environment serving different users, or one deployed for a different client — is a second deployment. Note that verification is offline and enforcement is soft, so none of this is technically metered: no instance count is measured, reported, or enforced. It is the licence you are agreeing to, honoured on your word, which is why it is written to be easy to honour.
 
 **Continuity:** if maintenance ever stops, the intent is that customers keep the source and the right to run and patch what they have deployed — a paused project never strands a running vault.
 
