@@ -108,6 +108,22 @@ controls above.
    those upstream) — are outside this boundary.
 10. **Cryptographic assumptions.** The controls assume today's primitives (Argon2id, AES-256-GCM,
     ECDSA P-256, SHA-256) hold. A future break of an underlying algorithm is out of scope.
+11. **Reclassifying a secret by writing to the database directly.** Envelopes are bound to the row
+    they belong in, so someone with database write cannot *move* a secret's ciphertext somewhere they
+    are cleared to read it (in scope, item 1 above). The binding covers immutable identity only —
+    deliberately, so that reclassifying a secret is not a re-encryption — which means the access
+    *attributes* are not bound. An attacker with database write can therefore lower a secret's
+    `Sensitivity`, change its `ProjectKey`, or change its `Environment`, and the ABAC rules will then
+    correctly permit an account that could not read it before. The envelope never moved; the policy
+    inputs did.
+    - **What still holds:** the read itself is audited like any other, so the access is attributable
+      and tamper-evident.
+    - **The tell:** a reclassification performed through the vault writes a `SecretUpdated` audit
+      entry. One performed directly against the database does not. **A secret whose classification
+      changed with no audit entry explaining it is the signal**, and it is worth alerting on.
+    - **Reducing it:** this is the general "database write is a powerful position" case — keep the
+      application's login least-privileged (see the invariants below), keep database credentials out
+      of reach of the application host, and review the audit trail rather than the table.
 
 ## Invariants that bound the blast radius
 
@@ -123,6 +139,16 @@ These hold by construction and are worth stating because they limit how bad a fa
 - **Least privilege at rest.** The application's own database login has no schema (DDL) rights;
   migrations run from the deploy job under a separate login. A compromise of the running app cannot
   rewrite the schema or the audit tables.
+  - **Dynamic secrets and managed rotation do not weaken this.** They run `CREATE LOGIN`,
+    `DROP LOGIN`, and `ALTER LOGIN`, which need server-level rights (`ALTER ANY LOGIN` on SQL
+    Server) — rights that can re-password *any* principal on that instance. Those statements
+    therefore run against a **separately configured target database** over its own connection
+    (`DynamicSecrets:TargetConnectionString`), never over the vault's. The privileged credential is
+    the target's, not the vault's, and the target can be — and normally should be — a different
+    server entirely. If no target is configured, minting and rotation **refuse**; there is no
+    fallback to the vault's connection, because a fallback would silently require the vault's own
+    login to hold a privilege that would put the audit trail's own server within reach of an
+    application compromise.
 
 ## Reporting a weakness
 
