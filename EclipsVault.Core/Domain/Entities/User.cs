@@ -30,6 +30,12 @@ public class User
     /// <summary>True once the user has proven possession of the authenticator.</summary>
     public bool TotpEnabled { get; set; }
 
+    /// <summary>
+    /// The last TOTP time step this account successfully authenticated with, so the same one-time
+    /// password cannot be used twice (RFC 6238 §5.2). Null until the first TOTP success.
+    /// </summary>
+    public long? LastTotpStep { get; set; }
+
     /// <summary>ABAC subject attribute: clearance held by this user.</summary>
     public ClearanceLevel Clearance { get; set; } = ClearanceLevel.Standard;
 

@@ -26,7 +26,15 @@ public sealed class StepUpService : IStepUpService
     public async Task<bool> VerifyAsync(Guid userId, string code, CancellationToken ct)
     {
         var user = await _users.FindByIdAsync(userId, ct);
-        if (user is null || !user.TotpEnabled || string.IsNullOrEmpty(user.TotpSecret) || !_totp.ValidateCode(user.TotpSecret, code))
+
+        // Step-up shares the single-use ledger with sign-in, deliberately: the code that just let
+        // someone in must not also unlock a high-sensitivity reveal, and a code spent here must not
+        // then work at the login screen.
+        long step = 0;
+        if (user is null
+            || !user.TotpEnabled
+            || string.IsNullOrEmpty(user.TotpSecret)
+            || !_totp.TryValidateCode(user.TotpSecret, code, user.LastTotpStep, out step))
         {
             if (user is not null)
             {
@@ -35,6 +43,9 @@ public sealed class StepUpService : IStepUpService
 
             return false;
         }
+
+        user.LastTotpStep = step;
+        await _users.UpdateAsync(user, ct);
 
         await _audit.WriteUserEventAsync(AuditAction.StepUpVerified, user.Id, user.Username, "Re-authenticated for a sensitive reveal", ct);
         return true;
