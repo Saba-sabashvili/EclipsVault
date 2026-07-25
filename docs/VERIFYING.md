@@ -38,7 +38,8 @@ curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-li
 
 ## 2. Verify the image signature
 
-Replace `v1.0.0` with the release you intend to run:
+Replace `1.0.0` with the release you intend to run. Note that **image tags carry no `v` prefix**: the
+git tag `v1.0.0` publishes the image as `:1.0.0` (plus a rolling `:1.0` for the minor series).
 
 ```bash
 cosign verify \
@@ -46,7 +47,7 @@ cosign verify \
     'https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer \
     'https://token.actions.githubusercontent.com' \
-  ghcr.io/saba-sabashvili/eclipsvault:v1.0.0
+  ghcr.io/saba-sabashvili/eclipsvault:1.0.0
 ```
 
 A successful verification prints the checked claims and exits `0`. It confirms the image was signed by
@@ -64,7 +65,7 @@ digest=$(cosign verify \
     'https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer \
     'https://token.actions.githubusercontent.com' \
-  ghcr.io/saba-sabashvili/eclipsvault:v1.0.0 2>/dev/null \
+  ghcr.io/saba-sabashvili/eclipsvault:1.0.0 2>/dev/null \
   | jq -r '.[0].critical.image."docker-manifest-digest"')
 
 echo "Verified digest: $digest"
@@ -85,7 +86,7 @@ cosign verify-attestation \
     'https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer \
     'https://token.actions.githubusercontent.com' \
-  ghcr.io/saba-sabashvili/eclipsvault:v1.0.0 \
+  ghcr.io/saba-sabashvili/eclipsvault:1.0.0 \
   | jq -r '.payload | @base64d | fromjson | .predicate' > sbom.json
 ```
 
