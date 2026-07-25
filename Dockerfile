@@ -17,12 +17,17 @@ RUN dotnet publish EclipsVault.Web/EclipsVault.Web.csproj -c Release -o /app --n
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS runtime
 WORKDIR /app
-COPY --from=build /app .
 
-# Run as a non-root user.
-RUN adduser --disabled-password --gecos "" --uid 10001 vault \
-    && chown -R vault /app
-USER vault
+# Run as a non-root user. Use the `app` account the base image already ships (its UID is published
+# as $APP_UID, currently 1654) rather than creating one: this image carries a shell but no `adduser`
+# binary, so the previous `adduser ... --uid 10001 vault` failed with exit 127 and no image could be
+# built at all. The image's own User field is unset, so declaring USER here is what actually drops
+# root — without it the vault runs as root.
+#
+# Ownership is set during the copy instead of by a later `chown -R`, which would duplicate the whole
+# publish output into a second layer for nothing.
+COPY --from=build --chown=$APP_UID:$APP_UID /app .
+USER $APP_UID
 
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080

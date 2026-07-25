@@ -89,6 +89,35 @@ jobs:
             exit 1
           fi
 
+  # The release workflow builds this Dockerfile, but it only ever runs on a v* tag — so before this
+  # job existed, the first execution of the production image build was also its first test, on the
+  # tag that was supposed to be the release. A Dockerfile break would surface as a failed release
+  # rather than a failed PR, and recovering means deleting and re-pushing a tag that may already be
+  # public. Build it here on every push so a tag only ever publishes something already proven to
+  # build.
+  #
+  # Build only: no push, no registry credentials, no cosign. Signing needs the tag's OIDC identity
+  # and a real digest in GHCR, so it stays in release.yml — this job de-risks the step that has no
+  # such requirement. Kept deliberately identical to release.yml's build (same context, same action)
+  # so it is a rehearsal and not merely a similar-looking build.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          # GitHub's action cache keeps the restore/publish layers warm across runs; without it
+          # every PR pays a full NuGet restore and publish.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   sbom:
     runs-on: ubuntu-latest
     steps:
