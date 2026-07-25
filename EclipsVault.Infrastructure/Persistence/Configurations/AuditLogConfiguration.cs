@@ -20,6 +20,10 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(a => a.PreviousHash).HasMaxLength(64);
         builder.Property(a => a.EntryHash).HasMaxLength(64);
 
+        // Existing rows were sealed before this column existed, so the stored default is 1 — the
+        // scheme they were written with. New rows are stamped explicitly by the chain writer.
+        builder.Property(a => a.HashVersion).HasDefaultValue(1);
+
         builder.HasIndex(a => a.TimestampUtc);
         builder.HasIndex(a => a.ResourceId);
         builder.HasIndex(a => a.UserId);

@@ -78,7 +78,7 @@ public sealed class AuditCheckpointService : IAuditCheckpointService
             .Select(a => new AuditBundleRow(
                 a.Sequence, a.Id, a.TimestampUtc, a.UserId, a.Username, a.SourceIp, (int)a.Action,
                 a.ResourceType, a.ResourceId, a.ResourceName, a.Details, a.IsCritical,
-                a.PreviousHash!, a.EntryHash!))
+                a.PreviousHash!, a.EntryHash!, a.HashVersion))
             .ToListAsync(ct);
 
         var headSequence = rows.Count == 0 ? 0 : rows[^1].Sequence;

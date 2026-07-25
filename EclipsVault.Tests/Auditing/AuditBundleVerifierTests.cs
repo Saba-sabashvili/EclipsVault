@@ -200,4 +200,48 @@ public class AuditBundleVerifierTests
         var result = AuditBundleVerifier.Verify(genuine, otherKey.ExportSubjectPublicKeyInfo());
         Assert.False(result.IsValid);
     }
+
+    /// <summary>
+    /// A checkpoint's SigningKeyId is not covered by the signature, so a bundle can be edited to
+    /// name any key without breaking verification. The id an auditor is shown must therefore be
+    /// derived from the public key that actually verified the signature — otherwise the one piece of
+    /// provenance a human reads off the report is the one piece an attacker can choose.
+    /// </summary>
+    [Fact]
+    public void The_reported_key_id_is_derived_from_the_key_that_signed_not_the_stored_label()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var expected = AuditSigningKeyId.For(key.ExportSubjectPublicKeyInfo());
+
+        var bundle = Bundle(Chain(3), key);
+        var mislabelled = bundle with
+        {
+            Checkpoint = bundle.Checkpoint with { SigningKeyId = "sig-deadbeef" }
+        };
+
+        var result = AuditBundleVerifier.Verify(mislabelled);
+
+        // Still valid — the label was never part of the signed material.
+        Assert.True(result.IsValid);
+        // But the report names the real key, and says the label disagreed.
+        Assert.Contains(expected, result.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("validly signed by key sig-deadbeef", result.Message, StringComparison.Ordinal);
+        Assert.Contains("not covered by the signature", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_correctly_labelled_bundle_reports_no_discrepancy()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var keyId = AuditSigningKeyId.For(key.ExportSubjectPublicKeyInfo());
+
+        var bundle = Bundle(Chain(3), key);
+        var labelled = bundle with { Checkpoint = bundle.Checkpoint with { SigningKeyId = keyId } };
+
+        var result = AuditBundleVerifier.Verify(labelled);
+
+        Assert.True(result.IsValid);
+        Assert.Contains(keyId, result.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("NOTE:", result.Message, StringComparison.Ordinal);
+    }
 }

@@ -44,4 +44,12 @@ public class AuditLog
 
     /// <summary>This row's hash: SHA-256 over its immutable content and <see cref="PreviousHash"/>.</summary>
     public string? EntryHash { get; set; }
+
+    /// <summary>
+    /// Which canonical form <see cref="EntryHash"/> was computed with. Defaults to 1 — the scheme
+    /// that existed before this column, so a row loaded from an older database (or an older exported
+    /// bundle, where the field is absent) still verifies exactly as it was written. The chain writer
+    /// stamps the current version on new rows; nothing ever re-hashes a stored row.
+    /// </summary>
+    public int HashVersion { get; set; } = 1;
 }

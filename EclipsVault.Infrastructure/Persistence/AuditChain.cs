@@ -111,6 +111,7 @@ public sealed class AuditChain
             sequence++;
             row.Sequence = sequence;
             row.PreviousHash = previous;
+            row.HashVersion = AuditRowHasher.CurrentVersion; // seal new rows with the current scheme
             row.EntryHash = AuditRowHasher.Compute(row, previous);
             previous = row.EntryHash;
         }
