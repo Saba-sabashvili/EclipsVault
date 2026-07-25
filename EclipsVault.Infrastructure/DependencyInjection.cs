@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.Configure<AuditSigningOptions>(configuration.GetSection(AuditSigningOptions.SectionName));
         services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
         services.Configure<LicenseOptions>(configuration.GetSection(LicenseOptions.SectionName));
+        services.Configure<DynamicSecretTargetOptions>(configuration.GetSection(DynamicSecretTargetOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddMemoryCache();

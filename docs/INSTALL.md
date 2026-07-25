@@ -20,6 +20,7 @@ secrets or your servers. This guide is the production runbook; for feature detai
 | `ECLIPSVAULT_KEK` | Master key: `openssl rand -base64 32`. Or use a KMS engine — set `Crypto__Engine=VaultTransit` and the `Vault` settings (see `docker-compose.yml` for the shape). |
 | `ECLIPSVAULT_AUDIT_SIGNING_KEY` | Base64 PKCS#8 P-256 private key for signing audit checkpoints. |
 | `DataProtection__KeyRingPath` | Durable directory shared by all nodes (the keys are sealed at rest with the KEK). |
+| `DynamicSecrets__TargetConnectionString` | **Only if you use dynamic secrets or managed rotation.** The database whose logins the vault manages — see [Dynamic secrets: the managed target](#dynamic-secrets-the-managed-target) below. Deliberately separate from `ConnectionStrings__DefaultConnection`. |
 | `ECLIPSVAULT_LICENSE` | Your license token (or place it in a `license.key` file in the content root). |
 | `ASPNETCORE_ENVIRONMENT` | Must be `Production` (anything other than `Development` disables dev seeding and fallbacks). |
 | `ForwardedHeaders__KnownProxies` | The IP(s) of your reverse proxy, so the real client IP is trusted for rate limiting, the IP blacklist, ABAC network rules, and audit. |
@@ -37,6 +38,28 @@ For PostgreSQL, use the `EclipsVault.Migrations.Postgres` project and set
 `ECLIPSVAULT_DESIGN_PROVIDER=Postgres` (the design-time factory also reads
 `ECLIPSVAULT_DESIGN_CONNECTION` if you keep the runtime connection string out of that shell). The app
 verifies the schema at startup and refuses to start against a mismatched one.
+
+### Dynamic secrets: the managed target
+
+Skip this unless you use **dynamic secrets** or **managed rotation**. Both work by issuing
+`CREATE LOGIN`, `DROP LOGIN`, and `ALTER LOGIN` against the database whose credentials you want the
+vault to manage. That needs server-level rights there — `ALTER ANY LOGIN` on SQL Server.
+
+Those rights are why this is a **second, separate connection string**:
+
+    DynamicSecrets__TargetConnectionString="Server=app-db;Database=app;User Id=eclipsvault_credmgr;Password=…;Encrypt=True;TrustServerCertificate=False"
+
+- **Point it at the database you want managed, not at the vault's own.** Minting credentials on the
+  vault's database is almost never what you want, and it is not the default.
+- **Use a dedicated login on that server**, granted only `ALTER ANY LOGIN` (plus whatever your role
+  statements need). Do not reuse `ConnectionStrings__DefaultConnection`.
+- **Why they are separate:** `ALTER ANY LOGIN` can re-password *any* principal on the instance that
+  holds it. If the vault's own login held it, a compromise of the running application would reach
+  the server that stores the audit trail — so the vault never asks for it. See
+  `docs/THREAT_MODEL.md` → *Invariants that bound the blast radius*.
+- **If it is unset, minting and rotation refuse**, with an error naming this setting. There is no
+  fallback to the vault's connection: falling back would quietly require the privilege above.
+- The target may be a different server, and in most deployments it should be.
 
 ## 4. First administrator
 
