@@ -12,8 +12,6 @@ namespace EclipsVault.Infrastructure.Auditing;
 /// </summary>
 public sealed class AuditCheckpointService : IAuditCheckpointService
 {
-    private const string BundleSchemaVersion = "eclipsvault.audit-bundle/1";
-
     private readonly EclipsVaultDbContext _db;
     private readonly IAuditCheckpointSigner _signer;
     private readonly IAuditSink _audit;
@@ -93,7 +91,7 @@ public sealed class AuditCheckpointService : IAuditCheckpointService
         }, ct);
 
         return new AuditBundle(
-            BundleSchemaVersion,
+            AuditBundleSchema.Current,
             _clock.GetUtcNow(),
             _signer.PublicKeySpki,
             new AuditBundleCheckpoint(checkpoint.Sequence, checkpoint.ChainHeadHash, checkpoint.CreatedAtUtc, checkpoint.SigningKeyId, checkpoint.Signature),
