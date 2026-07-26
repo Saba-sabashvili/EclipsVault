@@ -25,3 +25,6 @@ secrets.json
 
 # Session handoff scratch note (kept on disk for cross-session context, not versioned)
 docs/HANDOFF.md
+
+# Vendor-internal operations (quotes, minting runbook, issuance ledger) — never published.
+docs/internal/
