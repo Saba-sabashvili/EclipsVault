@@ -282,6 +282,7 @@ The mechanisms above are the *what*. These documents are the *boundary* and the 
 - **[Backup & recovery](docs/BACKUP_AND_RECOVERY.md)** — the three things to back up, the KEK-custody rule, and a tested restore procedure.
 - **[Verifying a release](docs/VERIFYING.md)** — every release image is keyless-signed with Sigstore cosign; verify it (and its signed SBOM) before you run it.
 - **[Production install](docs/INSTALL.md)** — the deployment runbook (required configuration, least-privilege schema migration, verification).
+- **[Installing a licence](docs/LICENSE_INSTALL.md)** — where the token goes, what each status message means, and why nothing stops when a licence is missing.
 
 ## Extension points
 

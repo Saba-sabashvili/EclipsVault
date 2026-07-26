@@ -14,6 +14,23 @@ public class LicenseVerifierTests
         "lic-1", LicenseTier.Max, "Acme Ltd", "ops@acme.example",
         new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), notAfter, null, 3, []);
 
+    /// <summary>
+    /// The configuration every build ships in until a vendor keypair is generated: the pinned public
+    /// key is empty. Verification must stay soft there rather than throwing — an unconfigured vendor
+    /// key is the vendor's problem and must never become the operator's outage. Worth pinning because
+    /// this is the path that actually runs in production today, and it had no coverage.
+    /// </summary>
+    [Fact]
+    public void An_unset_vendor_key_refuses_every_licence_without_throwing()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var token = LicenseSigner.Sign(Claims(Now.AddYears(1)), key);
+
+        var result = LicenseVerifier.Verify(token, LicensePublicKey.Spki, Now);
+
+        Assert.Equal(LicenseStatus.InvalidSignature, result.Status);
+    }
+
     [Fact]
     public void A_correctly_signed_unexpired_token_is_valid()
     {
