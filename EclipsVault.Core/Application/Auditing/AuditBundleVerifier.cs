@@ -37,6 +37,18 @@ public static class AuditBundleVerifier
     /// </summary>
     public static AuditBundleVerification Verify(AuditBundle bundle, byte[]? expectedPublicKeySpki)
     {
+        // (0) Refuse a format this build does not know, and say plainly that it is not tampering.
+        // Verifying anyway would mean recomputing hashes under assumptions the bundle does not
+        // share, which produces a mismatch indistinguishable from an edited row — accusing an
+        // honest trail of tampering because the verifier is out of date.
+        if (!AuditBundleSchema.IsSupported(bundle.SchemaVersion))
+        {
+            return new AuditBundleVerification(false, 0, null, false,
+                $"This bundle is in format '{bundle.SchemaVersion}', which this verifier does not understand — " +
+                "it was exported by a newer EclipsVault. This is NOT evidence of tampering and says nothing " +
+                "about the trail either way. Re-run with a verifier from the release that exported it, or newer.");
+        }
+
         var rows = bundle.Rows.OrderBy(r => r.Sequence).ToList();
 
         // (1) Re-walk the chain, recomputing every row's hash from its content + the running head.

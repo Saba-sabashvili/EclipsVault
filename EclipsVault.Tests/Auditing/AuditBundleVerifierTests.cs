@@ -14,37 +14,42 @@ public class AuditBundleVerifierTests
 {
     // ---- Builders: produce a correctly chained + signed bundle, mirroring the vault ----------
 
-    private static AuditBundleRow Row(long seq, string previousHash, string details)
+    private static AuditLog Log(long seq, string previousHash, string details, int hashVersion) => new()
     {
-        var log = new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            Sequence = seq,
-            TimestampUtc = DateTimeOffset.UnixEpoch.AddMinutes(seq),
-            UserId = Guid.NewGuid(),
-            Username = "alice",
-            SourceIp = "10.0.0.1",
-            Action = AuditAction.SecretRevealed,
-            ResourceType = "Secret",
-            ResourceName = "Phoenix_Staging_Api_Key",
-            Details = details,
-            IsCritical = false,
-            PreviousHash = previousHash
-        };
+        Id = Guid.NewGuid(),
+        Sequence = seq,
+        TimestampUtc = DateTimeOffset.UnixEpoch.AddMinutes(seq),
+        UserId = Guid.NewGuid(),
+        Username = "alice",
+        SourceIp = "10.0.0.1",
+        Action = AuditAction.SecretRevealed,
+        ResourceType = "Secret",
+        ResourceName = "Phoenix_Staging_Api_Key",
+        Details = details,
+        IsCritical = false,
+        PreviousHash = previousHash,
+        HashVersion = hashVersion
+    };
+
+    private static AuditBundleRow Row(
+        long seq, string previousHash, string details, int hashVersion = AuditRowHasher.LegacyVersion)
+    {
+        var log = Log(seq, previousHash, details, hashVersion);
         var entryHash = AuditRowHasher.Compute(log, previousHash);
         return new AuditBundleRow(
             log.Sequence, log.Id, log.TimestampUtc, log.UserId, log.Username, log.SourceIp,
             (int)log.Action, log.ResourceType, log.ResourceId, log.ResourceName, log.Details,
-            log.IsCritical, previousHash, entryHash);
+            log.IsCritical, previousHash, entryHash, hashVersion);
     }
 
-    private static List<AuditBundleRow> Chain(int count, string tag = "row")
+    private static List<AuditBundleRow> Chain(
+        int count, string tag = "row", int hashVersion = AuditRowHasher.LegacyVersion)
     {
         var rows = new List<AuditBundleRow>();
         var previous = AuditRowHasher.GenesisHash;
         for (var i = 1; i <= count; i++)
         {
-            var row = Row(i, previous, $"{tag} {i}");
+            var row = Row(i, previous, $"{tag} {i}", hashVersion);
             rows.Add(row);
             previous = row.EntryHash;
         }
@@ -61,7 +66,7 @@ public class AuditBundleVerifierTests
             AuditCheckpointCanonical.Bytes(headSeq, headHash, createdAt), HashAlgorithmName.SHA256);
 
         return new AuditBundle(
-            "eclipsvault.audit-bundle/1",
+            AuditBundleSchema.Current,
             createdAt,
             signingKey.ExportSubjectPublicKeyInfo(),
             new AuditBundleCheckpoint(headSeq, headHash, createdAt, "sig-test", signature),
@@ -243,5 +248,99 @@ public class AuditBundleVerifierTests
         Assert.True(result.IsValid);
         Assert.Contains(keyId, result.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("NOTE:", result.Message, StringComparison.Ordinal);
+    }
+
+    // ---- Bundle format compatibility ---------------------------------------------------------
+    // A verifier is shipped to auditors and then lives on their machines for years, so the two
+    // directions are not symmetric. Reading an OLDER bundle must keep working forever. Reading a
+    // NEWER one cannot work — but it must fail as "I can't read this", never as "this was edited".
+
+    /// <summary>A bundle an auditor exported before the row-hash version existed still verifies.</summary>
+    [Fact]
+    public void A_bundle_in_the_previous_format_still_verifies()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var old = Bundle(Chain(5), key) with { SchemaVersion = AuditBundleSchema.V1 };
+
+        var result = AuditBundleVerifier.Verify(old, key.ExportSubjectPublicKeyInfo());
+
+        Assert.True(result.IsValid);
+        Assert.Equal(5, result.RowsVerified);
+    }
+
+    [Fact]
+    public void A_bundle_of_rows_sealed_under_the_current_hash_version_verifies()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var rows = Chain(5, hashVersion: AuditRowHasher.CurrentVersion);
+
+        var result = AuditBundleVerifier.Verify(Bundle(rows, key), key.ExportSubjectPublicKeyInfo());
+
+        Assert.True(result.IsValid);
+        Assert.Equal(5, result.RowsVerified);
+    }
+
+    /// <summary>A chain spanning an upgrade holds both kinds of row and must verify as one chain.</summary>
+    [Fact]
+    public void A_chain_that_spans_an_upgrade_verifies_across_both_hash_versions()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        var rows = new List<AuditBundleRow>();
+        var previous = AuditRowHasher.GenesisHash;
+        for (var i = 1; i <= 6; i++)
+        {
+            // Rows 1-3 were sealed before the upgrade, rows 4-6 after it.
+            var version = i <= 3 ? AuditRowHasher.LegacyVersion : AuditRowHasher.CurrentVersion;
+            var row = Row(i, previous, $"row {i}", version);
+            rows.Add(row);
+            previous = row.EntryHash;
+        }
+
+        var result = AuditBundleVerifier.Verify(Bundle(rows, key), key.ExportSubjectPublicKeyInfo());
+
+        Assert.True(result.IsValid);
+        Assert.Equal(6, result.RowsVerified);
+    }
+
+    [Theory]
+    [InlineData("eclipsvault.audit-bundle/3")]
+    [InlineData("eclipsvault.audit-bundle/99")]
+    [InlineData("something-else-entirely")]
+    [InlineData("")]
+    public void A_bundle_from_a_newer_release_is_refused_without_alleging_tampering(string schema)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var future = Bundle(Chain(5), key) with { SchemaVersion = schema };
+
+        var result = AuditBundleVerifier.Verify(future, key.ExportSubjectPublicKeyInfo());
+
+        // Fail closed: an unreadable bundle is never reported as verified.
+        Assert.False(result.IsValid);
+        Assert.False(result.SignatureValid);
+
+        // But the auditor must not be told the trail was edited, and must be told what to do.
+        Assert.Contains("NOT evidence of tampering", result.Message, StringComparison.Ordinal);
+        Assert.Contains("newer EclipsVault", result.Message, StringComparison.Ordinal);
+        Assert.Null(result.FirstBrokenSequence);
+        Assert.DoesNotContain("edited", result.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Why the format version had to move at all. A row sealed under hash version 2 does not hash to
+    /// the same digest under version 1 — so a verifier that predates the <c>HashVersion</c> field
+    /// (which JSON deserialisation silently drops) recomputes the wrong digest and concludes the row
+    /// was edited. That false accusation is the failure the schema gate above exists to prevent, and
+    /// this test pins the premise: the two schemes genuinely disagree.
+    /// </summary>
+    [Fact]
+    public void A_row_sealed_under_version_2_does_not_match_the_version_1_hash()
+    {
+        var log = Log(1, AuditRowHasher.GenesisHash, "row 1", AuditRowHasher.CurrentVersion);
+
+        var sealedV2 = AuditRowHasher.Compute(log, AuditRowHasher.GenesisHash);
+        var asAnOlderVerifierWouldCompute = AuditRowHasher.ComputeV1(log, AuditRowHasher.GenesisHash);
+
+        Assert.NotEqual(asAnOlderVerifierWouldCompute, sealedV2);
     }
 }
