@@ -15,10 +15,10 @@ public class LicenseVerifierTests
         new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), notAfter, null, 3, []);
 
     /// <summary>
-    /// The configuration every build ships in until a vendor keypair is generated: the pinned public
-    /// key is empty. Verification must stay soft there rather than throwing — an unconfigured vendor
-    /// key is the vendor's problem and must never become the operator's outage. Worth pinning because
-    /// this is the path that actually runs in production today, and it had no coverage.
+    /// A build with no vendor key pinned must stay soft rather than throwing — an unconfigured vendor
+    /// key is the vendor's problem and must never become the operator's outage. Note this passes an
+    /// explicitly empty key rather than reading the pinned one: written when the pinned key really was
+    /// empty, it would have quietly stopped testing anything the moment a key was set.
     /// </summary>
     [Fact]
     public void An_unset_vendor_key_refuses_every_licence_without_throwing()
@@ -26,7 +26,40 @@ public class LicenseVerifierTests
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var token = LicenseSigner.Sign(Claims(Now.AddYears(1)), key);
 
-        var result = LicenseVerifier.Verify(token, LicensePublicKey.Spki, Now);
+        var result = LicenseVerifier.Verify(token, [], Now);
+
+        Assert.Equal(LicenseStatus.InvalidSignature, result.Status);
+    }
+
+    /// <summary>
+    /// The pinned vendor key must be a usable P-256 public key. A truncated or mangled paste would
+    /// otherwise ship silently: every licence would verify as InvalidSignature, soft enforcement would
+    /// keep the vault running, and the first evidence of the mistake would be a paying customer whose
+    /// vault says "unlicensed". This costs nothing and closes exactly that gap.
+    /// </summary>
+    [Fact]
+    public void The_pinned_vendor_key_is_a_usable_P256_public_key()
+    {
+        Assert.NotEmpty(LicensePublicKey.Spki);
+
+        using var ecdsa = ECDsa.Create();
+        ecdsa.ImportSubjectPublicKeyInfo(LicensePublicKey.Spki, out var bytesRead);
+
+        Assert.Equal(LicensePublicKey.Spki.Length, bytesRead);
+        Assert.Equal(256, ecdsa.KeySize);
+    }
+
+    /// <summary>
+    /// A licence signed by anyone other than the vendor must not verify against the pinned key. This
+    /// is the property the whole licensing scheme rests on, asserted against the real shipped key.
+    /// </summary>
+    [Fact]
+    public void A_licence_signed_by_a_stranger_is_refused_by_the_pinned_key()
+    {
+        using var impostor = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var forged = LicenseSigner.Sign(Claims(Now.AddYears(1)), impostor);
+
+        var result = LicenseVerifier.Verify(forged, LicensePublicKey.Spki, Now);
 
         Assert.Equal(LicenseStatus.InvalidSignature, result.Status);
     }
