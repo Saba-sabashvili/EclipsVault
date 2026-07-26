@@ -196,6 +196,12 @@ public static class DependencyInjection
             ? SsoPolicy.Default
             : new SsoPolicy(ssoSection.TrustIdpMultiFactor));
         services.AddScoped<ISsoSignInService, SsoSignInService>();
+
+        // Read-only views of configuration for the presentation layer. They exist so a controller
+        // can render "is SSO on" or "where does mail go" without taking a dependency on the options
+        // types that answer it — those carry the OIDC client secret and the SMTP password.
+        services.AddSingleton<ISsoAvailability, SsoAvailability>();
+        services.AddSingleton<IEmailTransportStatus, EmailTransportStatus>();
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IMfaRecoveryService, MfaRecoveryService>();

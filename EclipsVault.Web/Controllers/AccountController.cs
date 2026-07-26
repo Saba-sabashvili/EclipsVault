@@ -1,5 +1,4 @@
 using EclipsVault.Core.Application.Sso;
-using EclipsVault.Infrastructure.Security;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authentication;
 using EclipsVault.Web.Authorization;
@@ -10,7 +9,6 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 namespace EclipsVault.Web.Controllers;
 
@@ -31,7 +29,7 @@ public sealed class AccountController : Controller
     private readonly ISessionRegistry _sessions;
     private readonly IAuditSink _audit;
     private readonly ISsoSignInService _sso;
-    private readonly SsoOptions _ssoOptions;
+    private readonly ISsoAvailability _ssoAvailability;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -41,7 +39,7 @@ public sealed class AccountController : Controller
         ISessionRegistry sessions,
         IAuditSink audit,
         ISsoSignInService sso,
-        IOptions<SsoOptions> ssoOptions,
+        ISsoAvailability ssoAvailability,
         ILogger<AccountController> logger)
     {
         _auth = auth;
@@ -50,7 +48,7 @@ public sealed class AccountController : Controller
         _sessions = sessions;
         _audit = audit;
         _sso = sso;
-        _ssoOptions = ssoOptions.Value;
+        _ssoAvailability = ssoAvailability;
         _logger = logger;
     }
 
@@ -67,8 +65,8 @@ public sealed class AccountController : Controller
     /// <summary>Stamps the SSO button's state onto the model — it is not part of the posted form.</summary>
     private LoginViewModel Decorate(LoginViewModel model)
     {
-        model.SsoEnabled = _ssoOptions.Enabled;
-        model.SsoDisplayName = _ssoOptions.DisplayName;
+        model.SsoEnabled = _ssoAvailability.Enabled;
+        model.SsoDisplayName = _ssoAvailability.DisplayName;
         return model;
     }
 
