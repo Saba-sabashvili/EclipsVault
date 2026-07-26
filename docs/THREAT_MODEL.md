@@ -124,6 +124,30 @@ controls above.
     - **Reducing it:** this is the general "database write is a powerful position" case — keep the
       application's login least-privileged (see the invariants below), keep database credentials out
       of reach of the application host, and review the audit trail rather than the table.
+12. **An insider who can read the audit signing key off the application host.** The checkpoint
+    signing key is loaded from `ECLIPSVAULT_AUDIT_SIGNING_KEY` on the host running the vault. Anyone
+    who can read that host's environment — a root user, an operator with deploy access, a process or
+    crash dump — holds the key the vault signs with.
+    - **What that buys them:** the hash chain is public and deterministic, so an attacker with
+      database write can already rewrite history and recompute every row hash. What normally stops
+      them is the signed checkpoint, which they cannot forge. With the real key they can: rewrite the
+      chain, re-checkpoint it, and export a bundle that verifies — **including against a pinned key,
+      because the key is genuinely the vault's.** Key-pinning closes the case where an attacker signs
+      with a key of *their own*; it cannot close this one.
+    - **What still holds:** this needs host-level compromise, which is a strictly higher bar than
+      database access. Against an attacker with the database alone — a stolen dump, a backup, a read
+      replica, a DBA — the chain and the signature both hold completely. That is the common case and
+      it is covered.
+    - **The tell, and the practical mitigation:** a rewrite cannot reach a bundle that has already
+      left the building. **Export a signed bundle on a schedule and have the auditor retain it
+      externally.** A later rewrite contradicts every retained bundle — the same sequence numbers
+      resolve to different hashes — and the contradiction is evidence in itself. This costs nothing
+      and converts host-key compromise from undetectable to detectable by comparison, which is the
+      whole reason the export exists.
+    - **Reducing it further:** hold the signing key somewhere the application host cannot read —
+      an external signer or HSM. EclipsVault does not ship one today; `IAuditCheckpointSigner` is the
+      seam where one would go. Until then, treat host access as equivalent to signing authority and
+      restrict it accordingly.
 
 ## Invariants that bound the blast radius
 

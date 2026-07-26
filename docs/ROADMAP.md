@@ -119,7 +119,9 @@ want. Community is limited by *which features it has*, not *how much it holds*.
 - [x] **Verifier key-pinning:** `EclipsVault.AuditVerifier` gains `--expected-key` and fails unless
       the bundle's signing key matches. Closes the "insider re-signs with their own key" gap and
       makes the offline-proof claim actually true.
-- [ ] **Audit signing-key separation:** get `ECLIPSVAULT_AUDIT_SIGNING_KEY` off the app host for Max
+- [ ] **Audit signing-key separation:** *(minimum bar met 2026-07-26 — the limit is now stated as
+      threat-model item 12, including the schedule-and-retain mitigation. The separation itself is
+      still open.)* get `ECLIPSVAULT_AUDIT_SIGNING_KEY` off the app host for Max
       deployments (external signer / documented HSM path), so "tamper-evident even against an
       insider" survives an insider with host env access. At minimum, document the current limit
       honestly in the threat model.
