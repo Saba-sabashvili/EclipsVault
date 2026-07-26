@@ -15,7 +15,10 @@
 - **Enforcement is SOFT.** A license problem shows a banner; it never stops the vault serving
   secrets or disables already-configured features. (A security tool that outages on a license
   hiccup is unsellable.)
-- **Sold via a Merchant of Record** (Polar) so EU VAT is handled.
+- **Sold via a Merchant of Record** so EU VAT is handled — **Paddle** first pick, **Freemius**
+  confirmed fallback. *Not* Polar: it pays out via Stripe Connect and Stripe does not operate in
+  Georgia. The payout rail is Payoneer. See `GTM_STRATEGY.md` §3 for the full comparison; do not
+  re-derive it.
 
 ### The three distinct "gates" — do not conflate them
 
@@ -83,7 +86,7 @@ want. Community is limited by *which features it has*, not *how much it holds*.
 ## Phase 0 — Decide & draw the line  *(this week)*
 
 - [ ] Confirm the tier split and the two Community decisions above.
-- [ ] Collapse `LicenseTier` to **{ Community, Max }** (keep an internal `Enterprise`/custom value if
+- [x] Collapse `LicenseTier` to **{ Community, Max }** (keep an internal `Enterprise`/custom value if
       you want room for bespoke deals, but sell two). `Max` grants **all six** features.
 - [x] Finalize price. **Max $899 one-time, per production instance, unlimited seats** (perpetual +
       12 mo updates). Set against the category's anchors, not against free tools: Passbolt is
@@ -97,51 +100,58 @@ want. Community is limited by *which features it has*, not *how much it holds*.
 
 ## Phase 1 — Make the split real in code  *(weeks 1–3)*
 
-- [ ] Set `Max` → all features in `LicenseTierFeatures`; remove/retire `Pro`.
-- [ ] **Wire the gate at each feature entry point** (this is the actual work — the flags are modeled
+- [x] Set `Max` → all features in `LicenseTierFeatures`; remove/retire `Pro`.
+- [x] **Wire the gate at each feature entry point** (this is the actual work — the flags are modeled
       but enforcement is thin): SSO login, Vault Transit KEK provider selection, Redis HA wiring,
       dynamic-secret issuance, managed-rotation trigger, attestation export. Each checks the
       effective feature set; absent → feature is unavailable with an "available in Max" nudge.
-- [ ] **Separate perpetual from update-window in the claims.** Add `UpdatesUntilUtc`; make Max
+- [x] **Separate perpetual from update-window in the claims.** Add `UpdatesUntilUtc`; make Max
       licenses perpetual (`NotAfterUtc = null` for runtime). `LicenseVerifier` must **never** downgrade
       a signed Max key to Community on date grounds — a lapsed update window is a nudge, not a
       feature loss. Add a test that pins this.
-- [ ] Confirm soft enforcement end-to-end: invalid/expired/malformed key → banner via
+- [x] Confirm soft enforcement end-to-end: invalid/expired/malformed key → banner via
       `LicenseNudgeState`, secrets still served, configured features still work.
 - **Deliverable:** no key → secure Community; Max key → all features; lapsed update window → still
       Max, with a renew banner. Tests cover all three.
 
 ## Phase 2 — Two security fixes that are sales assets  *(weeks 2–4, parallel)*
 
-- [ ] **Verifier key-pinning:** `EclipsVault.AuditVerifier` gains `--expected-key` and fails unless
+- [x] **Verifier key-pinning:** `EclipsVault.AuditVerifier` gains `--expected-key` and fails unless
       the bundle's signing key matches. Closes the "insider re-signs with their own key" gap and
       makes the offline-proof claim actually true.
 - [ ] **Audit signing-key separation:** get `ECLIPSVAULT_AUDIT_SIGNING_KEY` off the app host for Max
       deployments (external signer / documented HSM path), so "tamper-evident even against an
       insider" survives an insider with host env access. At minimum, document the current limit
       honestly in the threat model.
-- [ ] **Honey-token blast radius:** block the exact host by default; make /24–/64 range-blocking an
+- [x] **Honey-token blast radius:** block the exact host by default; make /24–/64 range-blocking an
       opt-in. Prevents one compromised low-priv session from DoSing a whole NAT/VPN egress.
 - **Why here:** these harden the *one claim that differentiates you*. They are compliance/Max
   selling points, not features — worth doing before the landing page makes the claim.
 
 ## Phase 3 — Store & delivery  *(weeks 3–5)*
 
-- [ ] Polar account + Max product; connect payout/tax.
+- [ ] **Prerequisites first, in order:** domain + business email → IE registration + Small Business
+      Status (1%) → Georgian bank account → Payoneer. The MoR cannot be applied for without them, and
+      the 1% status has real lead time.
+- [ ] Paddle account as IE + Max product; connect payout (Payoneer) and tax. Verify at signup that
+      Georgia seller onboarding is accepted — if not, fall back to Freemius, which is confirmed.
+- [x] **The manual motion needs none of the above and is already done:** quote → bank transfer →
+      mint → deliver, documented in `docs/internal/`. The first sale does not have to wait for a
+      payment processor.
 - [ ] License-key delivery on the purchase webhook (mint with `LicenseForge`, email the key +
       `UpdatesUntilUtc`). A minimal license portal: view/download key, see update window, renew.
-- [ ] Publish the **Community** image to GHCR + Docker Hub; publish "verify before you run" (cosign)
+- [x] Publish the **Community** image to GHCR + Docker Hub; publish "verify before you run" (cosign)
       instructions front-and-center.
-- [ ] One-page landing: repositioned pitch ("compliance-ready self-hosted secrets for the team
+- [x] One-page landing: repositioned pitch ("compliance-ready self-hosted secrets for the team
       without a platform engineer"), the feature matrix, honest boundaries, buy button.
 - **Deliverable:** a stranger can buy Max and receive a working key; anyone can pull Community.
 
 ## Phase 4 — Trust & launch content  *(weeks 4–6)*
 
-- [ ] Publish threat model **including "what this does NOT protect against."**
+- [x] Publish threat model **including "what this does NOT protect against."**
 - [ ] Publish 2–3 architecture writeups you've already written (AAD binding; the audit-chain
       SaveChanges failure bug; honey-token design). This is your audit substitute.
-- [ ] Quickstart / install / backup-and-recovery docs polished for a first-time operator.
+- [x] Quickstart / install / backup-and-recovery docs polished for a first-time operator.
 - **Deliverable:** a credible public presence that answers "why should I trust a solo vault?"
 
 ## Phase 5 — First 10 customers & feedback loop  *(weeks 6–12)*
