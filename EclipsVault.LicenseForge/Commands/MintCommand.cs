@@ -16,7 +16,7 @@ namespace EclipsVault.LicenseForge.Commands;
 public sealed class MintCommand : Command
 {
     /// <summary>Environment variable holding the base64 PKCS#8 private key (from <c>keygen</c>).</summary>
-    public const string SigningKeyEnvVar = "ECLIPSVAULT_LICENSE_SIGNING_KEY";
+    public const string SigningKeyEnvVar = SigningKeySource.EnvVar;
 
     public MintCommand(bool pretty) : base(pretty) { }
 
@@ -24,9 +24,13 @@ public sealed class MintCommand : Command
     {
         var options = CommandLineOptions.Parse(args);
 
-        var keyBase64 = Environment.GetEnvironmentVariable(SigningKeyEnvVar);
-        if (string.IsNullOrWhiteSpace(keyBase64))
-            return Fail($"Set {SigningKeyEnvVar} to the base64 PKCS#8 private key (from keygen).");
+        var key = SigningKeySource.Resolve(
+            options.Get("key-file"),
+            Environment.GetEnvironmentVariable(SigningKeyEnvVar));
+        if (!key.Ok)
+            return Fail(key.Error!);
+
+        var keyBase64 = key.KeyBase64!;
 
         var tierText = options.Get("tier");
         if (tierText is null || !Enum.TryParse<LicenseTier>(tierText, ignoreCase: true, out var tier))

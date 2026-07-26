@@ -507,6 +507,12 @@
           "xunit.extensibility.core": "[2.9.2]"
         }
       },
+      "eclipsvault-license": {
+        "type": "Project",
+        "dependencies": {
+          "EclipsVault.Core": "[1.0.0, )"
+        }
+      },
       "eclipsvault.core": {
         "type": "Project"
       },
