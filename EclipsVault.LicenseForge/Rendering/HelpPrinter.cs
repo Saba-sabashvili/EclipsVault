@@ -20,10 +20,10 @@ public static class HelpPrinter
     private static void PrintPlain()
     {
         Console.WriteLine("EclipsVault license tool");
-        Console.WriteLine("  keygen");
-        Console.WriteLine("  mint --tier <Community|Max> --to <name> [--contact <email>]");
+        Console.WriteLine("  keygen [--out <path>]");
+        Console.WriteLine("  mint --tier <Community|Max> --to <name> [--key-file <path>] [--contact <email>]");
         Console.WriteLine("       [--nodes <n>] [--years <n>] [--expires <n>] [--features a,b,c] [--id <id>]");
-        Console.WriteLine($"  mint reads the private key (base64 PKCS#8) from ${MintCommand.SigningKeyEnvVar}.");
+        Console.WriteLine($"  mint reads the private key from --key-file, else ${MintCommand.SigningKeyEnvVar}.");
     }
 
     private static void PrintThemed()
@@ -34,7 +34,12 @@ public static class HelpPrinter
         Console.WriteLine($"  {Theme.Fg(Theme.Accent)}{Theme.Bold}{"keygen",-10}{Theme.Reset} {Theme.Fg(Theme.Muted)}generate a P-256 signing keypair (run once){Theme.Reset}");
         Console.WriteLine($"  {Theme.Fg(Theme.Accent)}{Theme.Bold}{"mint",-10}{Theme.Reset} {Theme.Fg(Theme.Muted)}sign a license token from claims{Theme.Reset}");
 
+        Render.SectionHeader("keygen options");
+        Option("--out",      "write the private key to this file (owner-only) and never display it");
+        Console.WriteLine();
+
         Render.SectionHeader("mint options");
+        Option("--key-file", "read the private key from this file — preferred over the env var");
         Option("--tier",     "Community | Max                (required)");
         Option("--to",       "customer / licensee name       (required)");
         Option("--contact",  "customer email");
@@ -44,7 +49,8 @@ public static class HelpPrinter
         Option("--features", "comma list to override the tier default");
         Option("--id",       "license id (default: random)");
         Console.WriteLine();
-        Render.Info($"mint reads the private key from ${MintCommand.SigningKeyEnvVar} (base64 PKCS#8).");
+        Render.Info($"mint reads the private key from --key-file, else ${MintCommand.SigningKeyEnvVar} (base64 PKCS#8).");
+        Render.Info("A key file keeps the key out of your shell history and out of the process list.");
         Console.WriteLine();
     }
 
