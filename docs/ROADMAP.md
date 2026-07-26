@@ -89,10 +89,21 @@ want. Community is limited by *which features it has*, not *how much it holds*.
 - [x] Collapse `LicenseTier` to **{ Community, Max }** (keep an internal `Enterprise`/custom value if
       you want room for bespoke deals, but sell two). `Max` grants **all six** features.
 - [x] Finalize price. **Max $899 one-time, per production instance, unlimited seats** (perpetual +
-      12 mo updates). Set against the category's anchors, not against free tools: Passbolt is
-      ~€4.50/user/mo self-hosted on a 10-user minimum (~€540/yr, forever) and ManageEngine PMP's
-      perpetual tiers start at $1,495 — so a one-time $899 sits below the floor of what this
-      category already pays, while the perpetual + unlimited-seat shape is the actual wedge.
+      12 mo updates). Set against the category's anchors, not against free tools. Anchors below were
+      re-verified against vendor pricing pages on **2026-07-26** — the earlier €4.50 Passbolt figure
+      and "$1,495 perpetual" ManageEngine figure recorded here were both wrong:
+      - **Passbolt Pro** — $4.90/user/mo billed annually, 10-seat minimum (~$588/yr, recurring forever).
+      - **Bitwarden** — $6/user/mo, and **self-hosting is Enterprise-only**; Secrets Manager is a
+        further $6–$12/user/mo on top of that.
+      - **ManageEngine PMP** — priced per *administrator* with unlimited end users: 10 admins =
+        $1,495–$3,995/yr subscription, or $3,895–$10,195 perpetual **plus 20%/yr maintenance**. Their
+        "perpetual" still bills every year; ours does not. That distinction is the pitch.
+      A one-time $899 is below the three-year cost of every one of them at 20 seats.
+      **Where it does *not* win — say this honestly in sales, it will come up:** at ≤10 seats the
+      category floor is **$0**. Devolutions Server is free to 10 users *on .NET + IIS + SQL Server*,
+      Vaultwarden and Passbolt CE are free and unlimited. So "we're a .NET shop" is Devolutions'
+      argument, not ours — the price argument only starts working around 20 seats, and the
+      audit-trail argument has to carry everything below that.
       **Launch is one-time only**; the annual continuing-updates add-on waits for the self-serve
       renewal portal. Revisit after the first 10 sales.
 - **Deliverable:** a one-page pricing + feature-matrix decision, and an updated tier enum.
