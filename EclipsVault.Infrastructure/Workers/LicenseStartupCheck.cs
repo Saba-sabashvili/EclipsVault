@@ -48,7 +48,10 @@ public sealed class LicenseStartupCheck : IHostedService
     {
         _logger.LogInformation("License check: {Status} — {Message}", _license.Status, _license.Message);
 
-        // Development runs unlicensed by design (no pinned key), so it is never nagged or recorded.
+        // Development is never nagged or recorded — but note the status is logged above regardless,
+        // which is how a licence is confirmed locally without standing up a production environment.
+        // (This used to say development runs unlicensed "by design, no pinned key". A key is pinned
+        // now, so a dev run does verify a real licence; only the nag and the audit row are skipped.)
         if (_environment.IsDevelopment())
             return;
 
