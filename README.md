@@ -430,7 +430,7 @@ A second *production* vault — a separate environment serving different users, 
 
 **Continuity:** if maintenance ever stops, the intent is that customers keep the source and the right to run and patch what they have deployed — a paused project never strands a running vault.
 
-**Buy:** _&lt;Merchant-of-Record checkout — added at launch&gt;_. Contact `sabashvili13@icloud.com` for a licence or an invoice.
+**Buy:** _&lt;Merchant-of-Record checkout — added at launch&gt;_. Contact `sabasabashvili86@gmail.com` for a licence or an invoice.
 
 ### Installing your license
 
@@ -438,7 +438,7 @@ Set the token you receive at purchase as the `ECLIPSVAULT_LICENSE` environment v
 
 ## Licence
 
-**Source-available, not open source.** EclipsVault is © 2026 Saba Sabashvili, all rights reserved, and is licensed rather than sold. You may read the source and run it for **evaluation** for 30 days; **production use — anything holding a real credential — requires a written commercial licence.** Redistributing it, hosting it for others, or offering it as a service is not permitted. See [LICENSE](LICENSE) for the terms and `sabashvili13@icloud.com` for licensing.
+**Source-available, not open source.** EclipsVault is © 2026 Saba Sabashvili, all rights reserved, and is licensed rather than sold. You may read the source and run it for **evaluation** for 30 days; **production use — anything holding a real credential — requires a written commercial licence.** Redistributing it, hosting it for others, or offering it as a service is not permitted. See [LICENSE](LICENSE) for the terms and `sabasabashvili86@gmail.com` for licensing.
 
 This is the managed self-hosted model: the source is visible to customers, because a vault you cannot read is a vault you cannot audit, and running one you have not audited is a decision no security team should make. What is licensed is running it in production.
 

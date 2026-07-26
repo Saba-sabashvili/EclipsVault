@@ -154,4 +154,4 @@ Stated plainly, because a licence page that only lists what you get is not much 
   works. A refund is a commercial matter settled between us, not a technical shutdown.
 - It does **not** gate security. Every baseline protection is identical in Community and Max.
 
-Questions: **sabashvili13@icloud.com**, quoting your licence id.
+Questions: **sabasabashvili86@gmail.com**, quoting your licence id.

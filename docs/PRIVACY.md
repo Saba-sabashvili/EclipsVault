@@ -5,7 +5,7 @@
 > starting point, not legal advice. Fill the bracketed placeholders.
 
 **Vendor:** Saba Sabashvili ("we"), sole proprietor / individual entrepreneur, Georgia.
-**Contact:** sabashvili13@icloud.com
+**Contact:** sabasabashvili86@gmail.com
 
 ## The short version
 
@@ -66,7 +66,7 @@ We keep this list current; material changes are noted in the product's release n
 ## Your rights
 
 You can ask us to show you, correct, or delete the limited data we hold about you (your email, license,
-and support history). Email sabashvili13@icloud.com and we will respond within [30] days. Deleting your
+and support history). Email sabasabashvili86@gmail.com and we will respond within [30] days. Deleting your
 license record may end your entitlement to updates and support; it does not affect the copy of the
 software already running on your own infrastructure.
 

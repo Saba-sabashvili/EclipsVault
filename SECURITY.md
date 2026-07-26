@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **sabashvili13@icloud.com** with the details. Please do **not** open a public issue for a
+Email **sabasabashvili86@gmail.com** with the details. Please do **not** open a public issue for a
 security report. Include: what you found, the impact, and the steps to reproduce it. If you can,
 suggest a fix.
 

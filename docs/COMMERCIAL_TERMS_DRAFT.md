@@ -63,7 +63,7 @@ implication.
 ### 5. Support
 
 - The Licensor provides **[best-effort]** support to Customers with a current licence, via
-  sabashvili13@icloud.com, during **[business days, GMT+4]**.
+  sabasabashvili86@gmail.com, during **[business days, GMT+4]**.
 - Target first response: **[e.g. 2 business days]**. These are targets, **not** a guaranteed
   service-level agreement, and the Licensor is a single maintainer.
 - Support covers: defects in the Software, licence and installation help, and security questions. It
@@ -125,4 +125,4 @@ in force at its purchase. If any provision is unenforceable, the rest stand.
 
 ---
 
-_Contact for commercial licensing: sabashvili13@icloud.com_
+_Contact for commercial licensing: sabasabashvili86@gmail.com_
