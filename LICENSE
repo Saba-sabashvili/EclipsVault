@@ -2,9 +2,9 @@ EclipsVault — Commercial Source-Available Licence
 Copyright (c) 2026 Saba Sabashvili. All rights reserved.
 
 EclipsVault is licensed, not sold. This file states what you may do with the
-source code in this repository. It is not a substitute for legal advice, and it
-is not a licence agreement for a specific customer; a commercial deployment is
-governed by the written agreement signed with the Licensor.
+source code in this repository. It is not a substitute for legal advice. Use of
+the Licensed Capabilities in production is additionally governed by the written
+commercial agreement referenced below.
 
 DEFINITIONS
 
@@ -14,37 +14,59 @@ DEFINITIONS
   "You"       The individual or legal entity exercising the permissions below.
   "Production Use"  Any use that is not Evaluation Use, including use in the
               operation of a business or in the handling of real credentials.
-  "Evaluation Use"  Running the Software on hardware You control, in order to
-              assess it, using data that is not real. It does not include using
-              it to hold, protect, or serve any credential in actual use.
+  "Evaluation Use"  Running the Software in order to assess it, using data that
+              is not real.
+  "Licensed Capabilities"  The following six capabilities, and only these:
+              (i)   single sign-on via OIDC;
+              (ii)  sealing the master key with an external KMS;
+              (iii) Redis-backed high availability across replicas;
+              (iv)  dynamic secrets (credentials minted per lease);
+              (v)   managed rotation of secrets held in external systems;
+              (vi)  signed audit attestation.
+  "Community Use"  Production Use of the Software that does not use any
+              Licensed Capability.
 
 GRANT
 
-  1. Evaluation. You may download, read, compile, and run the Software for
-     Evaluation Use for up to 30 consecutive days.
+  1. Community. You may download, read, compile, run, and put the Software to
+     Community Use, free of charge, for an unlimited period, on any number of
+     deployments, for any number of users, including in the operation of a
+     business and to hold real credentials. No payment, registration, or
+     licence key is required, and the Software transmits nothing to the
+     Licensor.
 
-  2. Production. You may not put the Software to Production Use except under a
-     separate written commercial licence agreement with the Licensor. That
-     agreement, and not this file, defines the term, scope, support, and
-     warranties of such use.
+  2. Evaluation of Licensed Capabilities. You may use the Licensed Capabilities
+     for Evaluation Use, and for up to 30 consecutive days of Production Use, in
+     order to assess them.
 
-  3. Modification. You may modify the Software for Evaluation Use, and under a
-     commercial agreement to the extent that agreement permits. Modifying it
-     does not grant You any right to distribute it.
+  3. Production use of Licensed Capabilities. Beyond the period in section 2,
+     You may not use a Licensed Capability in Production Use except under a
+     commercial licence obtained from the Licensor. The commercial terms
+     accompanying that licence define its term, scope, support, and warranties.
+
+  4. Modification. You may modify the Software for Your own Community Use or
+     Evaluation Use, and under a commercial licence to the extent that licence
+     permits. Modifying it does not grant You any right to distribute it.
+
+  5. No technical enforcement. The Software does not disable, degrade, or block
+     any capability when unlicensed, and never withholds access to Your own
+     data. This is deliberate and permanent. It is not a waiver: a capability
+     that continues to run is not thereby licensed, and section 3 governs.
 
 RESTRICTIONS
 
   Except as expressly permitted above, or by a written agreement with the
   Licensor, or by law regardless of this licence, You may not:
 
-  (a) use the Software in production, or to hold any real credential;
+  (a) use a Licensed Capability in Production Use without a commercial licence,
+      beyond the evaluation period in section 2;
   (b) distribute, sublicense, sell, rent, lease, or host the Software, or make
       it available to any third party, whether modified or not;
   (c) offer the Software, or a derivative of it, as a service to others;
   (d) remove or alter any copyright, licence, or attribution notice.
 
   No rights are granted by implication, estoppel, or otherwise. Any use outside
-  this licence and outside a commercial agreement is unlicensed.
+  this licence and outside a commercial licence is unlicensed.
 
 THIRD-PARTY COMPONENTS
 
@@ -57,8 +79,9 @@ NO WARRANTY
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. THIS DISCLAIMER
-  APPLIES TO EVALUATION USE; WARRANTIES FOR PRODUCTION USE, IF ANY, ARE THOSE
-  STATED IN THE APPLICABLE COMMERCIAL AGREEMENT.
+  APPLIES TO ALL USE UNDER THIS LICENCE, INCLUDING EVALUATION USE AND COMMUNITY
+  USE IN PRODUCTION. WARRANTIES FOR USE UNDER A COMMERCIAL LICENCE, IF ANY, ARE
+  THOSE STATED IN THE ACCOMPANYING COMMERCIAL TERMS.
 
   EclipsVault is software for protecting credentials. It is not a guarantee that
   they will be protected. The security of a deployment depends on how it is
@@ -71,14 +94,36 @@ LIMITATION OF LIABILITY
   TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE LICENSOR BE
   LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT,
   OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS
-  USE. FOR PRODUCTION USE, LIABILITY IS AS STATED IN THE APPLICABLE COMMERCIAL
-  AGREEMENT.
+  USE, INCLUDING WITHOUT LIMITATION ANY LOSS OF OR UNAUTHORISED ACCESS TO
+  CREDENTIALS, DATA, OR KEYS.
+
+  THIS LIMITATION APPLIES TO ALL USE UNDER THIS LICENCE, INCLUDING EVALUATION
+  USE AND COMMUNITY USE IN PRODUCTION, FOR WHICH THE SOFTWARE IS PROVIDED FREE
+  OF CHARGE AND THE LICENSOR'S TOTAL AGGREGATE LIABILITY IS ZERO. FOR USE UNDER
+  A COMMERCIAL LICENCE, LIABILITY IS AS STATED IN THE ACCOMPANYING COMMERCIAL
+  TERMS.
+
+  Some jurisdictions do not allow the exclusion of certain warranties or the
+  limitation of certain liabilities; where so, the above apply to the fullest
+  extent permitted, and nothing here excludes liability that cannot lawfully be
+  excluded.
+
+YOUR RESPONSIBILITIES
+
+  You are solely responsible for the security of Your deployment — its hosting,
+  network exposure, transport security, database hardening, operating system
+  patching, and in particular the custody and backup of the master key. Loss of
+  the master key renders Your data permanently unrecoverable, and there is no
+  recovery path available to the Licensor. See docs/THREAT_MODEL.md and
+  docs/BACKUP_AND_RECOVERY.md.
 
 TERMINATION
 
   This licence terminates automatically if You breach it. On termination You
   must stop using the Software and destroy all copies. Nothing in this file
-  terminates or limits a commercial agreement that says otherwise.
+  terminates or limits a commercial licence that says otherwise. The NO
+  WARRANTY, LIMITATION OF LIABILITY, and YOUR RESPONSIBILITIES sections survive
+  termination.
 
 CONTACT
 

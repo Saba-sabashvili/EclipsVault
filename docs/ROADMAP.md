@@ -61,12 +61,22 @@ compliance-driven team without a platform engineer.
 can't add your 51st secret" is a terrible look on a vault and punishes the exact adoption you
 want. Community is limited by *which features it has*, not *how much it holds*.
 
-**→ Decision to confirm before Phase 1:**
-1. Keep Community usable in production, or restrict it to non-production/eval (the enum comment
-   currently says "free, non-production")? Recommendation: **allow small production use** — a happy
-   free prod user is your best word-of-mouth and the funnel to Max. A non-prod restriction is
-   unenforceable under soft enforcement anyway.
-2. Confirm the six gated features above, or move any of them into Community.
+**→ DECIDED 2026-07-28 — Community is free in production.** Unlimited users, unlimited deployments,
+no time limit, no registration, no licence key. `LICENSE` grants it outright as "Community Use".
+
+The cap is **capability, not scale or time** — which is the same conclusion this section reached
+above, arrived at again from the other direction: a seat or instance cap has to be counted, counting
+needs telemetry, and this product will never phone home. A limit nobody can observe is a limit nobody
+can enforce, and publishing one is a promise made without meaning it.
+
+Two consequences worth recording. The amendment also had to re-scope `NO WARRANTY` and `LIMITATION OF
+LIABILITY`, which covered Evaluation Use only and deferred production liability to a commercial
+agreement free users do not have — an individual entrepreneur carries that personally. And
+restrictions (b)/(c) (no redistribution, no offering as a service) must **stay**: they are the
+evidence that licence income is business profit rather than royalty, which is a 1% vs 20% tax
+question in Georgia.
+
+**→ Still to confirm:** the six gated features above, or move any of them into Community.
 
 ## Current state (what already exists — do not rebuild)
 
