@@ -6,8 +6,13 @@ Email **sabasabashvili86@gmail.com** with the details. Please do **not** open a 
 security report. Include: what you found, the impact, and the steps to reproduce it. If you can,
 suggest a fix.
 
-You can expect an acknowledgement within a few business days. This is a small project maintained by
-one person, so response is best-effort — but security reports are triaged ahead of everything else.
+**Acknowledgement is best-effort, with no promised response time.** This is maintained by one person
+who can be called away at no notice and may be unreachable for up to seven consecutive days. Security
+reports are triaged ahead of every other kind of work, so they get the first attention available — but
+you should have the real number rather than a comfortable one.
+
+If that is too slow for a disclosure timeline you are working to, say so in your first mail and
+publish on your own schedule. You will not get a legal threat from me for it.
 
 ## Supported versions
 
