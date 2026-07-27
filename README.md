@@ -426,7 +426,7 @@ A Max licence is **perpetual** — buy once, run forever. The purchase bundles a
 
 - **Replicas don't multiply the licence.** A Redis-backed HA deployment is *one* production deployment, whatever the node count. Running Max's own multi-node feature must never cost extra; a licence that penalised turning on high availability would be arguing against itself.
 - **Seats are unlimited.** Onboarding the whole team costs the same as onboarding one person, so the bill never grows as you hire.
-- **Non-production is free.** Development, staging, CI, and a standby you have not cut over to are not production deployments and are not licensed separately.
+- **Non-production never needs a second licence.** Development, staging, CI, and a standby you have not cut over to are not production deployments. (Community is free in production regardless — this bullet is about when a *second Max* licence is due.)
 
 A second *production* vault — a separate environment serving different users, or one deployed for a different client — is a second deployment. Note that verification is offline and enforcement is soft, so none of this is technically metered: no instance count is measured, reported, or enforced. It is the licence you are agreeing to, honoured on your word, which is why it is written to be easy to honour.
 
