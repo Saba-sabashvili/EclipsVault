@@ -14,13 +14,18 @@ patch a customer's instance for them: your job is to fix fast and give operators
 | **Medium** | Limited impact or high precondition | Info leak of metadata; denial of service on one endpoint | 30 days |
 | **Low** | Hardening / defense-in-depth | Missing header; verbose error | Next release |
 
+**These targets are intent, not a commitment, and `SECURITY.md` promises no response time.** A single
+maintainer who can be called away at no notice cannot guarantee a 72-hour fix; the targets say what to
+aim at and in what order, not what a reporter is owed. If you are unavailable when a Critical lands,
+the honest move is to say so to the reporter on return rather than to quietly miss the number.
+
 Judge by *impact on the in-scope assets* in [`THREAT_MODEL.md`](THREAT_MODEL.md). If a report targets
 something **out of scope** (a compromised host, KEK loss, deployment config), it is a boundary
 discussion, not an incident — reply, explain the boundary, and log it, but the clock below does not run.
 
 ## The flow
 
-1. **Acknowledge** (within a few business days, per SECURITY.md). Confirm receipt, ask for anything
+1. **Acknowledge** (as soon as you see it; no window is promised, per SECURITY.md). Confirm receipt, ask for anything
    missing to reproduce. Do not commit to a fix or a date yet.
 2. **Reproduce & triage.** Reproduce against an evaluation instance. Assign a severity. If you cannot
    reproduce, say so and keep the thread open — do not close as "works for me."
