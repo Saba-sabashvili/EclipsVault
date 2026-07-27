@@ -415,10 +415,12 @@ EclipsVault is **self-hosted**: you run it in your own environment and hold your
 
 | Tier | Price | For |
 |---|---|---|
-| **Community** | Free | Non-production — homelab, personal, and a 30-day production evaluation. The complete vault on SQL Server *or* PostgreSQL, source-available. |
+| **Community** | Free | **Production use included** — unlimited users, unlimited deployments, no time limit, no registration, no licence key. The complete vault on SQL Server *or* PostgreSQL, source-available. |
 | **Max** | **$899 one-time** · per production instance · perpetual licence + 12 months of updates | Production use, plus the six licensed capabilities — **SSO/OIDC, external KMS (Vault Transit), Redis HA, dynamic secrets, managed rotation, and signed audit attestation** — and best-effort email support. |
 
-A Max licence is **perpetual** — buy once, run forever. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free. (Pricing is indicative and finalised at launch.)
+**Community is free in production.** Not a trial, not a homelab exception, not seat-limited: you may run the vault to hold real credentials, in a business, indefinitely, without paying or telling anyone. The limit is *capability*, not scale or time — Community is everything except the six licensed capabilities. That choice is deliberate. A seat or instance cap would have to be counted, counting needs telemetry, and this product will never phone home; a limit that cannot be observed is one that cannot be enforced, and publishing an unenforceable limit is just a promise made without meaning it.
+
+A Max licence is **perpetual** — buy once, run forever. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free.
 
 **What one licence covers.** One **production deployment** — however many replicas, users, or secrets it holds. Specifically:
 
