@@ -4,6 +4,7 @@ using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EclipsVault.Web.Controllers;
@@ -19,6 +20,7 @@ namespace EclipsVault.Web.Controllers;
 /// ever evaluates the caller's own clearance and project, and discloses no secrets, no other users,
 /// and not even the trusted-network ranges (only whether the current network is trusted).
 /// </summary>
+[Authorize]
 public sealed class AccessController : Controller
 {
     // Rows run from most to least sensitive so the clearance cut-off reads top-to-bottom; columns

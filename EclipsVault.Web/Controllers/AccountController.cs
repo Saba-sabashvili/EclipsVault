@@ -17,6 +17,11 @@ namespace EclipsVault.Web.Controllers;
 /// cookie; the full session principal (with ABAC attribute claims) is granted after
 /// TOTP verification or first-time TOTP enrollment.
 /// </summary>
+// Default-deny at the class, opened per action. This is the one controller whose whole job is to
+// serve callers who are not yet signed in, so the anonymous surface here is the largest in the
+// vault — which is exactly why it is declared action by action with [AllowAnonymous] rather than
+// left to a policy configured in another file.
+[Authorize]
 [ServiceFilter(typeof(AuthThrottleFilter))]
 public sealed class AccountController : Controller
 {

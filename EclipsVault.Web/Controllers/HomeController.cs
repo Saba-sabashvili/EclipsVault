@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EclipsVault.Web.Controllers;
 
+[Authorize]
 public sealed class HomeController : Controller
 {
     private readonly IDashboardService _dashboard;

@@ -23,6 +23,7 @@
     <ProjectReference Include="..\EclipsVault.Core\EclipsVault.Core.csproj" />
     <ProjectReference Include="..\EclipsVault.Infrastructure\EclipsVault.Infrastructure.csproj" />
     <ProjectReference Include="..\EclipsVault.LicenseForge\EclipsVault.LicenseForge.csproj" />
+    <ProjectReference Include="..\EclipsVault.Web\EclipsVault.Web.csproj" />
   </ItemGroup>
 
 </Project>
