@@ -10,10 +10,21 @@
 > outstanding and tracked in `docs/internal/FIX_PLAN.md`.
 
 **Between** Saba Sabashvili, sole proprietor / individual entrepreneur, Georgia (the "Licensor"), and
-the individual or entity that purchases a licence (the "Customer").
+the business that purchases a licence (the "Customer").
 
 By completing a purchase, or by using a Licensed Capability in production, the Customer agrees to
 these terms.
+
+**Sold to businesses only.** EclipsVault Max is offered to businesses and not to consumers. By
+purchasing, the Customer confirms that it is acting in the course of a trade, business, or
+profession, and supplies a VAT number or equivalent company or tax registration number. An order
+that cannot be identified as a business purchase is refused and refunded in full.
+
+> This is not a formality, and it is stated here rather than buried in a checkout field. Consumer
+> protection law overrides agreed terms — it would override the liability limit in §10 and the
+> warranty position in §9 — so a consumer sale would be governed by terms neither party had actually
+> agreed to. EclipsVault is infrastructure software installed by the people who run a company's
+> servers; a consumer buyer would be a mistake for both of us, and this is where it gets caught.
 
 ## 1. Definitions
 
@@ -55,8 +66,10 @@ are granted by implication.
 
 ## 4. Fees, taxes, and refunds
 
-Fees are those in the Order. Where payment is collected by a Merchant of Record, that party is
-responsible for charging and remitting any applicable sales tax or VAT.
+Fees are those in the Order. The Customer supplies a **VAT number, or an equivalent company or tax
+registration number**, at or before purchase; it is recorded on the Order and on the invoice. Where
+payment is collected by a Merchant of Record, that party is responsible for charging and remitting
+any applicable sales tax or VAT.
 
 **Refunds: a 14-day money-back guarantee.** A Customer may request a full refund within 14 days of
 purchase, for any reason, by emailing the address below. A refund **terminates the licence**: because
