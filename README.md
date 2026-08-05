@@ -420,7 +420,7 @@ EclipsVault is **self-hosted**: you run it in your own environment and hold your
 
 **Community is free in production.** Not a trial, not a homelab exception, not seat-limited: you may run the vault to hold real credentials, in a business, indefinitely, without paying or telling anyone. The limit is *capability*, not scale or time — Community is everything except the six licensed capabilities. That choice is deliberate. A seat or instance cap would have to be counted, counting needs telemetry, and this product will never phone home; a limit that cannot be observed is one that cannot be enforced, and publishing an unenforceable limit is just a promise made without meaning it.
 
-A Max licence is **perpetual** — buy once, run forever. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free.
+A Max licence is **perpetual** — buy once, run forever. The purchase bundles a 12-month update window for new feature releases; when it lapses the vault keeps running and security patches stay free — published on the current release and never backported, so getting a fix means upgrading (free within the same major version). The product may be retired only on **12 months' published notice**, and because the source is published and builds reproducibly, even then you can keep building and patching it yourself.
 
 **What one licence covers.** One **production deployment** — however many replicas, users, or secrets it holds. Specifically:
 
