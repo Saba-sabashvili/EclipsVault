@@ -46,9 +46,18 @@ non-sublicensable** licence to use the Licensed Capabilities in Production Use, 
 the Order.
 
 EclipsVault Max is a **perpetual licence** to the purchased version, bundled with **12 months of
-updates** from the issue date. When that window lapses the Software keeps running and continues to
-receive security patches — a lapse affects the right to *new feature* updates and to support, not the
-Customer's access to their own data.
+updates** from the issue date. When that window lapses the Software keeps running; a lapse affects the
+right to *new feature* updates and to support, not the Customer's access to their own data.
+
+**Security patches are free, and published on the current release.** A security fix is issued on the
+current release and is **not backported** to earlier versions; obtaining it means upgrading, which is
+free within the same major version. Patches carry no charge, but — as with support — no release is
+promised to be patched by any particular date.
+
+**End of life.** The Licensor may retire the Software, ending new updates and security patches, on
+**12 months' prior published notice.** Even then no Customer is stranded: the source is published and
+builds reproducibly, so the Customer can continue to build, run, and patch its own deployment
+indefinitely. The perpetual right to run the version the Customer already holds is never withdrawn.
 
 The licence **transfers to a successor entity on written notice** — if the Customer is acquired,
 merges, or reorganises, the licence follows the deployment it was bought for. It may not otherwise be
