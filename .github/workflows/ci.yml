@@ -10,6 +10,7 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -27,7 +28,10 @@ jobs:
         run: dotnet build --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test --configuration Release --no-build --verbosity normal
+        # --blame-hang-timeout aborts (with a dump naming the culprit) if a test hangs, rather than
+        # letting one stuck test block the job to the 6h ceiling. The suite runs in seconds, so 5m is
+        # only ever reached by a genuine hang.
+        run: dotnet test --configuration Release --no-build --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type mini
 
   # The vault targets two database engines, so every model change needs a migration in BOTH sets.
   # One that reaches only one engine leaves the schemas silently different, and nothing notices
