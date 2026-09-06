@@ -147,4 +147,52 @@ public class PremiumFeatureUsageRecorderTests
         // Must not throw — licensing never blocks the vault.
         await recorder.RecordUseAsync(LicenseFeatures.Kms, CancellationToken.None);
     }
+
+    private sealed class NoOpAuditSink : IAuditSink
+    {
+        public Task WriteAsync(AuditEntry entry, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private static PremiumFeatureUsageRecorder RecorderWith(ILicenseState license)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<IAuditSink, NoOpAuditSink>();
+        var provider = services.BuildServiceProvider();
+        return new PremiumFeatureUsageRecorder(
+            license, provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<PremiumFeatureUsageRecorder>.Instance);
+    }
+
+    [Fact]
+    public async Task Require_throws_for_a_gated_feature_when_unlicensed()
+    {
+        var recorder = RecorderWith(new FakeLicense()); // grants nothing
+        await Assert.ThrowsAsync<PremiumFeatureNotLicensedException>(
+            () => recorder.RequireAsync(LicenseFeatures.DynamicSecrets, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Require_returns_for_a_gated_feature_when_licensed()
+    {
+        var license = new FakeLicense { Allowed = new(StringComparer.Ordinal) { LicenseFeatures.ManagedRotation } };
+        await RecorderWith(license).RequireAsync(LicenseFeatures.ManagedRotation, CancellationToken.None); // no throw
+    }
+
+    [Fact]
+    public async Task Require_does_not_throw_for_a_non_gated_feature_when_unlicensed()
+    {
+        // Attestation is soft: RequireAsync must record-and-return, never throw.
+        await RecorderWith(new FakeLicense()).RequireAsync(LicenseFeatures.AuditAttestation, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Require_throws_every_call_even_after_the_row_is_deduplicated()
+    {
+        var recorder = RecorderWith(new FakeLicense());
+        await Assert.ThrowsAsync<PremiumFeatureNotLicensedException>(
+            () => recorder.RequireAsync(LicenseFeatures.DynamicSecrets, CancellationToken.None));
+        await Assert.ThrowsAsync<PremiumFeatureNotLicensedException>(
+            () => recorder.RequireAsync(LicenseFeatures.DynamicSecrets, CancellationToken.None));
+    }
 }

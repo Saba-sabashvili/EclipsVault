@@ -12,6 +12,16 @@ public static class LicenseFeatures
     public const string DynamicSecrets = "dynamic-secrets";
     public const string ManagedRotation = "managed-rotation";
     public const string AuditAttestation = "audit-attestation";
+
+    /// <summary>
+    /// The features that are hard-gated: an unlicensed vault refuses the action rather than merely
+    /// noting it. Everything else stays soft. Single source of truth for which features enforce —
+    /// adding one here (plus, for SSO, a no-lockout safeguard) is the whole change. Both gated
+    /// features degrade gracefully: only issuing a new lease / re-rotating is refused, so nothing at
+    /// rest is ever locked.
+    /// </summary>
+    public static readonly IReadOnlySet<string> Gated =
+        new HashSet<string>(StringComparer.Ordinal) { DynamicSecrets, ManagedRotation };
 }
 
 /// <summary>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,13 +36,39 @@ public sealed class PremiumFeatureUsageRecorder : IPremiumFeatureUsage
         if (_license.Allows(featureKey))
             return;
 
+        await RecordUnlicensedAsync(featureKey, AuditAction.LicenseFeatureUnlicensed, blocked: false, ct);
+    }
+
+    public async Task RequireAsync(string featureKey, CancellationToken ct)
+    {
+        // Licensed — the gate is transparent.
+        if (_license.Allows(featureKey))
+            return;
+
+        var gated = LicenseFeatures.Gated.Contains(featureKey);
+        await RecordUnlicensedAsync(
+            featureKey,
+            gated ? AuditAction.LicenseFeatureBlocked : AuditAction.LicenseFeatureUnlicensed,
+            blocked: gated,
+            ct);
+
+        // The audit row is deduplicated, but the refusal is not: every call is refused.
+        if (gated)
+            throw new PremiumFeatureNotLicensedException(featureKey);
+    }
+
+    private async Task RecordUnlicensedAsync(string featureKey, AuditAction action, bool blocked, CancellationToken ct)
+    {
         // Already surfaced this feature this process — one line is enough, never spam the trail.
         if (!_recorded.TryAdd(featureKey, 0))
             return;
 
         _logger.LogWarning(
-            "Premium feature '{Feature}' was used without a license entitlement. This does not restrict " +
-            "the vault — it is a licensing reminder.", featureKey);
+            blocked
+                ? "Premium feature '{Feature}' was refused: no license entitlement. Existing state is unaffected."
+                : "Premium feature '{Feature}' was used without a license entitlement. This does not restrict " +
+                  "the vault — it is a licensing reminder.",
+            featureKey);
 
         try
         {
@@ -51,10 +78,12 @@ public sealed class PremiumFeatureUsageRecorder : IPremiumFeatureUsage
             await sink.WriteAsync(
                 new AuditEntry
                 {
-                    Action = AuditAction.LicenseFeatureUnlicensed,
+                    Action = action,
                     ResourceType = "License",
                     ResourceName = featureKey,
-                    Details = $"Premium feature '{featureKey}' exercised without a license entitlement.",
+                    Details = blocked
+                        ? $"Premium feature '{featureKey}' refused — not licensed."
+                        : $"Premium feature '{featureKey}' exercised without a license entitlement.",
                     IsCritical = false,
                     ActorUsername = "system"
                 },
@@ -64,12 +93,12 @@ public sealed class PremiumFeatureUsageRecorder : IPremiumFeatureUsage
         // AuditWriteFailedException, but this also creates a scope and resolves a service — during
         // shutdown either can throw something else entirely (ObjectDisposedException, for one), and
         // that would travel up into the secret operation that called this. A licensing reminder must
-        // never be able to affect an operation, which is the invariant the whole class exists for,
-        // so the catch has to be as wide as the promise.
+        // never be able to affect an operation beyond the deliberate gated refusal, so the catch has
+        // to be as wide as the promise.
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Could not record the unlicensed-feature-use audit row for '{Feature}' — continuing " +
+                "Could not record the premium-feature audit row for '{Feature}' — continuing " +
                 "(licensing never blocks the vault).", featureKey);
         }
     }
