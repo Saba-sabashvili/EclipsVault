@@ -51,8 +51,10 @@ public sealed class DynamicSecretService : IDynamicSecretService
             throw new VaultAdminException($"The role '{role.Name}' is disabled and cannot issue credentials.");
         }
 
-        // Soft licensing signal — never blocks issuing.
-        await _premiumUsage.RecordUseAsync(LicenseFeatures.DynamicSecrets, ct);
+        // Gate: a trial or paid licence is required to issue a dynamic credential. Refused before any
+        // credential is minted, so nothing is leased and there is nothing to undo. Existing leases and
+        // their revocation are unaffected.
+        await _premiumUsage.RequireAsync(LicenseFeatures.DynamicSecrets, ct);
 
         var backend = ResolveBackend(role);
         var now = _clock.GetUtcNow();
