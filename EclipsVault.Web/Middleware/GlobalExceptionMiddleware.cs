@@ -55,6 +55,12 @@ public sealed class GlobalExceptionMiddleware
             _logger.LogCritical(ex, "Cryptographic subsystem misconfiguration surfaced during {Path}", context.Request.Path);
             context.Response.Redirect("/Home/Error?code=500");
         }
+        catch (PremiumFeatureNotLicensedException ex) when (!context.Response.HasStarted)
+        {
+            // A payment / entitlement boundary, not a fault: 402, not 400/500. Existing state is intact.
+            _logger.LogInformation("Refused unlicensed premium feature '{Feature}' during {Path}", ex.FeatureKey, context.Request.Path);
+            context.Response.Redirect("/Home/Error?code=402");
+        }
         catch (DomainException ex) when (!context.Response.HasStarted)
         {
             _logger.LogError(ex, "Domain error during {Path}", context.Request.Path);

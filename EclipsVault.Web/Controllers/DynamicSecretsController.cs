@@ -73,6 +73,11 @@ public sealed class DynamicSecretsController : VaultController
             TempData[IssuedTempDataKey] = issued.LeaseId.ToString();
             return View(nameof(Index), await BuildAsync(issued, ct));
         }
+        catch (PremiumFeatureNotLicensedException)
+        {
+            this.FlashError("Dynamic secrets require a licence. Start a free 30-day trial, or install your licence.");
+            return RedirectToAction(nameof(Index));
+        }
         catch (VaultAdminException ex)
         {
             this.FlashError(ex.Message);

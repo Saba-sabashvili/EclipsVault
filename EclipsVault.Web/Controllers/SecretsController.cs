@@ -225,6 +225,10 @@ public sealed class SecretsController : VaultController
                 "Rotated upstream. The vault generated a new password, changed the real credential, and stored it — " +
                 "the previous value was archived to version history.");
         }
+        catch (PremiumFeatureNotLicensedException)
+        {
+            this.FlashError("Managed rotation requires a licence. Start a free 30-day trial, or install your licence.");
+        }
         catch (VaultAdminException ex)
         {
             this.FlashError(ex.Message);
