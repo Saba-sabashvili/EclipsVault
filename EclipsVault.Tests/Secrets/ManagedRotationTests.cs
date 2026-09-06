@@ -343,4 +343,18 @@ public class ManagedRotationTests
 
         Assert.Equal(LicenseFeatures.ManagedRotation, Assert.Single(usage.Recorded));
     }
+
+    [Fact]
+    public async Task Managed_rotation_is_refused_when_not_licensed()
+    {
+        var backend = new FakeBackend();
+        var usage = new RecordingPremiumFeatureUsage();
+        usage.Denied.Add(LicenseFeatures.ManagedRotation);
+
+        await Assert.ThrowsAsync<PremiumFeatureNotLicensedException>(
+            () => Build(new FakeRepository(ManagedSecret()), new RecordingAuditSink(), usage, backend)
+                .RotateManagedAsync(SecretId, null, CancellationToken.None));
+
+        Assert.Empty(backend.Rotations); // backend untouched; the stored value stays the truth
+    }
 }

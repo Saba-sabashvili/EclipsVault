@@ -173,8 +173,10 @@ public sealed class SecretService : ISecretService
                 "Rotate it with a new value instead.");
         }
 
-        // Soft licensing signal — never blocks rotation.
-        await _premiumUsage.RecordUseAsync(LicenseFeatures.ManagedRotation, ct);
+        // Gate: a trial or paid licence is required to have the vault change the real credential.
+        // Refused before the backend is touched, so the stored value stays the truth. (The secret and
+        // its read/decrypt path are never affected — only re-rotation is gated.)
+        await _premiumUsage.RequireAsync(LicenseFeatures.ManagedRotation, ct);
 
         var backend = _managedBackends.FirstOrDefault(b => b.Backend == entity.RotationBackend)
             ?? throw new VaultAdminException($"No backend is configured for '{entity.RotationBackend}'.");
