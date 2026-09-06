@@ -345,4 +345,34 @@ public class DynamicSecretServiceTests
         Assert.Empty(await service.ListLeasesAsync(Stranger, includeEveryone: false, CancellationToken.None));
         Assert.Single(await service.ListLeasesAsync(Stranger, includeEveryone: true, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Issue_is_refused_when_dynamic_secrets_are_not_licensed()
+    {
+        var role = Role();
+        var backend = new FakeBackend();
+        var usage = new RecordingPremiumFeatureUsage();
+        usage.Denied.Add(LicenseFeatures.DynamicSecrets);
+
+        await Assert.ThrowsAsync<PremiumFeatureNotLicensedException>(
+            () => Build(new FakeRepository(role), backend, usage).IssueAsync(role.Id, null, CancellationToken.None));
+
+        Assert.Empty(backend.Minted); // refused before the backend was touched — nothing leased
+    }
+
+    [Fact]
+    public async Task Revoke_still_succeeds_when_dynamic_secrets_are_no_longer_licensed()
+    {
+        // No-lockout invariant: an existing lease stays revocable after the licence lapses — only
+        // issuing is gated. RevokeAsync has no gate; this pins that it stays that way.
+        var role = Role();
+        var backend = new FakeBackend();
+        var usage = new RecordingPremiumFeatureUsage();
+        var service = Build(new FakeRepository(role), backend, usage);
+        var issued = await service.IssueAsync(role.Id, null, CancellationToken.None); // allowed
+
+        usage.Denied.Add(LicenseFeatures.DynamicSecrets); // licence lapses
+
+        Assert.True(await service.RevokeAsync(issued.LeaseId, Owner, isAdmin: false, CancellationToken.None));
+    }
 }

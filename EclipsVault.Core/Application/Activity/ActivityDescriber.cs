@@ -87,6 +87,7 @@ public static class ActivityDescriber
         // --- Licensing (soft — an operational notice, never a security event) --------
         AuditAction.LicenseInvalidProductionUse => new(ActivityCategory.Administration, "Started unlicensed in production", ActivitySeverity.Notable),
         AuditAction.LicenseFeatureUnlicensed => new(ActivityCategory.Administration, "Used a premium feature without a license", ActivitySeverity.Notable),
+        AuditAction.LicenseFeatureBlocked => new(ActivityCategory.Administration, "Refused an unlicensed premium feature", ActivitySeverity.Notable),
 
         // Any action added in future still renders as a readable, spaced-out title.
         _ => new(ActivityCategory.Other, Humanize(action), ActivitySeverity.Routine)

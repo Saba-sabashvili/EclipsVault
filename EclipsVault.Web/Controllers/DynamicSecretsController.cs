@@ -1,4 +1,5 @@
 using EclipsVault.Core.Application.Abac;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
@@ -22,15 +23,18 @@ public sealed class DynamicSecretsController : VaultController
 
     private readonly IDynamicSecretService _dynamicSecrets;
     private readonly IAuthorizationService _authorization;
+    private readonly ILicenseState _license;
     private readonly ILogger<DynamicSecretsController> _logger;
 
     public DynamicSecretsController(
         IDynamicSecretService dynamicSecrets,
         IAuthorizationService authorization,
+        ILicenseState license,
         ILogger<DynamicSecretsController> logger)
     {
         _dynamicSecrets = dynamicSecrets;
         _authorization = authorization;
+        _license = license;
         _logger = logger;
     }
 
@@ -72,6 +76,11 @@ public sealed class DynamicSecretsController : VaultController
             // never persisted, so it must survive exactly one render and no more.
             TempData[IssuedTempDataKey] = issued.LeaseId.ToString();
             return View(nameof(Index), await BuildAsync(issued, ct));
+        }
+        catch (PremiumFeatureNotLicensedException)
+        {
+            this.FlashError("Dynamic secrets require a licence. Start a free 30-day trial, or install your licence.");
+            return RedirectToAction(nameof(Index));
         }
         catch (VaultAdminException ex)
         {
@@ -124,7 +133,8 @@ public sealed class DynamicSecretsController : VaultController
             Roles = permitted,
             Leases = await _dynamicSecrets.ListLeasesAsync(CurrentUserId(), isAdmin, ct),
             ShowingEveryone = isAdmin,
-            Issued = issued
+            Issued = issued,
+            Licensed = _license.Allows(LicenseFeatures.DynamicSecrets)
         };
     }
 

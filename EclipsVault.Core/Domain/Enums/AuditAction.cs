@@ -119,5 +119,12 @@ public enum AuditAction
     /// unlicensed deployment, or a feature switched on beyond the current tier). Soft and
     /// deduplicated — a licensing reminder, never a restriction and never a security event.
     /// </summary>
-    LicenseFeatureUnlicensed = 201
+    LicenseFeatureUnlicensed = 201,
+
+    /// <summary>
+    /// A gated Max-only feature was refused because the license does not grant it. Distinct from
+    /// <see cref="LicenseFeatureUnlicensed"/>: the vault actually refused the action (surfaced as a
+    /// 402), it did not merely note the use. Non-critical — a licensing refusal is not a security event.
+    /// </summary>
+    LicenseFeatureBlocked = 202
 }
