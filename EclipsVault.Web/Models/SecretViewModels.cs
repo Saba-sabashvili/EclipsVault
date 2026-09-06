@@ -69,6 +69,9 @@ public sealed class SecretDetailsViewModel
 
     /// <summary>The configured freshness window, for the step-up prompt's explanation.</summary>
     public int StepUpMaxAgeMinutes { get; init; }
+
+    /// <summary>False when the vault holds no licence for managed rotation — the page nudges rather than hides.</summary>
+    public bool ManagedRotationLicensed { get; init; } = true;
 }
 
 public sealed class ShareSecretViewModel

@@ -1,4 +1,5 @@
 using EclipsVault.Core.Application.Abac;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
 using EclipsVault.Web.Authorization;
@@ -22,15 +23,18 @@ public sealed class DynamicSecretsController : VaultController
 
     private readonly IDynamicSecretService _dynamicSecrets;
     private readonly IAuthorizationService _authorization;
+    private readonly ILicenseState _license;
     private readonly ILogger<DynamicSecretsController> _logger;
 
     public DynamicSecretsController(
         IDynamicSecretService dynamicSecrets,
         IAuthorizationService authorization,
+        ILicenseState license,
         ILogger<DynamicSecretsController> logger)
     {
         _dynamicSecrets = dynamicSecrets;
         _authorization = authorization;
+        _license = license;
         _logger = logger;
     }
 
@@ -129,7 +133,8 @@ public sealed class DynamicSecretsController : VaultController
             Roles = permitted,
             Leases = await _dynamicSecrets.ListLeasesAsync(CurrentUserId(), isAdmin, ct),
             ShowingEveryone = isAdmin,
-            Issued = issued
+            Issued = issued,
+            Licensed = _license.Allows(LicenseFeatures.DynamicSecrets)
         };
     }
 

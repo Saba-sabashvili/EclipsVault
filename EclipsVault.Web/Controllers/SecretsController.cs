@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Core.Domain.Exceptions;
@@ -26,6 +27,7 @@ public sealed class SecretsController : VaultController
     private readonly ISecretGrantService _grants;
     private readonly IAuthorizationService _authorization;
     private readonly IStepUpService _stepUp;
+    private readonly ILicenseState _license;
     private readonly TimeProvider _clock;
     private readonly ILogger<SecretsController> _logger;
 
@@ -34,6 +36,7 @@ public sealed class SecretsController : VaultController
         ISecretGrantService grants,
         IAuthorizationService authorization,
         IStepUpService stepUp,
+        ILicenseState license,
         TimeProvider clock,
         ILogger<SecretsController> logger)
     {
@@ -41,6 +44,7 @@ public sealed class SecretsController : VaultController
         _grants = grants;
         _authorization = authorization;
         _stepUp = stepUp;
+        _license = license;
         _clock = clock;
         _logger = logger;
     }
@@ -461,7 +465,8 @@ public sealed class SecretsController : VaultController
             StepUpRequired = stepUpRequired,
             StepUpError = stepUpError,
             StepUpVersionId = stepUpVersionId,
-            StepUpMaxAgeMinutes = _stepUp.MaxAuthAgeMinutes
+            StepUpMaxAgeMinutes = _stepUp.MaxAuthAgeMinutes,
+            ManagedRotationLicensed = _license.Allows(LicenseFeatures.ManagedRotation)
         };
     }
 

@@ -17,6 +17,9 @@ public sealed class DynamicSecretsViewModel
     /// the only time the credential can be shown — reloading the page loses it for good.
     /// </summary>
     public IssuedCredentialDto? Issued { get; init; }
+
+    /// <summary>False when the vault holds no licence for dynamic secrets — the page nudges rather than hides.</summary>
+    public bool Licensed { get; init; } = true;
 }
 
 public sealed class IssueCredentialViewModel
