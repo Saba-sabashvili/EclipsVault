@@ -32,39 +32,32 @@ public sealed class MintCommand : Command
 
         var keyBase64 = key.KeyBase64!;
 
-        var tierText = options.Get("tier");
-        if (tierText is null || !Enum.TryParse<LicenseTier>(tierText, ignoreCase: true, out var tier))
-            return Fail("--tier must be Community or Max.");
-
-        var issuedTo = options.Get("to");
-        if (string.IsNullOrWhiteSpace(issuedTo))
-            return Fail("--to <customer name> is required.");
-
-        var now = DateTimeOffset.UtcNow;
-        var nodes = options.GetInt("nodes");
-        var updateYears = options.GetInt("years", 1);
         var featuresText = options.Get("features");
         var features = string.IsNullOrEmpty(featuresText)
             ? Array.Empty<string>()
             : featuresText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        // A Max licence is perpetual (NotAfterUtc null) and carries an update window (default one
-        // year, renewable). --expires <years> is the exception: it sets a hard expiry for a genuinely
-        // time-limited licence (an evaluation), whose features are meant to stop.
-        var expiresYears = options.GetInt("expires", 0);
-        DateTimeOffset? notAfter = expiresYears > 0 ? now.AddYears(expiresYears) : null;
-        DateTimeOffset? updatesUntil = tier == LicenseTier.Community ? null : now.AddYears(updateYears);
+        var now = DateTimeOffset.UtcNow;
 
-        var claims = new LicenseClaims(
-            LicenseId: options.Get("id") ?? Guid.NewGuid().ToString("N")[..12],
-            Tier: tier,
-            IssuedTo: issuedTo,
-            Contact: options.Get("contact"),
-            IssuedAtUtc: now,
-            NotAfterUtc: notAfter,
-            UpdatesUntilUtc: updatesUntil,
-            MaxNodes: nodes,
-            Features: features);
+        // --trial-days <n> mints a Max evaluation licence with an n-day hard expiry. Its presence (not
+        // its value) marks a trial, so absence stays null and a normal licence is untouched.
+        var trialDays = options.Get("trial-days") is null ? (int?)null : options.GetInt("trial-days", 0);
+
+        var build = MintClaims.Build(
+            tierText: options.Get("tier"),
+            issuedTo: options.Get("to"),
+            contact: options.Get("contact"),
+            licenseId: options.Get("id"),
+            nodes: options.GetInt("nodes"),
+            updateYears: options.GetInt("years", 1),
+            features: features,
+            expiresYears: options.GetInt("expires", 0),
+            trialDays: trialDays,
+            now: now);
+        if (!build.Ok)
+            return Fail(build.Error!);
+
+        var claims = build.Claims!;
 
         using var ecdsa = ECDsa.Create();
         try

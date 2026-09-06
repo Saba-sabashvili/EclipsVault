@@ -22,7 +22,7 @@ public static class HelpPrinter
         Console.WriteLine("EclipsVault license tool");
         Console.WriteLine("  keygen [--out <path>]");
         Console.WriteLine("  mint --tier <Community|Max> --to <name> [--key-file <path>] [--contact <email>]");
-        Console.WriteLine("       [--nodes <n>] [--years <n>] [--expires <n>] [--features a,b,c] [--id <id>]");
+        Console.WriteLine("       [--nodes <n>] [--years <n>] [--expires <n>] [--trial-days <n>] [--features a,b,c] [--id <id>]");
         Console.WriteLine($"  mint reads the private key from --key-file, else ${MintCommand.SigningKeyEnvVar}.");
     }
 
@@ -40,12 +40,13 @@ public static class HelpPrinter
 
         Render.SectionHeader("mint options");
         Option("--key-file", "read the private key from this file — preferred over the env var");
-        Option("--tier",     "Community | Max                (required)");
+        Option("--tier",     "Community | Max                (required, unless --trial-days)");
         Option("--to",       "customer / licensee name       (required)");
         Option("--contact",  "customer email");
         Option("--nodes",    "node allowance (0 = unlimited)");
         Option("--years",    "update window in years (default 1; the licence stays perpetual)");
         Option("--expires",  "hard expiry in years for a time-limited licence, e.g. an eval (default: perpetual)");
+        Option("--trial-days", "mint a Max trial with an n-day hard expiry, e.g. 30 (implies --tier Max)");
         Option("--features", "comma list to override the tier default");
         Option("--id",       "license id (default: random)");
         Console.WriteLine();
