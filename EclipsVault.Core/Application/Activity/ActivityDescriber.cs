@@ -88,6 +88,7 @@ public static class ActivityDescriber
         AuditAction.LicenseInvalidProductionUse => new(ActivityCategory.Administration, "Started unlicensed in production", ActivitySeverity.Notable),
         AuditAction.LicenseFeatureUnlicensed => new(ActivityCategory.Administration, "Used a premium feature without a license", ActivitySeverity.Notable),
         AuditAction.LicenseFeatureBlocked => new(ActivityCategory.Administration, "Refused an unlicensed premium feature", ActivitySeverity.Notable),
+        AuditAction.LicenseEvaluationStarted => new(ActivityCategory.Administration, "Started a premium feature's evaluation period", ActivitySeverity.Routine),
 
         // Any action added in future still renders as a readable, spaced-out title.
         _ => new(ActivityCategory.Other, Humanize(action), ActivitySeverity.Routine)

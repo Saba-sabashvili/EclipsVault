@@ -122,9 +122,17 @@ public enum AuditAction
     LicenseFeatureUnlicensed = 201,
 
     /// <summary>
-    /// A gated Max-only feature was refused because the license does not grant it. Distinct from
-    /// <see cref="LicenseFeatureUnlicensed"/>: the vault actually refused the action (surfaced as a
-    /// 402), it did not merely note the use. Non-critical — a licensing refusal is not a security event.
+    /// A gated Max-only feature was refused because the license does not grant it and its evaluation
+    /// period has ended. Distinct from <see cref="LicenseFeatureUnlicensed"/>: the vault actually
+    /// refused the action (surfaced as a 402), it did not merely note the use. Non-critical — a
+    /// licensing refusal is not a security event.
     /// </summary>
-    LicenseFeatureBlocked = 202
+    LicenseFeatureBlocked = 202,
+
+    /// <summary>
+    /// A Licensed Capability was exercised for the first time on an unlicensed vault, opening the
+    /// evaluation period the licence grants. Dated evidence of when the window opened, for the
+    /// operator and their auditor — the capability was allowed, not refused.
+    /// </summary>
+    LicenseEvaluationStarted = 203
 }
