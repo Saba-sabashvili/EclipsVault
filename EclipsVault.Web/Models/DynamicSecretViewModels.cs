@@ -20,6 +20,13 @@ public sealed class DynamicSecretsViewModel
 
     /// <summary>False when the vault holds no licence for dynamic secrets — the page nudges rather than hides.</summary>
     public bool Licensed { get; init; } = true;
+
+    /// <summary>
+    /// Days left in the licence's evaluation period, or null when it has not started. Only
+    /// meaningful while <see cref="Licensed"/> is false: null means the period is still available,
+    /// a positive number means it is running, and zero means it is spent.
+    /// </summary>
+    public int? EvaluationDaysRemaining { get; init; }
 }
 
 public sealed class IssueCredentialViewModel

@@ -28,6 +28,7 @@ public sealed class SecretsController : VaultController
     private readonly IAuthorizationService _authorization;
     private readonly IStepUpService _stepUp;
     private readonly ILicenseState _license;
+    private readonly IEvaluationWindowStore _evaluations;
     private readonly TimeProvider _clock;
     private readonly ILogger<SecretsController> _logger;
 
@@ -37,6 +38,7 @@ public sealed class SecretsController : VaultController
         IAuthorizationService authorization,
         IStepUpService stepUp,
         ILicenseState license,
+        IEvaluationWindowStore evaluations,
         TimeProvider clock,
         ILogger<SecretsController> logger)
     {
@@ -45,6 +47,7 @@ public sealed class SecretsController : VaultController
         _authorization = authorization;
         _stepUp = stepUp;
         _license = license;
+        _evaluations = evaluations;
         _clock = clock;
         _logger = logger;
     }
@@ -231,7 +234,7 @@ public sealed class SecretsController : VaultController
         }
         catch (PremiumFeatureNotLicensedException)
         {
-            this.FlashError("Managed rotation requires a licence. Start a free 30-day trial, or install your licence.");
+            this.FlashError("The 30-day evaluation period for managed rotation has ended. Rotating the real credential needs a licence — the stored value is unaffected.");
         }
         catch (VaultAdminException ex)
         {
@@ -444,6 +447,14 @@ public sealed class SecretsController : VaultController
         bool stepUpRequired = false, string? stepUpError = null, Guid? stepUpVersionId = null)
     {
         var canShare = CanShare(dto);
+        var rotationLicensed = _license.Allows(LicenseFeatures.ManagedRotation);
+
+        // Only ask when the answer can be shown — an unlicensed vault, on a managed secret. Otherwise
+        // every details page would carry a licensing query it never renders.
+        var rotationEvaluationDays = !rotationLicensed && dto.IsManaged
+            ? await _evaluations.DaysRemainingAsync(LicenseFeatures.ManagedRotation, _clock, ct)
+            : null;
+
         return new()
         {
             Id = dto.Id,
@@ -466,7 +477,8 @@ public sealed class SecretsController : VaultController
             StepUpError = stepUpError,
             StepUpVersionId = stepUpVersionId,
             StepUpMaxAgeMinutes = _stepUp.MaxAuthAgeMinutes,
-            ManagedRotationLicensed = _license.Allows(LicenseFeatures.ManagedRotation)
+            ManagedRotationLicensed = rotationLicensed,
+            ManagedRotationEvaluationDaysRemaining = rotationEvaluationDays
         };
     }
 

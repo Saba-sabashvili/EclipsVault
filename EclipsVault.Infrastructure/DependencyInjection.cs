@@ -175,6 +175,7 @@ public static class DependencyInjection
 
         // Soft recorder for on-demand premium-feature use (dynamic secrets, managed rotation,
         // attestation). Singleton so its per-feature dedup is process-wide.
+        services.AddSingleton<IEvaluationWindowStore, EvaluationWindowStore>();
         services.AddSingleton<IPremiumFeatureUsage, PremiumFeatureUsageRecorder>();
 
         // Single source of truth for config-activated premium features (banner + startup check read it).

@@ -24,17 +24,23 @@ public sealed class DynamicSecretsController : VaultController
     private readonly IDynamicSecretService _dynamicSecrets;
     private readonly IAuthorizationService _authorization;
     private readonly ILicenseState _license;
+    private readonly IEvaluationWindowStore _evaluations;
+    private readonly TimeProvider _clock;
     private readonly ILogger<DynamicSecretsController> _logger;
 
     public DynamicSecretsController(
         IDynamicSecretService dynamicSecrets,
         IAuthorizationService authorization,
         ILicenseState license,
+        IEvaluationWindowStore evaluations,
+        TimeProvider clock,
         ILogger<DynamicSecretsController> logger)
     {
         _dynamicSecrets = dynamicSecrets;
         _authorization = authorization;
         _license = license;
+        _evaluations = evaluations;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -79,7 +85,7 @@ public sealed class DynamicSecretsController : VaultController
         }
         catch (PremiumFeatureNotLicensedException)
         {
-            this.FlashError("Dynamic secrets require a licence. Start a free 30-day trial, or install your licence.");
+            this.FlashError("The 30-day evaluation period for dynamic secrets has ended. Issuing new credentials needs a licence — existing leases are unaffected and can still be revoked.");
             return RedirectToAction(nameof(Index));
         }
         catch (VaultAdminException ex)
@@ -128,13 +134,21 @@ public sealed class DynamicSecretsController : VaultController
         }
 
         var isAdmin = IsAdmin();
+        var licensed = _license.Allows(LicenseFeatures.DynamicSecrets);
+
+        // Only ask when the answer can be shown; a licensed vault never renders the nudge.
+        var evaluationDays = licensed
+            ? null
+            : await _evaluations.DaysRemainingAsync(LicenseFeatures.DynamicSecrets, _clock, ct);
+
         return new DynamicSecretsViewModel
         {
             Roles = permitted,
             Leases = await _dynamicSecrets.ListLeasesAsync(CurrentUserId(), isAdmin, ct),
             ShowingEveryone = isAdmin,
             Issued = issued,
-            Licensed = _license.Allows(LicenseFeatures.DynamicSecrets)
+            Licensed = licensed,
+            EvaluationDaysRemaining = evaluationDays
         };
     }
 

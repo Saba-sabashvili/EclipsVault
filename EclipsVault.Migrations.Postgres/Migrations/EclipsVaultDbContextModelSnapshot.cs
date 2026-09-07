@@ -415,6 +415,20 @@ namespace EclipsVault.Migrations.Postgres.Migrations
                     b.ToTable("EmailLogs", (string)null);
                 });
 
+            modelBuilder.Entity("EclipsVault.Core.Domain.Entities.FeatureEvaluation", b =>
+                {
+                    b.Property<string>("FeatureKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("FeatureKey");
+
+                    b.ToTable("FeatureEvaluations", (string)null);
+                });
+
             modelBuilder.Entity("EclipsVault.Core.Domain.Entities.MfaRecoveryCode", b =>
                 {
                     b.Property<Guid>("Id")
