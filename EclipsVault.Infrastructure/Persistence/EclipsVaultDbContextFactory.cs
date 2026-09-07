@@ -22,7 +22,7 @@ namespace EclipsVault.Infrastructure.Persistence;
 /// <code>
 /// ECLIPSVAULT_DESIGN_PROVIDER=Postgres \
 /// ECLIPSVAULT_DESIGN_CONNECTION="Host=localhost;Port=5433;Database=EclipsVaultUmbraDb;Username=postgres;Password=…" \
-/// dotnet ef migrations add &lt;Name&gt; -p EclipsVault.Migrations.Postgres -s EclipsVault.Infrastructure
+/// dotnet ef migrations add &lt;Name&gt; -p EclipsVault.Migrations.Postgres -s EclipsVault.Web
 /// </code>
 /// Adding a migration for one engine means adding it for both, or the two schemas drift.</para>
 /// </summary>

@@ -47,6 +47,9 @@ public sealed class EclipsVaultDbContext : DbContext
     /// <summary>Issued dynamic credentials, tracked so they can be destroyed when their lease ends.</summary>
     public DbSet<DynamicSecretLease> DynamicSecretLeases => Set<DynamicSecretLease>();
 
+    /// <summary>When each Licensed Capability was first exercised, which opens its evaluation period.</summary>
+    public DbSet<FeatureEvaluation> FeatureEvaluations => Set<FeatureEvaluation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EclipsVaultDbContext).Assembly);
