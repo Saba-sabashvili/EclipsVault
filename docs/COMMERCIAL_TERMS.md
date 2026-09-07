@@ -98,9 +98,11 @@ plainly.
 
 **What makes that survivable is the software, not a promise.** Nothing in EclipsVault depends on the
 Licensor being reachable. Licence verification is entirely offline; there is no activation server, no
-phone-home, and no kill switch; and enforcement never disables a capability or withholds access to the
-Customer's data. A vendor who is unreachable — for a week, or permanently — cannot cause an outage in
-the Customer's vault. Support answers questions; it is not in the path of anything working. That is the
+phone-home, and no kill switch; and enforcement never withholds access to the Customer's data, never
+disables any part of the baseline vault, and never stops anything already running. The single thing a
+licence state decides is whether a Licensed Capability will *begin* a new privileged operation once
+that capability's evaluation period has ended — which a licensed Customer never meets. A vendor who is
+unreachable — for a week, or permanently — cannot cause an outage in the Customer's vault. Support answers questions; it is not in the path of anything working. That is the
 reason this clause can afford to be honest.
 
 Security reports are triaged ahead of all other work. **If your organisation requires a contractual

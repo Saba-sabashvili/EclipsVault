@@ -92,13 +92,38 @@ this deployment become licensed" is an auditable fact rather than a memory.
 
 ## If something is wrong
 
-**Nothing stops.** Enforcement is soft by design and this is not a disclaimer — it is the deliberate
-behaviour, tested and documented. A missing, malformed, expired, or unrecognised licence produces an
-administrator banner and an audit entry. It never disables a feature, never blocks decryption, and
-never prevents the vault serving a secret. A security tool that outages over a licence check is not a
-security tool.
+**Your vault keeps running.** Enforcement is soft by design and this is not a disclaimer — it is the
+deliberate behaviour, tested and documented. A missing, malformed, expired, or unrecognised licence
+produces an administrator banner and an audit entry. It never blocks decryption, never disables any
+part of the baseline vault, and never prevents the vault serving a secret. A security tool that
+outages over a licence check is not a security tool.
+
+The one thing a licence state does decide is whether a **licensed capability** will *begin* a new
+privileged operation — and only after that capability's evaluation period has ended. See the next
+section. Even then, nothing already running is touched: existing leases stay listed and revocable,
+stored values stay readable, and configured integrations keep working.
 
 So if the banner says you are unlicensed, your vault is still working. You have time to sort it out.
+
+---
+
+## The evaluation period
+
+Each licensed capability carries **30 days of production use, free**, and the vault starts that period
+by itself the first time you use that capability. There is nothing to request, install, or register —
+no licence key, and no contact with us.
+
+- The period is **per capability**, timed from your first use of it. Reaching for managed rotation a
+  year after dynamic secrets still gives you a full 30 days to assess it.
+- The vault records the date it opened, in the audit trail, as `Evaluation started`. Your auditor can
+  see exactly when it began.
+- While it runs, the capability behaves exactly as it does under a licence, and the page tells you how
+  many days are left.
+- **When it ends**, the vault declines to *begin* a new privileged operation on that capability — it
+  will not issue a further dynamic credential or rotate an upstream credential — and returns a clear
+  "licence required" message. Everything already in place is unaffected.
+
+Installing a licence lifts this immediately; there is nothing to reset.
 
 | What you see | What it means |
 |---|---|

@@ -36,8 +36,10 @@ GRANT
      Licensor.
 
   2. Evaluation of Licensed Capabilities. You may use the Licensed Capabilities
-     for Evaluation Use, and for up to 30 consecutive days of Production Use, in
-     order to assess them.
+     for Evaluation Use, and each of them for up to 30 consecutive days of
+     Production Use, in order to assess it. The period runs per capability, from
+     the first time You use that capability, so one You reach for later is
+     assessed on the same terms as one You reached for first.
 
   3. Production use of Licensed Capabilities. Beyond the period in section 2,
      You may not use a Licensed Capability in Production Use except under a
@@ -48,10 +50,29 @@ GRANT
      Evaluation Use, and under a commercial licence to the extent that licence
      permits. Modifying it does not grant You any right to distribute it.
 
-  5. No technical enforcement. The Software does not disable, degrade, or block
-     any capability when unlicensed, and never withholds access to Your own
-     data. This is deliberate and permanent. It is not a waiver: a capability
-     that continues to run is not thereby licensed, and section 3 governs.
+  5. Limits on technical enforcement. Whatever its licence state, the Software
+     never withholds access to Your own data, never disables or degrades any
+     part of the baseline vault, and never stops serving a secret. Community
+     Use is never gated in any way. These guarantees are deliberate and
+     permanent.
+
+     For a Licensed Capability, and only once the evaluation period in section
+     2 has ended with no commercial licence present, the Software may refuse to
+     begin a new privileged operation — issuing a further dynamic credential,
+     or rotating an upstream credential, for example. Any such refusal happens
+     where the operation starts, never on the path that reads or decrypts a
+     secret, and never against anything already running: existing leases stay
+     listed and revocable, stored values stay readable, and configured
+     integrations keep working.
+
+     The evaluation period in section 2 requires no licence key, no
+     registration, and no contact with the Licensor. The Software opens it
+     itself, per capability, the first time You use that capability, and
+     records the date.
+
+     A refusal is a licensing outcome and never a security control. It is not a
+     waiver either: a capability that continues to run is not thereby licensed,
+     and section 3 governs.
 
 RESTRICTIONS
 
