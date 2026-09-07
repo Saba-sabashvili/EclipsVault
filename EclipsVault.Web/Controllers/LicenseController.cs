@@ -9,7 +9,8 @@ namespace EclipsVault.Web.Controllers;
 
 /// <summary>
 /// Shows how this vault is licensed and how to install or renew a license. Read-only and admin-only.
-/// Licensing is soft — this page reports state, it never restricts the vault.
+/// Licensing is soft — this page reports state and never restricts anything itself. The baseline
+/// vault is never gated; only a licensed capability past its evaluation period declines new work.
 /// </summary>
 [Authorize(Policy = VaultPolicies.AdminOnly)]
 public sealed class LicenseController : Controller

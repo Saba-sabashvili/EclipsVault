@@ -53,7 +53,7 @@ public sealed class HomeController : Controller
             403 => ("Access denied", "The attribute-based access policy denied this request."),
             409 => ("Secret needs a one-time upgrade", "This value was sealed before the vault bound each secret to its row, so it cannot be safely read until an administrator completes the re-seal migration. Nothing was decrypted or exposed."),
             503 => ("Vault unavailable (fail-closed)", "The audit trail could not be written, so the operation was refused. No data was released."),
-            402 => ("Licence required", "This feature is part of a paid licence. Start a free 30-day trial, or install your licence, then try again. Nothing was changed."),
+            402 => ("Licence required", "This feature's 30-day evaluation period has ended. Install a licence, then try again. Nothing was changed, and nothing already running was stopped."),
             _ => ("Something went wrong", "An unexpected error occurred. The incident has been logged.")
         };
 

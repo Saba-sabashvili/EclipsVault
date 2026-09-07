@@ -67,6 +67,7 @@ public static class AuditDisplay
         AuditAction.AuditCheckpointCreated => ("Checkpoint signed", "ok"),
         AuditAction.AuditBundleExported => ("Audit exported", "muted"),
         AuditAction.LicenseFeatureBlocked => ("Feature blocked (unlicensed)", "warn"),
+        AuditAction.LicenseEvaluationStarted => ("Evaluation started", "muted"),
         AuditAction.PersonalDataExported => ("Data exported", "muted"),
         AuditAction.PasskeyRegistered => ("Passkey added", "ok"),
         AuditAction.PasskeyRemoved => ("Passkey removed", "warn"),

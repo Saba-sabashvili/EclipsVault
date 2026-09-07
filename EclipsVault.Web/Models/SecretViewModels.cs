@@ -72,6 +72,12 @@ public sealed class SecretDetailsViewModel
 
     /// <summary>False when the vault holds no licence for managed rotation — the page nudges rather than hides.</summary>
     public bool ManagedRotationLicensed { get; init; } = true;
+
+    /// <summary>
+    /// Days left in managed rotation's evaluation period, or null when it has not started. Only
+    /// meaningful while <see cref="ManagedRotationLicensed"/> is false.
+    /// </summary>
+    public int? ManagedRotationEvaluationDaysRemaining { get; init; }
 }
 
 public sealed class ShareSecretViewModel

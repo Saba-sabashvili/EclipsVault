@@ -39,10 +39,29 @@
 
     @if (!Model.Licensed)
     {
-        <p class="muted">
-            <strong>Dynamic secrets are a licensed feature.</strong> You can browse roles, but issuing a
-            credential needs a licence. Ask an administrator to start a free 30-day trial or install a licence.
-        </p>
+        @if (Model.EvaluationDaysRemaining is null)
+        {
+            <p class="muted">
+                <strong>Dynamic secrets are a licensed feature.</strong> Issuing your first credential starts a
+                free 30-day evaluation — no licence key, no registration. After that, issuing new credentials
+                needs a licence; existing leases stay listed and revocable either way.
+            </p>
+        }
+        else if (Model.EvaluationDaysRemaining > 0)
+        {
+            <p class="muted">
+                <strong>Evaluating dynamic secrets — @Model.EvaluationDaysRemaining
+                @(Model.EvaluationDaysRemaining == 1 ? "day" : "days") left.</strong> When the evaluation ends,
+                issuing new credentials needs a licence. Existing leases stay listed and revocable.
+            </p>
+        }
+        else
+        {
+            <p class="muted">
+                <strong>The evaluation period for dynamic secrets has ended.</strong> Issuing new credentials
+                needs a licence — existing leases are unaffected and can still be revoked.
+            </p>
+        }
     }
 
     @if (Model.Roles.Count == 0)
