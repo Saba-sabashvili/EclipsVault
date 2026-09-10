@@ -112,4 +112,13 @@ public class MintClaimsTests
 
         Assert.False(result.Ok);
     }
+
+    [Fact]
+    public void A_negative_expiry_is_refused_rather_than_read_as_perpetual()
+    {
+        var result = Build(expiresYears: -1);
+
+        Assert.False(result.Ok);
+        Assert.Contains("--expires", result.Error!);
+    }
 }
