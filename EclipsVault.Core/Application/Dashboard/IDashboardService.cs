@@ -1,3 +1,4 @@
+using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Enums;
 
 namespace EclipsVault.Core.Application.Dashboard;
@@ -20,5 +21,6 @@ public sealed record DashboardDto(
 public interface IDashboardService
 {
     /// <summary>Pass a username to restrict the activity feed to that actor (non-admin view).</summary>
-    Task<DashboardDto> GetAsync(string? restrictActivityToUsername, CancellationToken ct);
+    Task<DashboardDto> GetAsync(
+        IReadOnlyList<SecretSummaryDto> visibleSecrets, string? restrictActivityToUsername, CancellationToken ct);
 }
