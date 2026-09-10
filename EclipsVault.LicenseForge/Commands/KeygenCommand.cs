@@ -7,54 +7,43 @@ namespace EclipsVault.LicenseForge.Commands;
 /// <summary>
 /// <c>keygen</c> — generate a fresh P-256 signing keypair. Run once: keep the private key OFFLINE and
 /// paste the public key into <c>LicensePublicKey.VendorSpkiBase64</c> so the shipped app can verify
-/// what this tool mints. Plain output is a stable five-line block (private key on line 2, public key
-/// on line 5) so a script can capture either without parsing colour.
+/// what this tool mints. Only the public half is ever printed.
 ///
-/// <para>
-/// <c>--out &lt;path&gt;</c> writes the private key straight to a file (owner-only) and prints only the
-/// public half. Prefer it. Displaying a private key means it must be selected, copied and pasted to be
-/// useful, and every one of those steps can drop it somewhere it cannot be recalled from — a terminal
-/// scrollback, a clipboard manager, a chat window. Writing it to disk skips all of them.
-/// </para>
+/// <para><b><c>--out &lt;path&gt;</c> is required.</b> It writes the private key straight to a file the
+/// tool creates owner-only, and displays only the public key. Printing a private key means it has to be
+/// selected, copied and pasted to be useful, and every one of those steps can drop it somewhere it
+/// cannot be recalled from — terminal scrollback, a clipboard manager, a chat window, or a world-readable
+/// file the moment the operator redirects stdout. That path used to be the default and is now gone: this
+/// key cannot be revoked, so the one convenience it bought was never worth the exposure.</para>
 /// </summary>
 public sealed class KeygenCommand : Command
 {
+    /// <summary>Every flag <c>keygen</c> accepts; anything else is refused rather than ignored.</summary>
+    private static readonly string[] KeygenFlags = ["out"];
+
     public KeygenCommand(bool pretty) : base(pretty) { }
 
     public override int Execute(string[] args)
     {
-        var options = CommandLineOptions.Parse(args);
+        var parsed = CommandLineOptions.Parse(args, KeygenFlags);
+        if (!parsed.Ok) return Fail(parsed.Error!);
+        var options = parsed.Options!;
         var outPath = options.Get("out");
+
+        // Refuse before generating. There is no branch here that prints a private key, so there is no
+        // way to reach one by holding the command wrong.
+        if (string.IsNullOrWhiteSpace(outPath))
+        {
+            return Fail(
+                "keygen needs --out <path>: the private key is written to that file and never displayed. " +
+                "Choose a path outside the repository and outside any cloud-synced folder.");
+        }
 
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var privateKey = Convert.ToBase64String(ecdsa.ExportPkcs8PrivateKey());
         var publicKey = Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo());
 
-        if (outPath is not null)
-        {
-            return WriteKeyFile(outPath, privateKey, publicKey);
-        }
-
-        if (!Pretty)
-        {
-            // Stable, scriptable format — line 2 is the private key, line 5 is the public key.
-            Console.WriteLine("# PRIVATE KEY (PKCS#8 base64) — keep OFFLINE, never commit:");
-            Console.WriteLine(privateKey);
-            Console.WriteLine();
-            Console.WriteLine("# PUBLIC KEY (SPKI base64) — paste into LicensePublicKey.VendorSpkiBase64:");
-            Console.WriteLine(publicKey);
-            return ExitCodes.Ok;
-        }
-
-        Banner.Print();
-        Render.SectionHeader("New signing keypair");
-        Render.KeyBlock("PRIVATE KEY", Theme.Negative, privateKey, "PKCS#8 · keep OFFLINE, never commit");
-        Render.KeyBlock("PUBLIC KEY", Theme.Accent, publicKey, "SPKI · paste into LicensePublicKey.VendorSpkiBase64");
-        Console.WriteLine();
-        Render.Warn("The private key is shown once — store it in your password manager now.");
-        Render.Info("Next time, prefer: keygen --out <path> — it never displays the private key.");
-        Console.WriteLine();
-        return ExitCodes.Ok;
+        return WriteKeyFile(outPath, privateKey, publicKey);
     }
 
     /// <summary>

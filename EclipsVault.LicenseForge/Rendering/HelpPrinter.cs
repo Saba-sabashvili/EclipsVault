@@ -23,7 +23,7 @@ public static class HelpPrinter
         Console.WriteLine("  keygen [--out <path>]");
         Console.WriteLine("  mint --tier <Community|Max> --to <name> [--key-file <path>] [--contact <email>]");
         Console.WriteLine("       [--nodes <n>] [--years <n>] [--expires <n>] [--trial-days <n>] [--features a,b,c] [--id <id>]");
-        Console.WriteLine($"  mint reads the private key from --key-file, else ${MintCommand.SigningKeyEnvVar}.");
+        Console.WriteLine("  mint reads the private key from --key-file only. keygen needs --out <path>.");
     }
 
     private static void PrintThemed()
@@ -50,7 +50,7 @@ public static class HelpPrinter
         Option("--features", "comma list to override the tier default");
         Option("--id",       "license id (default: random)");
         Console.WriteLine();
-        Render.Info($"mint reads the private key from --key-file, else ${MintCommand.SigningKeyEnvVar} (base64 PKCS#8).");
+        Render.Info("mint reads the private key from --key-file only (base64 PKCS#8). keygen needs --out <path>.");
         Render.Info("A key file keeps the key out of your shell history and out of the process list.");
         Console.WriteLine();
     }

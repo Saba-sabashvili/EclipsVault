@@ -55,7 +55,7 @@ public class SigningKeySourceTests : IDisposable
     public void A_key_file_is_read()
     {
         var key = NewPrivateKey();
-        var result = SigningKeySource.Resolve(TempFileWith(key), envValue: null);
+        var result = SigningKeySource.Resolve(TempFileWith(key));
 
         Assert.True(result.Ok);
         Assert.Equal(key, result.KeyBase64);
@@ -66,7 +66,7 @@ public class SigningKeySourceTests : IDisposable
     public void Trailing_whitespace_in_a_key_file_is_tolerated()
     {
         var key = NewPrivateKey();
-        var result = SigningKeySource.Resolve(TempFileWith(key + "\n"), envValue: null);
+        var result = SigningKeySource.Resolve(TempFileWith(key + "\n"));
 
         Assert.True(result.Ok);
         Assert.Equal(key, result.KeyBase64);
@@ -76,7 +76,7 @@ public class SigningKeySourceTests : IDisposable
     public void The_environment_variable_still_works_when_no_file_is_given()
     {
         var key = NewPrivateKey();
-        var result = SigningKeySource.Resolve(keyFilePath: null, envValue: key);
+        var result = SigningKeySource.Resolve(TempFileWith(key));
 
         Assert.True(result.Ok);
         Assert.Equal(key, result.KeyBase64);
@@ -89,10 +89,10 @@ public class SigningKeySourceTests : IDisposable
     [Fact]
     public void A_missing_key_file_does_not_silently_fall_back_to_the_environment()
     {
-        var result = SigningKeySource.Resolve("/nonexistent/path/to.key", envValue: NewPrivateKey());
+        var result = SigningKeySource.Resolve("/nonexistent/path/to.key");
 
         Assert.False(result.Ok);
-        Assert.Contains("not falling back", result.Error!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fall back", result.Error!, StringComparison.OrdinalIgnoreCase);
     }
 
     // ---- The mistakes that actually happened -------------------------------------------------
@@ -100,7 +100,7 @@ public class SigningKeySourceTests : IDisposable
     [Fact]
     public void Pasting_the_public_key_says_so_by_name()
     {
-        var result = SigningKeySource.Resolve(keyFilePath: null, envValue: NewPublicKey());
+        var result = SigningKeySource.Resolve(TempFileWith(NewPublicKey()));
 
         Assert.False(result.Ok);
         Assert.Contains("PUBLIC key", result.Error!, StringComparison.Ordinal);
@@ -110,7 +110,7 @@ public class SigningKeySourceTests : IDisposable
     [Fact]
     public void Pasting_something_that_is_not_a_key_at_all_reports_its_length()
     {
-        var result = SigningKeySource.Resolve(keyFilePath: null, envValue: "Vision1889Ac");
+        var result = SigningKeySource.Resolve(TempFileWith("Vision1889Ac"));
 
         Assert.False(result.Ok);
         Assert.Contains("12 characters", result.Error!, StringComparison.Ordinal);
@@ -119,7 +119,7 @@ public class SigningKeySourceTests : IDisposable
     [Fact]
     public void A_placeholder_used_literally_is_refused()
     {
-        var result = SigningKeySource.Resolve(keyFilePath: null, envValue: "EVLIC1....");
+        var result = SigningKeySource.Resolve(TempFileWith("EVLIC1...."));
 
         Assert.False(result.Ok);
         Assert.NotNull(result.Error);
@@ -131,7 +131,7 @@ public class SigningKeySourceTests : IDisposable
         var key = NewPrivateKey();
         var wrapped = key[..60] + "\n" + key[60..];
 
-        var result = SigningKeySource.Resolve(TempFileWith(wrapped), envValue: null);
+        var result = SigningKeySource.Resolve(TempFileWith(wrapped));
 
         Assert.False(result.Ok);
         Assert.Contains("one unbroken line", result.Error!, StringComparison.Ordinal);
@@ -140,20 +140,10 @@ public class SigningKeySourceTests : IDisposable
     [Fact]
     public void An_empty_key_file_is_refused()
     {
-        var result = SigningKeySource.Resolve(TempFileWith("   \n"), envValue: null);
+        var result = SigningKeySource.Resolve(TempFileWith("   \n"));
 
         Assert.False(result.Ok);
         Assert.Contains("empty", result.Error!, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void No_key_anywhere_points_at_both_ways_to_supply_one()
-    {
-        var result = SigningKeySource.Resolve(keyFilePath: null, envValue: null);
-
-        Assert.False(result.Ok);
-        Assert.Contains("--key-file", result.Error!, StringComparison.Ordinal);
-        Assert.Contains(SigningKeySource.EnvVar, result.Error!, StringComparison.Ordinal);
     }
 
     // ---- The rule that must hold for every message above --------------------------------------
@@ -171,10 +161,10 @@ public class SigningKeySourceTests : IDisposable
 
         string?[] errors =
         [
-            SigningKeySource.Resolve(null, publicKey).Error,
-            SigningKeySource.Resolve(null, "Vision1889Ac").Error,
-            SigningKeySource.Resolve(null, privateKey[..40]).Error,
-            SigningKeySource.Resolve(TempFileWith(privateKey[..60] + "\n" + privateKey[60..]), null).Error,
+            SigningKeySource.Resolve(TempFileWith(publicKey)).Error,
+            SigningKeySource.Resolve(TempFileWith("Vision1889Ac")).Error,
+            SigningKeySource.Resolve(TempFileWith(privateKey[..40])).Error,
+            SigningKeySource.Resolve(TempFileWith(privateKey[..60] + "\n" + privateKey[60..])).Error,
         ];
 
         foreach (var error in errors)
@@ -184,5 +174,18 @@ public class SigningKeySourceTests : IDisposable
             Assert.DoesNotContain(publicKey[..20], error, StringComparison.Ordinal);
             Assert.DoesNotContain("Vision1889", error, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void No_key_file_is_refused_without_offering_an_environment_variable_instead()
+    {
+        // The private key must reach this tool as a file and nothing else. An environment variable is
+        // inherited by every child process and lands verbatim in shell history, and this message used
+        // to recommend it.
+        var result = SigningKeySource.Resolve(keyFilePath: null);
+
+        Assert.False(result.Ok);
+        Assert.Contains("--key-file", result.Error!);
+        Assert.DoesNotContain("ECLIPSVAULT_LICENSE_SIGNING_KEY", result.Error!);
     }
 }
