@@ -107,7 +107,14 @@ public sealed class LicenseStartupCheck : IHostedService
                 },
                 ct);
         }
-        catch (AuditWriteFailedException ex)
+        // As wide as the promise above it. This method exists to record a licensing *reminder*, and
+        // the rule is that licensing never blocks the vault — so nothing that happens in here may
+        // bring the host down. Catching only AuditWriteFailedException left everything else (a
+        // disposed scope at shutdown, a provider that cannot resolve the sink) escaping into
+        // StartAsync, where it fails startup: a vault that will not boot because it could not write a
+        // note about its licence. The sibling writer, PremiumFeatureUsageRecorder, catches Exception
+        // here for the same reason.
+        catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "Could not record the licensing audit row — continuing (licensing never blocks the vault).");

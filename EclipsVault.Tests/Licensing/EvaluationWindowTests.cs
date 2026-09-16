@@ -48,4 +48,22 @@ public class EvaluationWindowTests
     [Fact]
     public void A_spent_window_reports_no_days_rather_than_a_negative_number()
         => Assert.Equal(0, EvaluationWindow.DaysRemaining(Start, Start.AddDays(45)));
+
+    [Fact]
+    public void A_start_near_the_end_of_time_does_not_throw_out_of_the_licensing_path()
+    {
+        // Licensing must never throw into a secret operation: PremiumFeatureUsageRecorder calls
+        // IsActive OUTSIDE the try/catch that guards the store lookup, so an AddDays overflow here
+        // would surface as a 500 on issuing a dynamic secret rather than as a clean licence answer.
+        // A stored start can be anything an operator wrote into the row.
+        var absurd = DateTimeOffset.MaxValue.AddDays(-1);
+
+        var ends = EvaluationWindow.EndsAt(absurd);
+        var active = EvaluationWindow.IsActive(absurd, DateTimeOffset.UnixEpoch);
+        var remaining = EvaluationWindow.DaysRemaining(absurd, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(DateTimeOffset.MaxValue, ends);
+        Assert.True(active);
+        Assert.True(remaining > 0);
+    }
 }

@@ -13,6 +13,22 @@ namespace EclipsVault.Tests.Licensing;
 /// in clipboard history the moment it was selected. The safe path existed but was opt-in. These pin
 /// that the tool will not emit private key bytes to a stream whose permissions it does not control.</para>
 /// </summary>
+/// <summary>
+/// Capturing <c>keygen</c>'s output means redirecting <see cref="Console"/>, which is process-global
+/// state, and xUnit runs test classes in parallel by default. Without this collection, any other test
+/// running at the same time would have its console output silently swallowed into this class's
+/// <see cref="StringWriter"/> — and that writer is disposed once the redirect is restored, so anything
+/// still holding the old reference would be writing to a disposed object. Disabling parallelisation
+/// for the collection is what makes the redirect safe; it is the only place in the suite that touches
+/// these streams, and it should stay that way.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ConsoleRedirectingCollection
+{
+    public const string Name = "console-redirecting";
+}
+
+[Collection(ConsoleRedirectingCollection.Name)]
 public class KeygenCommandTests : IDisposable
 {
     /// <summary>Base64 prefix of a PKCS#8 P-256 private key — what must never appear on stdout.</summary>
