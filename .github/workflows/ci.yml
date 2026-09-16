@@ -41,6 +41,23 @@ jobs:
         # only ever reached by a genuine hang.
         run: dotnet test --configuration Release --no-build --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type mini
 
+      # The step above has been promising a dump "naming the culprit" since PR #32, and the dump was
+      # thrown away with the runner every time — which is most of why the intermittent hang has never
+      # been root-caused. The blame collector writes Sequence_*.xml naming the tests still in flight
+      # when it gave up, plus a minidump of the stuck process; both are the actual evidence, and the
+      # console log is not (its output is buffered, so the last test printed before the silence is not
+      # the one that hung).
+      #
+      # Only on failure: a clean run deletes its own sequence file, so there is nothing to collect.
+      - name: Upload hang evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: EclipsVault.Tests/TestResults/**
+          if-no-files-found: ignore
+          retention-days: 30
+
   # The vault targets two database engines, so every model change needs a migration in BOTH sets.
   # One that reaches only one engine leaves the schemas silently different, and nothing notices
   # until a deployment on the other engine hits a column that was never created. Neither check
