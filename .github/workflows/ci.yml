@@ -1,11 +1,19 @@
 name: CI
 
 on:
-  # Every branch, not just main. Work here lands on stacked feature branches that may sit for a
-  # while before they are merged or ever see a pull request — CI that only watches main is CI that
-  # tells you a week late.
+  # `push` watches main; `pull_request` watches everything on its way there. Listening to both on
+  # every branch meant each commit on a branch with an open PR ran the whole suite TWICE — double the
+  # minutes, and two independent chances to hit the intermittent test hang, so roughly one PR in five
+  # went red for a reason that had nothing to do with the change.
+  #
+  # Little loses coverage that had it. A stacked PR fires `pull_request` against its own base, so
+  # chained branches are still built, and main is still built on every merge. The one gap is a branch
+  # with no pull request open at all — `workflow_dispatch` covers that on demand, which is a better
+  # trade than running everything twice forever for the rare branch that sits unopened.
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-test:
