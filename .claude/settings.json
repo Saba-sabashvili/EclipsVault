@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet restore --locked-mode)",
+      "Bash(dotnet build EclipsVault.slnx -c Release)",
+      "Bash(dotnet test EclipsVault.slnx -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini)",
+      "Bash(dotnet build-server shutdown)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show)",
+      "Bash(git show *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr list)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh run list)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)"
+    ],
+    "deny": [
+      "Bash(git difftool*)",
+      "Bash(git * --output*)",
+      "Bash(git push --force*)",
+      "Bash(git push * --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f*)",
+      "Bash(git push * +*)",
+      "Bash(git push --delete*)",
+      "Bash(git push * --delete*)",
+      "Bash(git push -d*)",
+      "Bash(git push * -d *)",
+      "Bash(git push * :*)",
+      "Bash(git branch -D*)",
+      "Bash(git branch * -D*)",
+      "Bash(git branch --delete --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git reset * --hard*)",
+      "Bash(git clean*)"
+    ]
+  }
+}
