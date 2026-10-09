@@ -25,8 +25,9 @@ INTERPRETER = re.compile(r"python[0-9.]*|perl|ruby|node|php|osascript|pwsh")
 SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "|&", ";;"}
 # git's own options that take a separate value, e.g. `git -C <dir> push`.
 GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
-GUARDED = {
-    "push", "reset", "clean", "branch", "checkout", "switch", "restore", "stash", "difftool",
+PUSHES = {"push", "send-pack", "http-push"}
+GUARDED = PUSHES | {
+    "reset", "clean", "branch", "checkout", "switch", "restore", "stash", "difftool",
     "mergetool", "rm", "update-ref", "reflog", "gc", "filter-branch", "filter-repo", "worktree", "config",
 }
 VERB = re.compile(r"\b(" + "|".join(sorted(GUARDED, key=len, reverse=True)) + r")\b")
@@ -39,13 +40,20 @@ BUILTINS = GUARDED | {
     "merge-base", "for-each-ref", "show-ref", "check-ignore", "help", "version", "submodule", "notes",
 }
 READ_ONLY_CONFIG = {"--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin"}
-RISKY_CONFIG = ("alias.", "core.hookspath", "core.sshcommand", "core.pager", "core.editor",
-                "core.fsmonitor", "diff.external")
+CONFIG_WRITE_FLAGS = {"--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section"}
+# Settings that change what a later, innocent-looking command does: where and how it pushes, or which
+# extra config and hooks load. Refused outright, whether set with `git config` or `git -c`.
+BLOCKED_CONFIG = ("remote.", "push.", "url.", "branch.", "include.", "includeif.", "core.hookspath", "alias.")
+# Settings whose value is a command git runs later. The value is checked like any other command.
+COMMAND_CONFIG = ("core.editor", "core.pager", "core.sshcommand", "core.fsmonitor", "core.askpass",
+                  "diff.external", "sequence.editor", "gpg.program")
 
 
 def tokenize(command):
-    """Split into shell words. Newlines and backticks separate commands, like `;` does."""
-    lexer = shlex.shlex(command.replace("\n", " ; ").replace("`", " ; "), posix=True, punctuation_chars=True)
+    """Split into shell words. A backslash-newline joins lines, as in the shell; other newlines and
+    backticks separate commands, like `;` does."""
+    command = command.replace("\\\n", " ").replace("\n", " ; ").replace("`", " ; ")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     return list(lexer)
 
@@ -113,6 +121,16 @@ def program_source(name, rest):
     return "file", None
 
 
+def config_reason(key, value, depth):
+    """Why setting this git config key is refused, or None."""
+    key = key.lower()
+    if key.startswith(BLOCKED_CONFIG):
+        return f"setting {key} could change what later git commands push or run"
+    if key.startswith(COMMAND_CONFIG) and value:
+        return check(value, depth + 1)
+    return None
+
+
 def configured_alias(name, location):
     try:
         result = subprocess.run(["git", *location, "config", "--get", f"alias.{name}"],
@@ -128,18 +146,31 @@ def check_git(args, depth):
         return "git aliases nest too deeply to check"
     i, inline_aliases, location = 0, {}, []
     while i < len(args) and args[i].startswith("-"):
-        option, value = args[i], args[i + 1] if i + 1 < len(args) else ""
-        if option in GIT_OPTIONS_WITH_VALUE:
-            if expands(value):
-                return "a git option is a shell expansion, so the command can't be checked"
-            if option == "-c" and value.lower().startswith("alias."):
-                name, _, body = value[len("alias."):].partition("=")
-                inline_aliases[name] = body
-            if option == "-C":
-                location = ["-C", value]
-            i += 2
+        # An option's value can be the next word (`-c k=v`), joined by `=` (`--config-env=k=v`) or
+        # attached (`-ck=v`). Normalise all three to (option, value).
+        word = args[i]
+        if word in GIT_OPTIONS_WITH_VALUE:
+            option, value, step = word, args[i + 1] if i + 1 < len(args) else "", 2
+        elif word.startswith("--") and word.split("=", 1)[0] in GIT_OPTIONS_WITH_VALUE and "=" in word:
+            option, value, step = *word.split("=", 1), 1
+        elif word[:2] in {"-c", "-C"} and len(word) > 2:
+            option, value, step = word[:2], word[2:], 1
         else:
             i += 1
+            continue
+        if expands(value):
+            return "a git option is a shell expansion, so the command can't be checked"
+        key, _, setting = value.partition("=")
+        if option == "-c" and key.lower().startswith("alias."):
+            inline_aliases[key[len("alias."):]] = setting
+        elif option in {"-c", "--config-env"}:
+            # --config-env takes its value from an environment variable this hook cannot see.
+            reason = config_reason(key, setting if option == "-c" else "unknown", depth)
+            if reason:
+                return reason
+        if option == "-C":
+            location = ["-C", value]
+        i += step
     if i >= len(args):
         return None
     sub, rest = args[i], args[i + 1:]
@@ -164,7 +195,7 @@ def check_git(args, depth):
         return "--output writes to an arbitrary file"
     if sub in {"difftool", "mergetool"}:
         return f"git {sub} runs external programs"
-    if sub == "push":
+    if sub in PUSHES:
         if any(a.startswith("--force") for a in rest) or "f" in flags:
             return "force-push rewrites shared history"
         if any(a.startswith("+") for a in operands(rest)):
@@ -179,8 +210,8 @@ def check_git(args, depth):
         return "reset --hard discards uncommitted work"
     if sub == "clean":
         return "git clean deletes untracked files"
-    if sub == "checkout" and ({".", "--", "--force"} & set(rest) or "f" in flags):
-        return "this checkout discards uncommitted changes"
+    if sub == "checkout" and ({".", "--", "--force"} & set(rest) or flags & {"f", "B"}):
+        return "this checkout discards uncommitted changes or resets a branch"
     if sub == "switch" and ({"--force", "--discard-changes"} & set(rest) or flags & {"f", "C"}):
         return "this switch discards changes or resets a branch"
     if sub == "restore":
@@ -191,8 +222,8 @@ def check_git(args, depth):
         return "this deletes stashed work"
     if sub == "rm" and ("--force" in rest or "f" in flags):
         return "git rm --force discards uncommitted changes"
-    if sub == "update-ref" and ("-d" in rest or "--delete" in rest):
-        return "update-ref -d deletes a ref"
+    if sub == "update-ref":
+        return "update-ref moves or deletes a branch directly"
     if sub == "reflog" and rest[:1] in (["expire"], ["delete"]):
         return "this destroys the reflog, the record that makes lost commits recoverable"
     if sub == "gc" and any(a.startswith("--prune") for a in rest):
@@ -201,8 +232,15 @@ def check_git(args, depth):
         return f"git {sub} rewrites history"
     if sub == "worktree" and rest[:1] == ["remove"] and ("--force" in rest or "f" in flags):
         return "worktree remove --force discards that worktree's changes"
-    if sub == "config" and not READ_ONLY_CONFIG & set(rest) and any(a.lower().startswith(RISKY_CONFIG) for a in rest):
-        return "this git config change could disguise or run commands"
+    if sub == "config" and not READ_ONLY_CONFIG & set(rest):
+        names = operands(rest)
+        if names[:1] in (["get"], ["list"]):
+            return None
+        writing = names[:1] in (["set"], ["unset"]) or len(names) >= 2 or bool(CONFIG_WRITE_FLAGS & set(rest))
+        if names[:1] in (["set"], ["unset"]):
+            names = names[1:]
+        if writing and names:
+            return config_reason(names[0], names[1] if len(names) > 1 else "", depth)
     return None
 
 

@@ -94,6 +94,21 @@ BLOCKED = [
     "git filter-branch --tree-filter true HEAD",
     "git worktree remove --force ../wt",
     "git rm -f src/File.cs",
+    # A backslash-newline joins lines in the shell, so the flag on the next line belongs to the push.
+    "git push origin main \\\n  --force",
+    # Config that turns a later plain command into a destructive one.
+    "git -c remote.origin.push=+HEAD:main push",
+    "git -c remote.origin.mirror=true push origin",
+    "git -c 'core.pager=git push --force' log",
+    "git --config-env=remote.origin.push=PUSHSPEC push",
+    "git config remote.origin.push '+refs/heads/*:refs/heads/*'",
+    "git config set push.default mirror",
+    "git config --global url.git@example.com:.pushInsteadOf git@github.com:",
+    "git config core.hooksPath /tmp/hooks",
+    # Other ways to move or force-write a branch.
+    "git checkout -B main origin/main",
+    "git update-ref refs/heads/main HEAD~3",
+    "git send-pack --force origin main",
 ]
 
 ALLOWED = [
@@ -135,6 +150,13 @@ ALLOWED = [
     "git reflog",
     "git config user.name 'A Person'",
     "git config --get alias.st",
+    "git config remote.origin.url",
+    "git config get remote.origin.url",
+    "git -c color.ui=always log -1",
+    "git -c core.editor=true rebase --continue",
+    "git -c user.name=Someone commit -m wip",
+    "git log --oneline \\\n  -5",
+    "git checkout -b feature origin/main",
     "python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py'",
     # A module or script file is not read, so running one beside a normal push is fine.
     "python3 -I -m unittest discover -s .claude/hooks && git push origin feature",
