@@ -1,0 +1,43 @@
+# Disposable local dummy-data evaluation. Images reuse the maintainer's cached ARM64 images.
+# pull_policy prevents unexpected downloads; install these digests explicitly on another machine.
+name: eclipsvault-evaluation
+
+services:
+  db:
+    image: postgres@sha256:39fb82e41109483c81ac15422a302500b4a753777b47f8431038703536bc6c52
+    pull_policy: never
+    environment:
+      POSTGRES_DB: eclipsvault_eval
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run evaluation/prepare.py first}
+    ports:
+      - "127.0.0.1:55432:5432"
+    # No database volume or backup. Stop/recreate this container and its data is discarded.
+    tmpfs:
+      - /var/lib/postgresql/data:rw,size=268435456
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eclipsvault_eval"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
+
+  mailpit:
+    image: axllent/mailpit@sha256:5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6
+    pull_policy: never
+    ports:
+      - "127.0.0.1:11025:1025"
+      - "127.0.0.1:18025:8025"
+    mem_limit: 128m
+    environment:
+      MP_MAX_MESSAGES: "100"
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"

@@ -27,6 +27,11 @@ Community features; do not activate premium capabilities to get the basic walkth
 
 ## Local setup for a supervised session
 
+For a small disposable setup using cached PostgreSQL/Mailpit images and no database disk volume or
+backups, use the [local evaluation lab](../evaluation/README.md). Its database is discarded when the
+container stops; it supports the browser walkthrough, not a recovery rehearsal. The manual setup
+below is an alternative.
+
 Use a dedicated checkout and a new, disposable database. Follow the [README development setup](../README.md#run-it),
 with these details made explicit:
 
