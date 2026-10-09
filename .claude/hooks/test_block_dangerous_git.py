@@ -4,6 +4,7 @@ Run: python3 -m unittest discover -s .claude/hooks -p 'test_*.py'
 """
 
 import json
+import shlex
 import subprocess
 import sys
 import unittest
@@ -65,6 +66,34 @@ BLOCKED = [
     "git restore --staged --worktree src/File.cs",
     "git stash drop",
     "git stash clear",
+    # The shell rewrites these after the hook has looked, so they are refused as unverifiable.
+    "git push $(echo --force)",
+    "F=--force; git push origin main $F",
+    "git push origin main $'--force'",
+    "git push {-f,} origin main",
+    "git push origin main --forc*",
+    "git $SUB --force",
+    "G=git; $G push --force",
+    # Scripts the hook cannot see into.
+    'echo "git push --force" | bash',
+    'bash <<< "git push --force"',
+    "python3 -c \"import os; os.system('git push --force')\"",
+    "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'push', '--force'])\nEOF",
+    "echo --force | xargs git push origin main",
+    'echo "git push --force" | bash 2>&1',
+    "cat <<'EOF' | sh\ngit push --force\nEOF",
+    "node -e \"require('child_process').execSync('git push --force')\"",
+    # Aliases.
+    'git -c alias.p="push --force" p origin main',
+    "git -c 'alias.p=!git push --force' p",
+    'git config alias.p "push --force"',
+    # History and ref destruction beyond push.
+    "git update-ref -d refs/heads/main",
+    "git reflog expire --expire=now --all",
+    "git gc --prune=now",
+    "git filter-branch --tree-filter true HEAD",
+    "git worktree remove --force ../wt",
+    "git rm -f src/File.cs",
 ]
 
 ALLOWED = [
@@ -97,6 +126,22 @@ ALLOWED = [
     "dotnet build EclipsVault.slnx -c Release",
     "ls -la",
     "",
+    "git restore --staged src/*.cs",
+    "git branch --list 'feat/*'",
+    "git log --format='%H %s' -3",
+    "git worktree add ../wt -b feature",
+    "git rm --cached src/File.cs",
+    "git gc",
+    "git reflog",
+    "git config user.name 'A Person'",
+    "git config --get alias.st",
+    "python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py'",
+    # A module or script file is not read, so running one beside a normal push is fine.
+    "python3 -I -m unittest discover -s .claude/hooks && git push origin feature",
+    "bash scripts/build.sh && git push origin feature",
+    "python3 tools/report.py --since main && git push origin feature",
+    'export PATH="/usr/local/share/dotnet:$PATH"',
+    'TOKEN=$(curl -s "https://example.com/token") && echo done',
 ]
 
 
@@ -122,6 +167,24 @@ class BlockDangerousGitTests(unittest.TestCase):
     def test_a_heredoc_with_an_apostrophe_does_not_crash_the_hook(self):
         command = "git commit -F - <<'EOF'\nDon't block a normal commit message\nEOF"
         self.assertEqual(run_hook(command).returncode, 0)
+
+    def test_shells_nested_too_deeply_to_check_are_refused(self):
+        command = "git push --force"
+        for _ in range(8):
+            command = f"bash -c {shlex.quote(command)}"
+        self.assertEqual(run_hook(command).returncode, 2)
+
+    def test_input_the_hook_cannot_read_is_refused_rather_than_allowed(self):
+        result = subprocess.run([sys.executable, "-I", str(HOOK)], input="not json", capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+
+    def test_the_registered_hook_command_refuses_everything_if_the_script_is_missing(self):
+        settings = json.loads((HOOK.parent.parent / "settings.json").read_text())
+        command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        payload = json.dumps({"tool_input": {"command": "git status"}})
+        result = subprocess.run(["bash", "-c", command], input=payload, capture_output=True, text=True,
+                                env={"CLAUDE_PROJECT_DIR": "/nonexistent", "PATH": "/usr/bin:/bin"})
+        self.assertEqual(result.returncode, 2)
 
 
 if __name__ == "__main__":

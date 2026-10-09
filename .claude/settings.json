@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-git.py\"; [ -f \"$f\" ] || exit 0; exec python3 -I \"$f\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-git.py\"; [ -f \"$f\" ] || { echo \"BLOCKED: the git guard $f is missing; restore it from git first.\" >&2; exit 2; }; command -v python3 >/dev/null 2>&1 || { echo 'BLOCKED: the git guard needs python3 on PATH.' >&2; exit 2; }; exec python3 -I \"$f\"",
             "statusMessage": "Checking git command"
           }
         ]
