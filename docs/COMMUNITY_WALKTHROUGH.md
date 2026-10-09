@@ -15,6 +15,8 @@ The maintainer supplies the candidate URL, its commit or image digest, a fresh t
 initial password, and an agreed way to return feedback. Use a browser and an authenticator app.
 Copy the [feedback template](COMMUNITY_FEEDBACK.md) into your notes. Record **Pass**, **Fail**,
 **Blocked**, or **Not run** for each step; a blocked step is not a pass.
+Use **Blocked** when a prerequisite prevents the check (for example, the candidate does not build
+or T1 cannot complete). Use **Fail** when you performed the check and observed the wrong behaviour.
 
 Use a browser profile separate from your normal accounts. For the session test you will need a
 second browser or another independent profile; two tabs share a session. The maintainer uses a
@@ -77,8 +79,9 @@ sensitivity. Neither is shared with your account.
 
 1. Refresh **Secrets**, open the sidebar search and search each exact name, then open **Overview**.
    Neither restricted name should appear, including in **Expiring soon**.
-2. With no one else changing data, compare the Overview **Active secrets** total with the number of
-   rows in your Secrets list. They should agree; hidden secrets must not inflate the total.
+2. With no one else changing data and no test secrets expiring during the comparison, compare the
+   Overview **Active secrets** total with the number of rows in your Secrets list. They should agree;
+   hidden secrets must not inflate the total. Refresh both pages and repeat if the data changed.
 3. The maintainer gives you the details URLs of these two dummy records. Open each directly in
    your signed-in profile. Expect access denied and no secret value.
 4. Try creating `EVAL_A_DENIED_PROJECT` with project ORION, Development, Internal, TTL 0 and value

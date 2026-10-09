@@ -30,6 +30,10 @@ what succeeded and what did not; do not mark the whole step Pass.
 | T6 | Audit events and integrity (with maintainer) | Not run | |
 | T7 | Delete test secret, verify audit and sign out | Not run | |
 
+Optional application-only restart check (leave the database running): **Not run**.
+Record whether the dummy value and existing MFA enrollment still work after the restart.
+Stopping the RAM database starts a new session with new MFA enrollment; it is not a persistence check.
+
 ## One issue per copy of this block
 
 - Short title:

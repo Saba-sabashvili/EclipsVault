@@ -25,11 +25,12 @@ The image digests are pinned to images already cached on the maintainer's machin
 never` makes a missing image fail rather than downloading it. Another machine must install those
 digests explicitly before using this lab.
 
-## Build and run the candidate once its vendor licence is available
+## Build and run the candidate once its vendor licence is accepted
 
 In the **candidate checkout**, complete the [candidate gate](../docs/COMMUNITY_EVALUATION_SETUP.md#candidate-gate).
-The pending ImageSharp vendor licence still blocks the application build; starting these containers
-does not resolve that prerequisite. Then run:
+The downloaded ImageSharp vendor licence currently fails build validation; vendor confirmation is
+pending. Starting these containers does not resolve that prerequisite. Only after restore, the
+Release build and tests pass, run:
 
 ```bash
 dotnet dev-certs https --trust
@@ -55,4 +56,6 @@ docker compose -f evaluation/compose.yml --env-file evaluation/.env down
 This removes only the lab's containers and network. It discards the RAM database and captured emails;
 cached images and the small local settings/key-ring files remain for reuse. The next start creates a
 fresh database and requires MFA enrollment again. No backup or restore rehearsal is performed here.
+Old authenticator codes belong to the discarded enrollment; enroll again on the new database.
+Retire the old authenticator entry once you have confirmed which entry belongs to the new session.
 Avoid Docker-wide prune commands: unrelated projects may share the cached images.

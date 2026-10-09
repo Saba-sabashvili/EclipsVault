@@ -6,24 +6,29 @@ does not change the product licence or establish production readiness.
 
 ## Candidate gate
 
-At the time this walkthrough was prepared, the ImageSharp security update still needed a Six Labors
-build licence, and the patched application had not completed its full build and runtime checks.
+The ImageSharp security update is awaiting vendor confirmation: the downloaded Six Labors licence
+has not passed build validation. Having a licence file is not enough to open this gate. The patched
+application has not completed its full build and runtime checks.
 The expected behaviour below was checked against source code, including the pending
 [security fixes in PR #34](https://github.com/Saba-sabashvili/EclipsVault/pull/34).
 **Do not invite testers until a candidate containing those fixes and the dependency update passes
 the following gate.** Record the actual candidate commit or image digest; a branch name alone can move.
 
 - [ ] Candidate includes the project/clearance creation checks and permission-filtered dashboard.
-- [ ] Patched ImageSharp is included and its vendor licence is configured for the candidate build.
+- [ ] Patched ImageSharp is included and the Release build accepts its vendor licence for
+      `EclipsVault.Infrastructure`.
 - [ ] `dotnet restore --locked-mode` succeeds without suppressing vulnerability findings.
 - [ ] `dotnet build EclipsVault.slnx -c Release --no-restore` succeeds.
 - [ ] `dotnet test EclipsVault.slnx -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`
-      succeeds after that build. An incomplete or hanging run is not a pass.
+      succeeds after that build. An incomplete or hanging run is not a pass. Include the audit
+      shutdown fix and its regression tests before evaluating this candidate.
 - [ ] The selected database's migrations apply and the app starts on a fresh evaluation database.
 - [ ] The maintainer completes T1–T7 on that candidate and records the results.
 
 The Six Labors build licence is separate from an EclipsVault feature licence. This evaluation uses
 Community features; do not activate premium capabilities to get the basic walkthrough working.
+If restore or build is blocked, record the failing command and sanitised error in the session note.
+Mark browser tasks **Blocked**, without treating an environment prerequisite as a workflow failure.
 
 ## Local setup for a supervised session
 
