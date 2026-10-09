@@ -232,6 +232,80 @@ public class AuditGroupCommitterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Cancelled_startup_refuses_queued_and_new_entries()
+    {
+        using var committer = new AuditGroupCommitter(
+            _provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<AuditGroupCommitter>.Instance);
+        await committer.StartAsync(new CancellationToken(canceled: true));
+        var queued = committer.CommitAsync(Row(), CancellationToken.None);
+
+        await committer.StopAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<AuditWriteFailedException>(() => queued)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<AuditWriteFailedException>(
+            () => committer.CommitAsync(Row(), CancellationToken.None))
+            .WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Shutdown_waits_for_the_in_flight_batch_to_commit()
+    {
+        var gate = _saves.HoldNextSave();
+        var row = Row();
+        var committed = _committer.CommitAsync(row, CancellationToken.None);
+
+        Task stopping;
+        try
+        {
+            await gate.Entered.WaitAsync(TimeSpan.FromSeconds(5));
+            stopping = _committer.StopAsync(CancellationToken.None);
+            Assert.False(committed.IsCompleted);
+            Assert.False(stopping.IsCompleted);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
+        await committed.WaitAsync(TimeSpan.FromSeconds(5));
+        await stopping.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(await ReadAsync(db => db.AuditLogs.AsNoTracking().AnyAsync(a => a.Id == row.Id)));
+    }
+
+    [Fact]
+    public async Task A_shutdown_deadline_does_not_release_an_uncommitted_caller()
+    {
+        var gate = _saves.HoldNextSave();
+        var row = Row();
+        var committed = _committer.CommitAsync(row, CancellationToken.None);
+
+        Task queued;
+        try
+        {
+            await gate.Entered.WaitAsync(TimeSpan.FromSeconds(5));
+            queued = _committer.CommitAsync(Row(), CancellationToken.None);
+            await _committer.StopAsync(new CancellationToken(canceled: true))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(committed.IsCompleted);
+            Assert.False(queued.IsCompleted);
+            await Assert.ThrowsAsync<AuditWriteFailedException>(
+                () => _committer.CommitAsync(Row(), CancellationToken.None))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            gate.Release();
+        }
+
+        await committed.WaitAsync(TimeSpan.FromSeconds(5));
+        await _committer.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<AuditWriteFailedException>(() => queued)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(await ReadAsync(db => db.AuditLogs.AsNoTracking().AnyAsync(a => a.Id == row.Id)));
+    }
+
+    [Fact]
     public async Task Shutting_down_refuses_new_entries_rather_than_hanging_their_callers()
     {
         // A caller left waiting on a promise nobody will keep never fails closed — it just hangs,
@@ -239,6 +313,7 @@ public class AuditGroupCommitterTests : IAsyncLifetime
         await _committer.StopAsync(CancellationToken.None);
 
         await Assert.ThrowsAsync<AuditWriteFailedException>(
-            () => _committer.CommitAsync(Row(), CancellationToken.None));
+            () => _committer.CommitAsync(Row(), CancellationToken.None))
+            .WaitAsync(TimeSpan.FromSeconds(5));
     }
 }

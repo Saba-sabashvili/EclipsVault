@@ -24,9 +24,14 @@ public static class EvaluationWindow
     /// a credential. Saturating answers the question instead: a window that far out has not closed.</para>
     /// </summary>
     public static DateTimeOffset EndsAt(DateTimeOffset startedAtUtc)
-        => startedAtUtc > DateTimeOffset.MaxValue.AddDays(-Days)
+    {
+        // Compare and add in the same time basis. AddDays preserves the source offset, whose
+        // local date can overflow even when its UTC instant is below the saturation boundary.
+        var start = startedAtUtc.ToUniversalTime();
+        return start > DateTimeOffset.MaxValue.AddDays(-Days)
             ? DateTimeOffset.MaxValue
-            : startedAtUtc.AddDays(Days);
+            : start.AddDays(Days);
+    }
 
     /// <summary>
     /// True while the capability may still be used unlicensed. The boundary is inclusive of the

@@ -20,6 +20,26 @@ public class EvaluationWindowTests
         => Assert.Equal(Start.AddDays(30), EvaluationWindow.EndsAt(Start));
 
     [Fact]
+    public void An_offset_start_near_the_upper_boundary_uses_the_representable_utc_end()
+    {
+        var start = new DateTimeOffset(9999, 12, 2, 1, 0, 0, TimeSpan.FromHours(14));
+        var expected = start.ToUniversalTime().AddDays(30);
+
+        Assert.Equal(expected, EvaluationWindow.EndsAt(start));
+        Assert.True(EvaluationWindow.IsActive(start, expected));
+        Assert.Equal(30, EvaluationWindow.DaysRemaining(start, start));
+    }
+
+    [Fact]
+    public void An_offset_start_that_exceeds_the_utc_end_boundary_saturates()
+    {
+        var start = new DateTimeOffset(9999, 12, 2, 1, 0, 0, TimeSpan.FromHours(-14));
+
+        Assert.Equal(DateTimeOffset.MaxValue, EvaluationWindow.EndsAt(start));
+        Assert.True(EvaluationWindow.IsActive(start, DateTimeOffset.MaxValue));
+    }
+
+    [Fact]
     public void It_is_active_on_the_day_it_opens()
         => Assert.True(EvaluationWindow.IsActive(Start, Start));
 

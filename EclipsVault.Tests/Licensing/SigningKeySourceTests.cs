@@ -72,16 +72,6 @@ public class SigningKeySourceTests : IDisposable
         Assert.Equal(key, result.KeyBase64);
     }
 
-    [Fact]
-    public void The_environment_variable_still_works_when_no_file_is_given()
-    {
-        var key = NewPrivateKey();
-        var result = SigningKeySource.Resolve(TempFileWith(key));
-
-        Assert.True(result.Ok);
-        Assert.Equal(key, result.KeyBase64);
-    }
-
     /// <summary>
     /// A mistyped path must fail, not quietly fall through to the environment — otherwise you would
     /// sign with a different key than the one you named and have no way to notice.
