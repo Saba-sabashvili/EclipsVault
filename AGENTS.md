@@ -19,9 +19,10 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
 
 - Errors in files you did not touch (RZ1021, `CS0246` naming `summary` or `button`): run
   `dotnet build-server shutdown` and rebuild before debugging code. Deleting `obj/` does not help.
-- `AuditGroupCommitterTests` hangs in roughly one full run in ten. It shows up as "The specified
-  inactivity time of 5 minutes has elapsed". It predates current work, so do not attribute it to your
-  change. Test output is buffered: the last test printed is not the one that hung.
+- A test run that stops with "The specified inactivity time of 5 minutes has elapsed" is a hang.
+  The long-standing `AuditGroupCommitterTests` hang was fixed in #37, so a hang now is a regression
+  to investigate, not a known flake. Test output is buffered: the last test printed is not the one
+  that hung. The aborted run's blame `Sequence_*.xml` names the test still in flight.
 - A newly published advisory against a dependency fails restore and build (`NU1902`/`NU1903` are
   errors here), even with no code change. That is the gate working: upgrade the package rather than
   suppress the warning.
