@@ -74,6 +74,26 @@ public sealed class AuditGroupCommitter : BackgroundService
         return committed.Task.WaitAsync(ct);
     }
 
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _queue.Writer.TryComplete();
+
+        try
+        {
+            await base.StopAsync(cancellationToken);
+        }
+        finally
+        {
+            // BackgroundService can cancel its scheduled task before ExecuteAsync ever runs.
+            // Its finally cannot settle queued callers in that case. If a shutdown deadline
+            // expires while the worker is still running, leave draining to that single reader.
+            if (ExecuteTask is null || ExecuteTask.IsCompleted)
+            {
+                FailRemaining();
+            }
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try

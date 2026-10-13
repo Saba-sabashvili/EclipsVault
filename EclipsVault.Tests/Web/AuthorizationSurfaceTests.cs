@@ -1,4 +1,5 @@
 using System.Reflection;
+using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -48,6 +49,17 @@ public class AuthorizationSurfaceTests
         "HomeController.Index",
     ];
 
+    /// <summary>
+    /// The only actions allowed to accept a principal that has passed the password factor but not a
+    /// second one — the three second-factor screens themselves, each a GET/POST pair.
+    /// </summary>
+    private static readonly string[] MayAcceptPendingMfa =
+    [
+        "AccountController.EnrollTotp",
+        "AccountController.RecoveryCode",
+        "AccountController.Totp",
+    ];
+
     [Fact]
     public void EveryAction_IsEitherBehindAuthorizeOrDeliberatelyAnonymous()
     {
@@ -89,6 +101,42 @@ public class AuthorizationSurfaceTests
     }
 
     /// <summary>
+    /// The tests above pin that every action carries <c>[Authorize]</c>, but not <em>which</em>
+    /// authorization — and they pass just as happily for a weak one. Moving a protected action to
+    /// <c>[Authorize(AuthenticationSchemes = AuthSchemes.MfaPending)]</c> would look like hardening in
+    /// a diff while actually admitting a half-authenticated caller: someone who has typed a correct
+    /// password and nothing else. That principal carries only a name and an id
+    /// (<c>VaultClaimsFactory.CreatePendingMfaPrincipal</c>), so it holds no clearance and no project,
+    /// and the six-minute pending cookie is a separate scheme from the session precisely so it cannot
+    /// reach the vault. This pins the boundary by name: the second-factor screens may accept it, and
+    /// nothing else may.
+    /// </summary>
+    [Fact]
+    public void OnlyTheSecondFactorScreens_AcceptAHalfAuthenticatedPrincipal()
+    {
+        var actual = Actions()
+            .Where(DeclaresPendingMfaScheme)
+            .Select(Name)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var expected = MayAcceptPendingMfa.OrderBy(name => name, StringComparer.Ordinal).ToList();
+
+        var added = actual.Except(expected, StringComparer.Ordinal).ToList();
+        var removed = expected.Except(actual, StringComparer.Ordinal).ToList();
+
+        Assert.True(added.Count == 0,
+            "These actions accept the pre-MFA scheme, so a caller who has only typed a password can " +
+            "reach them:\n  " + string.Join("\n  ", added) +
+            "\n\nIf that is genuinely intended, add them to MayAcceptPendingMfa and justify it in review.");
+
+        Assert.True(removed.Count == 0,
+            "These are listed as accepting the pre-MFA scheme but no longer do. Remove them from " +
+            "MayAcceptPendingMfa so the list keeps meaning something:\n  " + string.Join("\n  ", removed));
+    }
+
+    /// <summary>
     /// The backstop itself: <c>VaultController</c> carries the requirement that ten controllers
     /// inherit, so losing it would quietly unprotect all of them at once.
     /// </summary>
@@ -107,6 +155,18 @@ public class AuthorizationSurfaceTests
     private static bool IsAnonymous(MethodInfo action)
         => action.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Any()
            || action.DeclaringType!.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Any();
+
+    /// <summary>
+    /// Whether any <c>[Authorize]</c> on the action or its controller names the pre-MFA scheme.
+    /// <c>AuthenticationSchemes</c> is a comma-separated string, so it is split rather than compared.
+    /// </summary>
+    private static bool DeclaresPendingMfaScheme(MethodInfo action)
+        => action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .Concat(action.DeclaringType!.GetCustomAttributes<AuthorizeAttribute>(inherit: true))
+            .Select(attribute => attribute.AuthenticationSchemes)
+            .Where(schemes => !string.IsNullOrWhiteSpace(schemes))
+            .SelectMany(schemes => schemes!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Any(scheme => string.Equals(scheme, AuthSchemes.MfaPending, StringComparison.Ordinal));
 
     private static bool IsAuthorized(MethodInfo action)
         => action.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any()

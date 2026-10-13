@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Models;
@@ -11,8 +12,15 @@ namespace EclipsVault.Web.Controllers;
 public sealed class HomeController : Controller
 {
     private readonly IDashboardService _dashboard;
+    private readonly ISecretService _secrets;
+    private readonly IAuthorizationService _authorization;
 
-    public HomeController(IDashboardService dashboard) => _dashboard = dashboard;
+    public HomeController(IDashboardService dashboard, ISecretService secrets, IAuthorizationService authorization)
+    {
+        _dashboard = dashboard;
+        _secrets = secrets;
+        _authorization = authorization;
+    }
 
     [AllowAnonymous]
     [HttpGet]
@@ -24,7 +32,15 @@ public sealed class HomeController : Controller
         }
 
         var isAdmin = User.IsAdmin();
-        var dto = await _dashboard.GetAsync(isAdmin ? null : User.Identity.Name, ct);
+
+        // The overview reports on what this caller can see, and nothing else. A name is not nothing —
+        // "FINANCE_PROD_STRIPE_LIVE_KEY, expiring in 2 days" says what exists, where, and what it is
+        // worth — so every row goes through the same ABAC handler that gates the secrets list, and
+        // comes from ISecretService.ListAsync, which drops honey tokens. Reading the repository
+        // directly here is what leaked other projects' secrets onto everyone's home page.
+        var visible = await _authorization.VisibleToAsync(User, await _secrets.ListAsync(ct));
+
+        var dto = await _dashboard.GetAsync(visible, isAdmin ? null : User.Identity.Name, ct);
         var displayName = User.FindFirst(VaultClaimTypes.Display)?.Value ?? User.Identity.Name ?? string.Empty;
 
         return View("Dashboard", new DashboardViewModel

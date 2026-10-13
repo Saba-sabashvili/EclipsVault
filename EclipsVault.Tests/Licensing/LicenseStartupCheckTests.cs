@@ -116,4 +116,35 @@ public class LicenseStartupCheckTests
     public async Task A_valid_license_using_a_feature_beyond_its_tier_writes_one_feature_row()
         => Assert.Equal(1, await RowsAfterStartup(
             Environments.Production, LicenseStatus.Valid, RedisActive(), AuditAction.LicenseFeatureUnlicensed));
+
+    /// <summary>
+    /// The sibling writer, <c>PremiumFeatureUsageRecorder</c>, catches <c>Exception</c> on purpose and
+    /// says why: "the catch has to be as wide as the promise above it". This one promised the same
+    /// thing — licensing never blocks the vault — while catching only <c>AuditWriteFailedException</c>,
+    /// so anything else escaping the sink would fail host startup outright. A vault that will not boot
+    /// because it could not write a licensing *reminder* is the exact outcome soft enforcement exists
+    /// to prevent.
+    /// </summary>
+    [Fact]
+    public async Task A_sink_failure_that_is_not_an_audit_write_failure_still_does_not_block_startup()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<IAuditSink, ThrowingSink>();
+        await using var provider = services.BuildServiceProvider();
+
+        var check = new LicenseStartupCheck(
+            new FakeLicense { Status = LicenseStatus.Missing, Message = "Missing" },
+            new FakeEnv { EnvironmentName = Environments.Production },
+            NoFeatures(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<LicenseStartupCheck>.Instance);
+
+        await check.StartAsync(CancellationToken.None);
+    }
+
+    private sealed class ThrowingSink : IAuditSink
+    {
+        public Task WriteAsync(AuditEntry entry, CancellationToken ct)
+            => throw new ObjectDisposedException(nameof(ThrowingSink));
+    }
 }
