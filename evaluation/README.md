@@ -25,12 +25,11 @@ The image digests are pinned to images already cached on the maintainer's machin
 never` makes a missing image fail rather than downloading it. Another machine must install those
 digests explicitly before using this lab.
 
-## Build and run the candidate once its vendor licence is accepted
+## Build and run the candidate
 
 In the **candidate checkout**, complete the [candidate gate](../docs/COMMUNITY_EVALUATION_SETUP.md#candidate-gate).
-The downloaded ImageSharp vendor licence currently fails build validation; vendor confirmation is
-pending. Starting these containers does not resolve that prerequisite. Only after restore, the
-Release build and tests pass, run:
+Starting these containers does not replace that gate. Only after restore, the Release build and
+tests pass, run:
 
 ```bash
 dotnet dev-certs https --trust

@@ -6,27 +6,27 @@ does not change the product licence or establish production readiness.
 
 ## Candidate gate
 
-The ImageSharp security update is awaiting vendor confirmation: the downloaded Six Labors licence
-has not passed build validation. Having a licence file is not enough to open this gate. The patched
-application has not completed its full build and runtime checks.
+The dependency blockers are resolved on `main` as of `06790ef` (2026-10-14): ImageSharp was replaced
+by SkiaSharp (#38), which needs no vendor licence, and the security fixes (#34), the patched
+`System.Security.Cryptography.Pkcs` (#39) and the audit shutdown fix (#37) are merged. A candidate
+still has to pass this gate before testers are invited.
 The expected behaviour below was checked against source code, including the pending
 [security fixes in PR #34](https://github.com/Saba-sabashvili/EclipsVault/pull/34).
 **Do not invite testers until a candidate containing those fixes and the dependency update passes
 the following gate.** Record the actual candidate commit or image digest; a branch name alone can move.
 
 - [ ] Candidate includes the project/clearance creation checks and permission-filtered dashboard.
-- [ ] Patched ImageSharp is included and the Release build accepts its vendor licence for
-      `EclipsVault.Infrastructure`.
+- [ ] Candidate includes the SkiaSharp avatar processor (#38) and the patched
+      `System.Security.Cryptography.Pkcs` (#39).
 - [ ] `dotnet restore --locked-mode` succeeds without suppressing vulnerability findings.
 - [ ] `dotnet build EclipsVault.slnx -c Release --no-restore` succeeds.
 - [ ] `dotnet test EclipsVault.slnx -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`
-      succeeds after that build. An incomplete or hanging run is not a pass. Include the audit
-      shutdown fix and its regression tests before evaluating this candidate.
+      succeeds after that build. An incomplete or hanging run is not a pass. The candidate must
+      include the audit shutdown fix (#37) and its regression tests.
 - [ ] The selected database's migrations apply and the app starts on a fresh evaluation database.
 - [ ] The maintainer completes T1–T7 on that candidate and records the results.
 
-The Six Labors build licence is separate from an EclipsVault feature licence. This evaluation uses
-Community features; do not activate premium capabilities to get the basic walkthrough working.
+This evaluation uses Community features; do not activate premium capabilities to get the basic walkthrough working.
 If restore or build is blocked, record the failing command and sanitised error in the session note.
 Mark browser tasks **Blocked**, without treating an environment prerequisite as a workflow failure.
 
