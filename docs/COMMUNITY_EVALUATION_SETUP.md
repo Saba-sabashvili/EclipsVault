@@ -83,10 +83,12 @@ as administrator to create these two records, substituting the assigned prefix:
 | `EVAL_A_HIGH_CLEARANCE` | `dummy-high-clearance` | PHOENIX | Development | Secret | 2 |
 
 Save their details URLs for the direct-access checks. Do not grant the tester access to them. Their
-short TTL makes them eligible for the **Expiring soon** check; recreate them if the session occurs
+short TTL puts them in the administrator's Overview **Expiring within 7 days** total, so the tester's
+Overview can show they are excluded; recreate them if the session occurs
 after they expire. The tester creates `EVAL_A_WORKFLOW` during T2. Avoid unrelated writes while
 comparing list and dashboard counts. Do not use seeded honey tokens as fixtures: opening those is
-intended to trigger intrusion response.
+intended to trigger intrusion response. Development mode also seeds a few sample PHOENIX secrets; a
+Standard PHOENIX tester sees the Internal ones in their list, and that is expected.
 
 In the session note, record the URL, candidate commit/digest, database provider, browser/OS,
 tester username/prefix, whether the run is local or remote, and where feedback should be returned.

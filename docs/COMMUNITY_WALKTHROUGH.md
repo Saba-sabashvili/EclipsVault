@@ -19,7 +19,8 @@ Use **Blocked** when a prerequisite prevents the check (for example, the candida
 or T1 cannot complete). Use **Fail** when you performed the check and observed the wrong behaviour.
 
 Use a browser profile separate from your normal accounts. For the session test you will need a
-second browser or another independent profile; two tabs share a session. The maintainer uses a
+second browser or another independent profile; two tabs share a session. Actions that change or
+remove data open a **Please confirm** box: **Continue** goes ahead, **Cancel** stops. The maintainer uses a
 separate administrator session for the marked checks. Never include passwords, MFA QR codes,
 enrollment keys, recovery codes, cookies, or configuration files in feedback or screenshots.
 
@@ -78,12 +79,15 @@ dummy secrets: `EVAL_A_OTHER_PROJECT` in ORION and `EVAL_A_HIGH_CLEARANCE` in PH
 sensitivity. Neither is shared with your account.
 
 1. Refresh **Secrets**, open the sidebar search and search each exact name, then open **Overview**.
-   Neither restricted name should appear, including in **Expiring soon**.
+   Neither restricted name should appear. Both expire within two days, yet **Expiring within 7 days**
+   must not count them: with only your T2 secret, which never expires, it shows 0.
 2. With no one else changing data and no test secrets expiring during the comparison, compare the
    Overview **Active secrets** total with the number of rows in your Secrets list. They should agree;
    hidden secrets must not inflate the total. Refresh both pages and repeat if the data changed.
 3. The maintainer gives you the details URLs of these two dummy records. Open each directly in
-   your signed-in profile. Expect access denied and no secret value.
+   your signed-in profile. Expect access denied and no secret value. The denial names the rule that
+   failed, for example the record's project or the sensitivity it requires; that is expected. The
+   record's name and value must not appear.
 4. Try creating `EVAL_A_DENIED_PROJECT` with project ORION, Development, Internal, TTL 0 and value
    `dummy-denied`. Then try `EVAL_A_DENIED_CLEARANCE` with project PHOENIX, Development, Secret,
    TTL 0 and the same dummy value.
@@ -95,7 +99,8 @@ even if its value stays hidden. Record the failed step; do not broaden your perm
 ## T5 — Sign out another session
 
 1. Sign in to the same test account in a second browser or independent profile, completing MFA.
-2. In your first session, open **Signed-in devices** and select **Sign out all other sessions**.
+2. In your first session, open **Signed-in devices** (sidebar, under **Security**) and select
+   **Sign out all other sessions**.
 3. In the second session, make a new request by opening `/Secrets` or refreshing its page.
 
 **Expected:** the second session must sign in again; the first remains usable. A page already
@@ -104,8 +109,9 @@ displayed in the second browser is not erased remotely, so judge the new request
 ## T6 — Check the audit trail with the maintainer
 
 The maintainer opens **Audit log** in the administrator session, filters the displayed entries by
-your test prefix or username, and checks the creation, reveals, rotation and version restoration.
-Check session revocation under your username too, then select **Verify integrity**.
+your test prefix or username, and checks the creation (**Created**), reveals (**Revealed**,
+**Version revealed**), rotation (**Updated**) and version restoration (**Version restored**). Check
+session revocation under your username too (**Device signed out**), then select **Verify integrity**.
 
 **Expected:** the successful actions have matching actors and resources, secret values are absent
 from audit details, and integrity reports **Hash chain intact**. The page shows the latest 200

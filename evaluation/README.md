@@ -21,9 +21,9 @@ Generated settings and login details are private, gitignored files. Open
 paste them into chat. The database is at `127.0.0.1:55432`; the mail viewer is
 <http://127.0.0.1:18025>. No SMTP account or real email credentials are needed.
 
-The image digests are pinned to images already cached on the maintainer's machine. `pull_policy:
-never` makes a missing image fail rather than downloading it. Another machine must install those
-digests explicitly before using this lab.
+Both images are pinned by multi-architecture digest, so the lab runs on Apple Silicon and x86-64.
+The first start on a machine downloads them (about 175 MB); later starts reuse the cached copies and
+never download again.
 
 ## Build and run the candidate
 
@@ -35,6 +35,15 @@ tests pass, run:
 dotnet dev-certs https --trust
 dotnet run --project EclipsVault.Web -c Release --no-build --launch-profile https
 ```
+
+macOS asks for your password to trust the certificate. If the browser still rejects
+`https://localhost:7443` afterwards, or the app logs "The ASP.NET Core developer certificate is not
+trusted", more than one development certificate exists: run `dotnet dev-certs https --clean`, then
+`--trust` again, and restart the app.
+
+On the first start against a new database the log shows two `ERR Failed executing DbCommand` lines
+for `__EFMigrationsHistory`. That is EF Core looking for a table that does not exist yet; the next
+line applies the migrations. Wait for `Application started` before opening the browser.
 
 Open <https://localhost:7443>. Sign in as `vault-admin` and enroll MFA; create a fresh Standard,
 PHOENIX test user and the fixtures from [evaluation preparation](../docs/COMMUNITY_EVALUATION_SETUP.md).

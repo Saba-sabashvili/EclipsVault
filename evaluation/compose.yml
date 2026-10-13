@@ -1,11 +1,12 @@
-# Disposable local dummy-data evaluation. Images reuse the maintainer's cached ARM64 images.
-# pull_policy prevents unexpected downloads; install these digests explicitly on another machine.
+# Disposable local dummy-data evaluation. Both images are pinned by multi-architecture digest, so the
+# same file runs on Apple Silicon and x86-64. pull_policy: missing downloads an image only when it is
+# not already cached (first run on a machine), never to refresh one.
 name: eclipsvault-evaluation
 
 services:
   db:
     image: postgres@sha256:39fb82e41109483c81ac15422a302500b4a753777b47f8431038703536bc6c52
-    pull_policy: never
+    pull_policy: missing
     environment:
       POSTGRES_DB: eclipsvault_eval
       POSTGRES_USER: postgres
@@ -29,7 +30,7 @@ services:
 
   mailpit:
     image: axllent/mailpit@sha256:5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6
-    pull_policy: never
+    pull_policy: missing
     ports:
       - "127.0.0.1:11025:1025"
       - "127.0.0.1:18025:8025"
