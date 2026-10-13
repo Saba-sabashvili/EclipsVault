@@ -23,9 +23,12 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
   The long-standing `AuditGroupCommitterTests` hang was fixed in #37, so a hang now is a regression
   to investigate, not a known flake. Test output is buffered: the last test printed is not the one
   that hung. The aborted run's blame `Sequence_*.xml` names the test still in flight.
-- A newly published advisory against a dependency fails restore and build (`NU1902`/`NU1903` are
-  errors here), even with no code change. That is the gate working: upgrade the package rather than
-  suppress the warning.
+- A newly published advisory can turn CI red with no code change. Against a direct dependency it
+  fails restore and build (`NU1902`/`NU1903` are errors here). Against a transitive one, restore and
+  build can still pass and only CI's `security-scan` job fails; reproduce it with
+  `dotnet list package --vulnerable --include-transitive`. Either way that is the gate working:
+  upgrade the package, or pin the transitive one in `Directory.Packages.props` (transitive pinning
+  is on), rather than suppress the warning. Microsoft's monthly security release often triggers this.
 - `dotnet test --no-build` runs whatever binaries are already in `bin/`, possibly from another
   branch. Build first, or the result proves nothing.
 - Never report CI as green unless you have seen the check results yourself (`gh pr checks <n>`).
