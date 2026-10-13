@@ -304,8 +304,16 @@ public sealed class AccountController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> Logout()
+    public async Task<IActionResult> Logout(CancellationToken ct)
     {
+        // Clearing the cookie only makes this browser forget it; a copy taken earlier would stay
+        // valid until it expires. Revoking the session id is the tombstone the cookie validator
+        // checks, so that copy is refused on its next request and the device leaves the list.
+        if (User.GetSessionId() is { } sessionId)
+        {
+            await _sessions.RevokeAsync(User.GetUserId(), sessionId, ct);
+        }
+
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction("Index", "Home");
     }
