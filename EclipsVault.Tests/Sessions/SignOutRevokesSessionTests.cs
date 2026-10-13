@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using EclipsVault.Core.Application.Abstractions;
 using EclipsVault.Core.Application.Sessions;
 using EclipsVault.Infrastructure.Security;
 using EclipsVault.Web.Authorization;
@@ -40,8 +41,17 @@ public class SignOutRevokesSessionTests
         public Task SignInAsync(HttpContext context, string? scheme, ClaimsPrincipal principal, AuthenticationProperties? properties) => throw new NotSupportedException();
     }
 
+    // Reads work, writes fail: Redis at maxmemory with noeviction is the realistic case.
+    private sealed class WriteFailingRegistry : ISessionRegistry
+    {
+        public Task RecordSeenAsync(SessionObservation observation, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<ActiveSession>> ListAsync(Guid userId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ActiveSession>>([]);
+        public Task RevokeAsync(Guid userId, Guid sessionId, CancellationToken ct = default) => throw new InvalidOperationException("OOM command not allowed");
+        public Task<bool> IsRevokedAsync(Guid userId, Guid sessionId, CancellationToken ct = default) => Task.FromResult(false);
+    }
+
     private static (AccountController Controller, RecordingAuthentication Auth) SignedInController(
-        InMemorySessionRegistry sessions, params Claim[] claims)
+        ISessionRegistry sessions, params Claim[] claims)
     {
         var auth = new RecordingAuthentication();
         var http = new DefaultHttpContext
@@ -87,6 +97,22 @@ public class SignOutRevokesSessionTests
         var sessions = new InMemorySessionRegistry(NullLogger<InMemorySessionRegistry>.Instance);
         var (controller, auth) = SignedInController(sessions,
             new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()));
+
+        var result = await controller.Logout(CancellationToken.None);
+
+        Assert.True(auth.SignedOut);
+        Assert.IsType<RedirectToActionResult>(result);
+    }
+
+    [Fact]
+    public async Task When_the_revocation_cannot_be_stored_this_browser_is_still_signed_out()
+    {
+        // Failing closed here would leave a live session in the browser, on a shared machine the
+        // likelier threat; the copied cookie surviving is exactly the old behaviour, so the cookie
+        // is cleared regardless and the failure is logged.
+        var (controller, auth) = SignedInController(new WriteFailingRegistry(),
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(VaultClaimTypes.SessionId, Guid.NewGuid().ToString()));
 
         var result = await controller.Logout(CancellationToken.None);
 

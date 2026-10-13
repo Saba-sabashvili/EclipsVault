@@ -309,9 +309,19 @@ public sealed class AccountController : Controller
         // Clearing the cookie only makes this browser forget it; a copy taken earlier would stay
         // valid until it expires. Revoking the session id is the tombstone the cookie validator
         // checks, so that copy is refused on its next request and the device leaves the list.
+        // If the tombstone cannot be stored, the cookie is still cleared: a live session left in the
+        // browser (a shared machine) is the likelier threat, and the copy surviving is only the
+        // behaviour from before revocation existed.
         if (User.GetSessionId() is { } sessionId)
         {
-            await _sessions.RevokeAsync(User.GetUserId(), sessionId, ct);
+            try
+            {
+                await _sessions.RevokeAsync(User.GetUserId(), sessionId, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Sign-out could not revoke session {SessionId}; the cookie was cleared, but a copy of it stays valid until it expires", sessionId);
+            }
         }
 
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
