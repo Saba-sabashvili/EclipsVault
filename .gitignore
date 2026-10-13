@@ -32,3 +32,8 @@ docs/GTM_STRATEGY.md
 
 # Crash/hang dumps from `dotnet test --blame`.
 TestResults/
+
+# Claude Code: personal overrides, and the vendor-only licence-minting skill (it follows docs/internal/).
+.claude/settings.local.json
+.claude/skills/mint-licence/
+__pycache__/

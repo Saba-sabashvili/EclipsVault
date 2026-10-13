@@ -118,6 +118,17 @@ jobs:
             exit 1
           fi
 
+  # The hook that stops coding agents running destructive git commands is itself security code,
+  # and its first version had a bypass that only a test exposed. Run its test table on every change
+  # so a broken pattern fails here instead of failing open on someone's machine.
+  agent-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Git guardrail hook blocks destructive commands and allows everyday ones
+        run: python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py' -v
+
   # The release workflow builds this Dockerfile, but it only ever runs on a v* tag — so before this
   # job existed, the first execution of the production image build was also its first test, on the
   # tag that was supposed to be the release. A Dockerfile break would surface as a failed release
