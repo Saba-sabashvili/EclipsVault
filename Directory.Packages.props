@@ -21,6 +21,10 @@
          advisory (GHSA-2m69-gcr7-jv3q). Test-only and never shipped, but a known-vulnerable package has
          no business in a vault's dependency tree — pinned forward to the patched build. -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+    <!-- Microsoft.Data.SqlClient still resolves 9.0.4, which carries CVE-2026-84008 (high) and
+         CVE-2026-70162 (moderate), both .NET denial-of-service fixes from 2026-10-13. Transitive
+         pinning lifts it to the patched build until SqlClient takes it up itself. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.9" />
