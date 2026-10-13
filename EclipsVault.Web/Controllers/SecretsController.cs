@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using EclipsVault.Core.Application.Abac;
 using EclipsVault.Core.Application.Licensing;
 using EclipsVault.Core.Application.Secrets;
 using EclipsVault.Core.Domain.Enums;
@@ -300,17 +301,28 @@ public sealed class SecretsController : VaultController
             return View(model);
         }
 
-        // A user may not classify a secret above their own clearance.
-        var clearance = (int)User.GetClearance();
-        if ((int)model.Sensitivity > clearance)
+        // Creating is an access decision too. ProjectKey and Sensitivity arrive from the posted form,
+        // and the read path treats project as a boundary — so without this the form was a way to write
+        // a credential into a namespace the caller cannot open, where its owners would deploy it.
+        var projectKey = (model.ProjectKey ?? string.Empty).Trim();
+
+        var decision = SecretCreationPolicy.Evaluate(
+            new SubjectAttributes(User.GetClearance(), User.GetProject()),
+            projectKey,
+            model.Sensitivity);
+
+        if (!decision.IsAllowed)
         {
-            ModelState.AddModelError(nameof(model.Sensitivity),
-                "You cannot create a secret classified above your own clearance level.");
+            _logger.LogWarning(
+                "User {Username} was denied creation of a secret in project {ProjectKey}: {Reasons}",
+                User.Identity?.Name, model.ProjectKey, string.Join(" ", decision.DenialReasons));
+
+            ModelState.AddModelError(string.Empty, string.Join(" ", decision.DenialReasons));
             return View(model);
         }
 
         var id = await _secrets.CreateAsync(
-            new CreateSecretRequest(model.Name, model.Value, model.ProjectKey, model.Environment, model.Sensitivity, model.TtlDays),
+            new CreateSecretRequest(model.Name, model.Value, projectKey, model.Environment, model.Sensitivity, model.TtlDays),
             ct);
 
         this.FlashSuccess($"Secret '{model.Name}' was envelope-encrypted and stored.");

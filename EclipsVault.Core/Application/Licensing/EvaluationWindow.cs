@@ -12,8 +12,26 @@ public static class EvaluationWindow
     /// </summary>
     public const int Days = 30;
 
-    /// <summary>When the window started at <paramref name="startedAtUtc"/> closes.</summary>
-    public static DateTimeOffset EndsAt(DateTimeOffset startedAtUtc) => startedAtUtc.AddDays(Days);
+    /// <summary>
+    /// When the window started at <paramref name="startedAtUtc"/> closes, saturating at
+    /// <see cref="DateTimeOffset.MaxValue"/> rather than overflowing.
+    ///
+    /// <para>The clamp is not decoration. The start instant is read from a database row an operator
+    /// can write, and <c>AddDays</c> throws on a start within 30 days of the end of time. Callers sit
+    /// on the secret path — <c>PremiumFeatureUsageRecorder</c> asks <see cref="IsActive"/> outside the
+    /// try/catch that guards the store lookup — so an exception here would break the rule that
+    /// licensing never throws into a vault operation, turning a licence question into a 500 on issuing
+    /// a credential. Saturating answers the question instead: a window that far out has not closed.</para>
+    /// </summary>
+    public static DateTimeOffset EndsAt(DateTimeOffset startedAtUtc)
+    {
+        // Compare and add in the same time basis. AddDays preserves the source offset, whose
+        // local date can overflow even when its UTC instant is below the saturation boundary.
+        var start = startedAtUtc.ToUniversalTime();
+        return start > DateTimeOffset.MaxValue.AddDays(-Days)
+            ? DateTimeOffset.MaxValue
+            : start.AddDays(Days);
+    }
 
     /// <summary>
     /// True while the capability may still be used unlicensed. The boundary is inclusive of the
