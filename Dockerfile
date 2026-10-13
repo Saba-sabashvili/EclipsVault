@@ -14,6 +14,12 @@ WORKDIR /src
 COPY . .
 RUN dotnet restore EclipsVault.Web/EclipsVault.Web.csproj --locked-mode
 RUN dotnet publish EclipsVault.Web/EclipsVault.Web.csproj -c Release -o /app --no-restore
+# The portable publish carries SkiaSharp's native library for 17 platforms (~465 MB). Keep only the
+# one this container's runtime will load, and fail the build if it is missing so a broken avatar
+# upload can't ship silently.
+RUN rid="$(dotnet --info | awk '/^ *RID:/ { print $2; exit }')" \
+ && find /app/runtimes -name 'libSkiaSharp*' -not -path "/app/runtimes/$rid/*" -delete \
+ && test -f "/app/runtimes/$rid/native/libSkiaSharp.so"
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS runtime
 WORKDIR /app
