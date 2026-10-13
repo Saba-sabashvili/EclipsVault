@@ -42,7 +42,7 @@ EclipsVault.slnx                  # modern XML solution format
 │   │     └── WebAuthn/           #     the passkey relying-party verifier
 │   ├── Auditing/                 #   audit checkpoint / export service
 │   ├── Distributed/              #   Redis connection options (shared-state switch)
-│   ├── Media/                    #   ImageSharp avatar processor
+│   ├── Media/                    #   SkiaSharp avatar processor
 │   ├── Caching/                  #   envelope cache (in-memory AND Redis variants)
 │   ├── Logging/ · Workers/
 ├── EclipsVault.Web/              # Composition root. Thin controllers, ViewModels,

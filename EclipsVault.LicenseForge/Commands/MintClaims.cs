@@ -62,6 +62,12 @@ public static class MintClaims
         if (trialDays is <= 0)
             return Result.Failure("--trial-days must be a positive number of days.");
 
+        // A negative expiry is a mistake, and the old `expiresYears > 0` test read it as "perpetual" —
+        // the most generous outcome, reached by the least deliberate input. Refuse it here as well as
+        // in the parser, so the rule holds for any caller of this resolver.
+        if (expiresYears < 0)
+            return Result.Failure("--expires must not be negative.");
+
         if (isTrial && expiresYears > 0)
             return Result.Failure(
                 "--trial-days sets a short evaluation expiry; it cannot be combined with --expires.");

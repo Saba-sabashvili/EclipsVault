@@ -3,22 +3,26 @@ using System.Security.Cryptography;
 namespace EclipsVault.LicenseForge.Cli;
 
 /// <summary>
-/// Resolves the licence-signing private key from a file or the environment, and — when it cannot —
-/// says precisely what is wrong.
+/// Resolves the licence-signing private key from a file — and, when it cannot, says precisely what is
+/// wrong.
+///
+/// <para><b>A file is the only source.</b> This used to accept the key from an environment variable
+/// too, and recommend it in the error text. An environment variable is inherited by every child
+/// process of the shell that set it, is readable from the process environment by anything running as
+/// the same user, and the command that set it is written verbatim to shell history. For a key that
+/// cannot be revoked — verification is offline against a key pinned into shipped builds — that is a
+/// permanent exposure in exchange for a little convenience, so the option is gone rather than
+/// discouraged.</para>
 ///
 /// <para>
-/// The diagnostics are the point. A signing key reaches this tool through a clipboard, and every way
-/// that goes wrong produces the same useless outcome otherwise: "not a valid key". Pasting the public
-/// half, pasting something else entirely, a paste that silently truncated at a line break — each is a
-/// distinct mistake with a distinct fix, and each is invisible when the prompt does not echo. So they
+/// The diagnostics are the point. Every way a key goes wrong produces the same useless outcome
+/// otherwise: "not a valid key". Pasting the public half, pasting something else entirely, a paste
+/// that silently truncated at a line break — each is a distinct mistake with a distinct fix. So they
 /// are distinguished here by shape alone. Nothing in an error message ever includes key material.
 /// </para>
 /// </summary>
 public static class SigningKeySource
 {
-    /// <summary>Environment variable carrying the base64 PKCS#8 private key.</summary>
-    public const string EnvVar = "ECLIPSVAULT_LICENSE_SIGNING_KEY";
-
     /// <summary>A PKCS#8 P-256 private key is this long in base64, give or take a couple of chars.</summary>
     private const int ExpectedPrivateKeyLength = 185;
 
@@ -34,17 +38,14 @@ public static class SigningKeySource
         public bool Ok => KeyBase64 is not null;
     }
 
-    /// <summary>
-    /// Resolves from <paramref name="keyFilePath"/> when given, otherwise from <paramref name="envValue"/>.
-    /// The file wins because it is the explicit request; falling back silently would hide a typo'd path.
-    /// </summary>
-    public static Result Resolve(string? keyFilePath, string? envValue)
+    /// <summary>Resolves the key from <paramref name="keyFilePath"/>. There is no other source.</summary>
+    public static Result Resolve(string? keyFilePath)
     {
         if (!string.IsNullOrWhiteSpace(keyFilePath))
         {
             if (!File.Exists(keyFilePath))
             {
-                return Fail($"No signing key file at '{keyFilePath}'. Check the path — this is not falling back to ${EnvVar}, because a mistyped path should not silently sign with a different key.");
+                return Fail($"No signing key file at '{keyFilePath}'. Check the path — there is no other source to fall back to, because a mistyped path must never silently sign with a different key.");
             }
 
             string contents;
@@ -60,15 +61,10 @@ public static class SigningKeySource
             return Validate(contents, $"file '{keyFilePath}'");
         }
 
-        if (string.IsNullOrWhiteSpace(envValue))
-        {
-            return Fail(
-                $"No signing key. Either pass --key-file <path>, or set ${EnvVar} to the base64 PKCS#8 private key. " +
-                "A key file is the safer of the two: it keeps the key out of your shell history and out of the " +
-                "process list, and you can see what you pasted.");
-        }
-
-        return Validate(envValue, $"${EnvVar}");
+        return Fail(
+            "No signing key. Pass --key-file <path>, pointing at a file holding the base64 PKCS#8 private key. " +
+            "A file is the only accepted source: it keeps the key out of your shell history, out of the process " +
+            "list, and out of every child process's environment.");
     }
 
     /// <summary>
