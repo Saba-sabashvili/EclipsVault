@@ -33,7 +33,11 @@
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
 
     <!-- Media -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <!-- SkiaSharp ships the native libSkiaSharp for Windows and macOS only; the Linux asset is a
+         separate package. NoDependencies is the build with no fontconfig/freetype system deps, which
+         is what the slim aspnet runtime image and the CI runners need. Keep both on one version. -->
+    <PackageVersion Include="SkiaSharp" Version="4.153.1" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
 
     <!-- Logging -->
