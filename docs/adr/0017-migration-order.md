@@ -2,8 +2,8 @@
 
 Areas migrate in this order:
 
-0. **Groundwork:** workspace, app shell, `/api/ui/me`, error handling, CSRF, no-store, test infrastructure.
-1. **Read-only self-service:** My activity, Sign-in history, Security checkup, My access.
+0. **Groundwork:** workspace, app shell, `/api/ui/me`, error handling, CSRF, no-store, test infrastructure, plus My access as the tracer area that proves the whole path end to end.
+1. **Read-only self-service:** My activity, Sign-in history, Security checkup.
 2. **Simple self-service writes:** Signed-in devices, Your data, Shared by me.
 3. **Profile.**
 4. **Sharing:** Shared with me, Access requests.
