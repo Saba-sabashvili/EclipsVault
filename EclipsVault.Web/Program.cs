@@ -9,6 +9,7 @@ using EclipsVault.Web.Authentication;
 using EclipsVault.Infrastructure.Security;
 using EclipsVault.Infrastructure.Security.Licensing;
 using EclipsVault.Web.Authorization;
+using EclipsVault.Web.Hosting;
 using EclipsVault.Web.Middleware;
 using EclipsVault.Web.Security;
 using EclipsVault.Web.Services;
@@ -320,6 +321,8 @@ try
     app.UseSession();
     app.UseAuthentication();
     app.UseAuthorization();
+
+    app.MapAngularUi();
 
     app.MapControllerRoute(
         name: "default",

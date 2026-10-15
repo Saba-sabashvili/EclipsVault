@@ -1,8 +1,10 @@
 using System.Reflection;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Controllers;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Xunit;
 
 namespace EclipsVault.Tests.Web;
@@ -149,6 +151,64 @@ public class AuthorizationSurfaceTests
         Assert.NotEmpty(baseController.GetCustomAttributes<AuthorizeAttribute>(inherit: true));
     }
 
+    /// <summary>
+    /// The UI API and the Public API must never accept each other's credentials (ADR-0005). The UI
+    /// API is driven by a session, so it gets the session's CSRF rules; the Public API is driven by an
+    /// API key, with the key's scopes. An endpoint accepting both would apply each set of rules only
+    /// to some of its callers. The scheme is named explicitly on every UI API controller, rather than
+    /// left to the default, so that changing the default scheme in <c>Program.cs</c> cannot quietly
+    /// let a key in.
+    /// </summary>
+    [Fact]
+    public void UiApiControllers_AcceptOnlyTheSession_AndNoneOfTheirActionsIsAnonymous()
+    {
+        var uiApi = ControllersUnder("api/ui/");
+        Assert.NotEmpty(uiApi);
+
+        var wrongScheme = uiApi
+            .Where(type => !DeclaresExactly(type, CookieAuthenticationDefaults.AuthenticationScheme))
+            .Select(type => type.Name)
+            .ToList();
+        Assert.True(wrongScheme.Count == 0,
+            "These UI API controllers do not declare the session scheme, and only it, on their [Authorize]:\n  " +
+            string.Join("\n  ", wrongScheme));
+
+        var anonymous = Actions()
+            .Where(action => uiApi.Contains(action.DeclaringType!))
+            .Where(action => IsAnonymous(action) || DeclaresAnyScheme(action))
+            .Select(Name)
+            .ToList();
+        Assert.True(anonymous.Count == 0,
+            "These UI API actions are anonymous or override the controller's scheme:\n  " +
+            string.Join("\n  ", anonymous));
+    }
+
+    /// <summary>The other half of ADR-0005: the Public API takes an API key and never a session.</summary>
+    [Fact]
+    public void PublicApiControllers_AcceptOnlyAnApiKey()
+    {
+        var publicApi = ControllersUnder("api/v1/");
+        Assert.NotEmpty(publicApi);
+
+        var wrongScheme = publicApi
+            .Where(type => !DeclaresExactly(type, AuthSchemes.ApiKey))
+            .Select(type => type.Name)
+            .ToList();
+        Assert.True(wrongScheme.Count == 0,
+            "These Public API controllers do not declare the API-key scheme, and only it, on their [Authorize]:\n  " +
+            string.Join("\n  ", wrongScheme));
+
+        // An action naming a scheme adds to the controller's, so a session on one action is enough.
+        var overriding = Actions()
+            .Where(action => publicApi.Contains(action.DeclaringType!))
+            .Where(DeclaresAnyScheme)
+            .Select(Name)
+            .ToList();
+        Assert.True(overriding.Count == 0,
+            "These Public API actions add an authentication scheme to the controller's API key:\n  " +
+            string.Join("\n  ", overriding));
+    }
+
     private static string Name(MethodInfo action)
         => $"{action.DeclaringType!.Name}.{action.Name}";
 
@@ -167,6 +227,40 @@ public class AuthorizationSurfaceTests
             .Where(schemes => !string.IsNullOrWhiteSpace(schemes))
             .SelectMany(schemes => schemes!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Any(scheme => string.Equals(scheme, AuthSchemes.MfaPending, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Controllers with any route template starting with <paramref name="prefix"/>, whether it sits on
+    /// the controller or on one of its actions, so a controller routed only per action is still found.
+    /// </summary>
+    private static List<Type> ControllersUnder(string prefix)
+        => ControllerTypes()
+            .Where(type => !type.IsAbstract)
+            .Where(type => type.GetCustomAttributes<RouteAttribute>(inherit: true).Select(route => route.Template)
+                .Concat(type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .SelectMany(method => method.GetCustomAttributes(inherit: true).OfType<IRouteTemplateProvider>())
+                    .Select(route => route.Template))
+                .Any(template => template is not null
+                    && template.TrimStart('/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+    /// <summary>
+    /// Whether the controller's <c>[Authorize]</c> attributes name exactly one scheme between them,
+    /// and it is <paramref name="scheme"/>. An attribute naming no scheme would fall back to the
+    /// default one, so it counts as a mismatch.
+    /// </summary>
+    private static bool DeclaresExactly(Type controller, string scheme)
+    {
+        var attributes = controller.GetCustomAttributes<AuthorizeAttribute>(inherit: true).ToList();
+        return attributes.Count > 0
+            && attributes.All(attribute => SchemesOf(attribute).SequenceEqual([scheme], StringComparer.Ordinal));
+    }
+
+    private static bool DeclaresAnyScheme(MethodInfo action)
+        => action.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any(attribute => SchemesOf(attribute).Length > 0);
+
+    private static string[] SchemesOf(AuthorizeAttribute attribute)
+        => (attribute.AuthenticationSchemes ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static bool IsAuthorized(MethodInfo action)
         => action.GetCustomAttributes<AuthorizeAttribute>(inherit: true).Any()

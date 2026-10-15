@@ -37,3 +37,7 @@ TestResults/
 .claude/settings.local.json
 .claude/skills/mint-licence/
 __pycache__/
+
+# Angular UI build output, written into the web app by `npm run build` in EclipsVault.AngularUi.
+EclipsVault.Web/wwwroot/ui/
+EclipsVault.Web/AngularUi/

@@ -91,6 +91,7 @@ command rather than mocked in-process:
 
 ```bash
 docker compose up -d      # SQL Server + Vault + Mailpit + Redis
+(cd EclipsVault.AngularUi && npm ci && npm run build)   # the Angular UI's pages (Node: see its .nvmrc)
 dotnet run --project EclipsVault.Web
 # → https://localhost:7443
 ```

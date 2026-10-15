@@ -1,0 +1,6 @@
+/* The only stylesheet. Components declare no styles: Angular would inject them as <style> tags,
+   which the vault's Content Security Policy refuses (ADR-0013). */
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
