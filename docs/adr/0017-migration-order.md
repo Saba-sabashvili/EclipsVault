@@ -9,7 +9,7 @@ Areas migrate in this order:
 4. **Sharing:** Shared with me, Access requests.
 5. **Administration:** Users, Networks, Service accounts, Notifications, Licence.
 6. **Audit log and Encryption keys.**
-7. **Secrets and Dynamic secrets.**
+7. **Overview dashboard, Secrets and Dynamic secrets.** The dashboard goes with Secrets because it aggregates secret metadata through the same ABAC filter.
 8. **Sign-in.**
 9. **Final cleanup.**
 
