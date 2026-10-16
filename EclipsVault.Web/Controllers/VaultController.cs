@@ -1,3 +1,4 @@
+using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,7 +19,7 @@ namespace EclipsVault.Web.Controllers;
 /// the requirement is also written where the code being protected lives.
 /// </para>
 /// </summary>
-[Authorize]
+[Authorize(Policy = VaultPolicies.Session)]
 public abstract class VaultController : Controller
 {
     /// <summary>The signed-in user's id, or <see cref="Guid.Empty"/> when absent (fail-closed).</summary>

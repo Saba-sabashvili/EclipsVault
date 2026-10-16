@@ -1,3 +1,4 @@
+using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -34,7 +35,11 @@ public static class AngularUiRoutes
     public static void MapAngularUi(this IEndpointRouteBuilder endpoints)
     {
         // A signed-out visitor gets the session cookie's usual redirect to sign-in, with a return URL.
-        var session = new AuthorizeAttribute { AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme };
+        var session = new AuthorizeAttribute
+        {
+            AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme,
+            Policy = VaultPolicies.Session,
+        };
 
         foreach (var path in Paths)
         {

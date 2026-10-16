@@ -8,4 +8,5 @@ namespace EclipsVault.Web.Models.Ui;
 /// <param name="DisplayName">The name to show, falling back to the username.</param>
 /// <param name="Clearance">The clearance's display name, e.g. "Top Secret".</param>
 /// <param name="Project">The project the account belongs to.</param>
-public sealed record MeResponse(string Username, string DisplayName, string Clearance, string Project);
+/// <param name="Areas">Area keys authorized for this session by the pages' named policies.</param>
+public sealed record MeResponse(string Username, string DisplayName, string Clearance, string Project, IReadOnlyList<string> Areas);

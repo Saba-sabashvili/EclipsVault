@@ -1,3 +1,4 @@
+using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using EclipsVault.Web.Middleware;
 using EclipsVault.Web.Models.Ui;
@@ -13,13 +14,13 @@ namespace EclipsVault.Web.Controllers.Ui;
 /// </summary>
 [ApiController]
 [Route("api/ui/me")]
-[Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
+[Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme, Policy = VaultPolicies.Session)]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 [Produces("application/json")]
-public sealed class MeController : ControllerBase
+public sealed class MeController(IAuthorizationService authorization) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<MeResponse> Get()
+    public async Task<ActionResult<MeResponse>> Get()
     {
         // A session missing the vault attribute claims is stale: refuse it rather than show a
         // clearance or project the server never issued, as the Legacy UI's My access does.
@@ -29,6 +30,15 @@ public sealed class MeController : ControllerBase
             return UiApiProblem.Unauthenticated();
         }
 
-        return new MeResponse(User.GetUsername(), User.GetDisplayName(), clearance.ToDisplayName(), project);
+        var areas = new List<string>();
+        foreach (var area in UiAreas.All)
+        {
+            if ((await authorization.AuthorizeAsync(User, HttpContext, area.Policy)).Succeeded)
+            {
+                areas.Add(area.Key);
+            }
+        }
+
+        return new MeResponse(User.GetUsername(), User.GetDisplayName(), clearance.ToDisplayName(), project, areas);
     }
 }

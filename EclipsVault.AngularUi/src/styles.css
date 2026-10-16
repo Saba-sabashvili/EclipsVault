@@ -1,6 +1,471 @@
-/* The only stylesheet. Components declare no styles: Angular would inject them as <style> tags,
-   which the vault's Content Security Policy refuses (ADR-0013). */
-body {
-  margin: 0;
-  font-family: system-ui, sans-serif;
+/* Ported from EclipsVault.Web/wwwroot/css/site.css for the shell and both themes.
+   This is the only stylesheet: components declare no styles (ADR-0013). */
+/* ================================================================
+   EclipsVault design system
+   Layers: fonts → tokens → base → shell → components → pages → overlays → legacy
+   Influences: Apple HIG — restraint, hairline borders, generous space,
+   a single accent used sparingly, soft depth, calm motion.
+   New features should COMPOSE these components (panel, page-header,
+   data-table, badge, button, field, flash) rather than add one-off CSS.
+   ================================================================ */
+
+/* ---- Typeface --------------------------------------------------- */
+/* Geist, served from this origin. Not from Google Fonts, and not by @import:
+   the vault's own Content-Security-Policy is style-src 'self'; font-src 'self',
+   so a CDN import is blocked outright — and relaxing the policy to allow it
+   would let a third party inject stylesheets into pages that display secrets,
+   which is a real exfiltration channel (attribute selectors + url()), and would
+   leak every user's address to that third party on every page load. It would
+   also simply fail on the isolated networks this product is deployed into.
+
+   Two variable files carry every weight (~138 KB total, less than a handful of
+   static weights would cost), so the whole family is one request each and works
+   with no network at all. SIL OFL 1.1 — see fonts/OFL.txt, kept alongside as
+   the licence requires. */
+@font-face {
+    font-family: 'Geist';
+    src: url('/fonts/geist-variable.woff2') format('woff2');
+    font-weight: 100 900;   /* variable axis: any weight the design asks for */
+    font-style: normal;
+    font-display: swap;     /* text is readable immediately; it is not decoration */
 }
+
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('/fonts/geist-mono-variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* ---- Tokens ---------------------------------------------------- */
+/* The dark palette is the default. A light palette is provided under
+   :root[data-theme="light"]; the server stamps data-theme on <html> from the
+   EclipsVault.Theme cookie (no inline script, no flash), and the sidebar toggle
+   flips it live. Components reference tokens only, so this block is the whole theme. */
+:root {
+    color-scheme: dark;
+
+    /* Layered near-black surfaces (cool, low-chroma) */
+    --bg: #0a0b0f;
+    --bg-sidebar: rgba(18, 20, 27, 0.72);
+    /* Glass: the same raised surface, translucent, for elements that sit over the page
+       backdrop. A token rather than a literal rgba() so the light theme can answer for
+       itself — hardcoding a dark rgba here is how a "glass" panel ends up as a grey
+       smear on white. */
+    --bg-raised-glass: rgba(20, 22, 30, 0.72);
+    --glass-blur: saturate(160%) blur(14px);
+    --bg-raised: #14161e;
+    --bg-raised-2: #181b25;
+    --bg-inset: #0d0e13;
+    --bg-hover: #1c1f2a;
+
+    /* Hairline borders */
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.12);
+
+    --text: #edeef2;
+    --text-secondary: #b6bcca;
+    --text-muted: #7f8798;
+    --text-faint: #5b6273;
+
+    /* Accent: warm eclipse corona amber, used sparingly */
+    --accent: #ff9f0a;              /* aligns with Apple systemOrange */
+    --accent-hover: #ffb84d;
+    --accent-press: #d97f00;
+    --accent-soft: rgba(255, 159, 10, 0.14);
+    --accent-line: rgba(255, 159, 10, 0.30);
+
+    --danger: #ff453a;              /* systemRed (dark) */
+    --danger-soft: rgba(255, 69, 58, 0.14);
+    --warn: #ffd60a;                /* systemYellow (dark) */
+    --warn-soft: rgba(255, 214, 10, 0.12);
+    --ok: #30d158;                  /* systemGreen (dark) */
+    --ok-soft: rgba(48, 209, 88, 0.14);
+
+    --radius-lg: 16px;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-pill: 980px;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+    --sidebar-width: 244px;
+    --ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --dur: 200ms;
+
+    /* System faces stay behind Geist: font-display:swap paints in them first, and they are
+       what renders if the woff2 ever fails to load. */
+    --font: 'Geist', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: 'Geist Mono', ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+    /* Optical sizing: display type wants tighter tracking than body copy, which wants none. */
+    --tracking-display: -0.03em;
+    --tracking-heading: -0.02em;
+}
+
+/* ---- Light palette --------------------------------------------- */
+/* Only color tokens change. Surfaces invert to layered whites, borders become
+   black-alpha hairlines, and the amber accent deepens so it stays readable as
+   link/button text on light — while keeping the same warm identity. */
+:root[data-theme="light"] {
+    color-scheme: light;
+
+    --bg: #f3f4f7;
+    --bg-sidebar: rgba(244, 245, 248, 0.80);
+    /* Light glass is nearly opaque on purpose. White-on-white has almost no contrast to
+       begin with, so the panel edge is the only thing separating content from page — let
+       it go translucent and the layering disappears rather than deepens. */
+    --bg-raised-glass: rgba(255, 255, 255, 0.86);
+    --bg-raised: #ffffff;
+    --bg-raised-2: #f6f7f9;
+    --bg-inset: #eceef2;
+    --bg-hover: #ebedf1;
+
+    --border: rgba(0, 0, 0, 0.09);
+    --border-strong: rgba(0, 0, 0, 0.16);
+
+    --text: #1c1d22;
+    --text-secondary: #4a4e58;
+    --text-muted: #697080;
+    --text-faint: #9aa0ac;
+
+    --accent: #b45f04;
+    --accent-hover: #8f4b00;
+    --accent-press: #703b00;
+    --accent-soft: rgba(180, 95, 4, 0.12);
+    --accent-line: rgba(180, 95, 4, 0.32);
+
+    --danger: #d70015;
+    --danger-soft: rgba(215, 0, 21, 0.10);
+    --warn: #8a6a00;
+    --warn-soft: rgba(180, 140, 0, 0.15);
+    --ok: #1a7f37;
+    --ok-soft: rgba(26, 127, 55, 0.13);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.16);
+}
+
+/* A couple of rules bake in a white overlay for depth; on light they need a dark one. */
+:root[data-theme="light"] .data-table tbody tr:hover td { background: rgba(0, 0, 0, 0.03); }
+:root[data-theme="light"] .button.primary { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset; }
+
+/* ---- Base ------------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { height: 100%; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.5;
+    /* No tracking at body size. The -0.01em here was compensating for SF Pro's looser
+       metrics; Geist is drawn tight already, and carrying the compensation over would
+       close up running text that people have to read carefully. */
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+
+    /* Lining, tabular figures everywhere. This is a screen full of counts, sequence numbers
+       and timestamps in columns: proportional digits make them jitter between rows and make
+       two numbers of the same magnitude look different lengths. */
+    font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Ambient corona. Glass needs something behind it to be glass — blur a flat colour and you get
+   the same flat colour, so the whole layer would be cost with no effect. Two very low-opacity
+   radial pools give the backdrop something to pick up, and they are the eclipse the product is
+   named for: a warm corona bleeding past a dark disc. Fixed and behind everything, so it does
+   not move with scroll or intercept a single click. */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(60rem 40rem at 78% -8%, rgba(255, 159, 10, 0.10), transparent 60%),
+        radial-gradient(48rem 34rem at 8% 102%, rgba(120, 90, 255, 0.07), transparent 62%);
+}
+
+:root[data-theme="light"] body::before {
+    background:
+        radial-gradient(60rem 40rem at 78% -8%, rgba(255, 159, 10, 0.13), transparent 60%),
+        radial-gradient(48rem 34rem at 8% 102%, rgba(120, 90, 255, 0.08), transparent 62%);
+}
+
+h1, h2, h3 { font-weight: 620; letter-spacing: var(--tracking-heading); margin: 0; line-height: 1.25; }
+h1 { font-size: 1.5rem; letter-spacing: var(--tracking-display); }
+h2 { font-size: 1.06rem; }
+
+a { color: var(--accent); text-decoration: none; transition: color var(--dur) var(--ease); }
+a:hover { color: var(--accent-hover); }
+
+code { font-family: var(--mono); font-size: 0.9em; overflow-wrap: anywhere; }
+
+.muted { color: var(--text-muted); }
+.mono { font-family: var(--mono); }
+
+::selection { background: var(--accent-soft); color: var(--text); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+button { font-family: inherit; }
+
+/* Motion restraint for users who ask for it */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* ---- App shell -------------------------------------------------- */
+.shell { display: flex; min-height: 100vh; }
+
+.sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-sidebar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-right: 1px solid var(--border);
+    padding: 1.2rem 0.85rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0.65rem 1.2rem;
+    font-size: 1.08rem;
+    font-weight: 650;
+    color: var(--text);
+    letter-spacing: -0.02em;
+}
+.brand:hover { color: var(--text); }
+/* Eclipse logomark — the favicon's twin: a dark disc haloed by the accent ring. */
+.brand-mark {
+    width: 1.05em;
+    height: 1.05em;
+    border-radius: 50%;
+    background: #05060a;
+    border: 1.5px solid var(--accent);
+    flex-shrink: 0;
+}
+
+.sidenav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+
+.nav-section {
+    padding: 1.15rem 0.65rem 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.52rem 0.65rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    font-weight: 500;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.nav-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.85; }
+.nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); }
+.nav-item.active svg { opacity: 1; }
+
+/* Active indicator: an accent rule on the leading edge, which reads as "you are here" at a
+   glance down the rail in a way a tinted background alone does not. It grows from the centre
+   rather than sliding between items — the items are links, so the browser repaints the page
+   anyway and there is no continuous element to slide. */
+.nav-item { position: relative; }
+.nav-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    transform: translateY(-50%);
+    border-radius: 0 2px 2px 0;
+    background: var(--accent);
+    transition: height var(--dur) var(--ease);
+}
+.nav-item.active::before { height: 60%; }
+.nav-item:hover::before { height: 30%; background: var(--border-strong); }
+.nav-item.active:hover::before { height: 60%; background: var(--accent); }
+
+/* Collapsible nav groups (native <details>, no script). A group opens itself and tints its
+   header when one of its children is the active page. */
+.nav-group { display: flex; flex-direction: column; }
+.nav-group-summary { cursor: pointer; list-style: none; }
+.nav-group-summary::-webkit-details-marker { display: none; }
+.nav-group-summary .nav-chevron { width: 14px; height: 14px; margin-left: auto; opacity: 0.55; transition: transform var(--dur) var(--ease); }
+.nav-group[open] > .nav-group-summary .nav-chevron { transform: rotate(90deg); }
+.nav-group-summary.has-active { color: var(--accent); }
+.nav-group-summary.has-active svg { opacity: 1; }
+/* Children indented under the header, with a guide line so the grouping reads at a glance. */
+.nav-group-items { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 2px 1.45rem; padding-left: 0.4rem; border-left: 1px solid var(--border); }
+
+.sidebar-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 0.85rem;
+    margin-top: 0.85rem;
+}
+
+.content {
+    flex: 1;
+    min-width: 0;
+    padding: 2rem 2.4rem 1rem;
+    max-width: 1280px;
+    display: flex;
+    flex-direction: column;
+    animation: content-in 320ms var(--ease);
+}
+
+@keyframes content-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+.content-footer {
+    margin-top: auto;
+    padding: 2.2rem 0 0.6rem;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+}
+
+/* ---- Page header ------------------------------------------------ */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.6rem;
+    flex-wrap: wrap;
+}
+
+.page-sub { margin: 0.4rem 0 0; color: var(--text-muted); font-size: 0.92rem; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.page-actions { display: flex; gap: 0.6rem; flex-shrink: 0; }
+
+/* ---- Panels & grids --------------------------------------------- */
+.panel {
+    /* Translucent over the page backdrop, so panels read as sheets above the surface rather
+       than holes cut in it. The solid colour stays as the fallback: backdrop-filter is what
+       makes this legible, and where it is unsupported an unblurred translucent panel would
+       just be text over text. */
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.2rem;
+    box-shadow: var(--shadow-sm);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .panel, .stat-card {
+        background: var(--bg-raised-glass);
+        -webkit-backdrop-filter: var(--glass-blur);
+        backdrop-filter: var(--glass-blur);
+    }
+}
+
+.panel.highlight { border-color: var(--accent-line); background: linear-gradient(180deg, rgba(255, 159, 10, 0.06), var(--bg-raised) 60%); }
+.panel.narrow { max-width: 520px; margin-left: auto; margin-right: auto; }
+.panel.narrow-left { max-width: 660px; }
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.two-col { display: grid; grid-template-columns: 3fr 2fr; gap: 1.2rem; align-items: start; margin-bottom: 1.2rem; }
+/* min-width:0 lets the grid tracks shrink so inner scroll containers (e.g. .table-scroll)
+   actually scroll, instead of a wide child forcing the whole page to scroll sideways. */
+.two-col > .panel { margin-bottom: 0; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 1.2rem; }
+.stack > .panel { margin-bottom: 0; min-width: 0; }
+
+@media (max-width: 1000px) {
+    .two-col { grid-template-columns: 1fr; }
+}
+
+/* ---- Buttons ----------------------------------------------------- */
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1.1rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-raised-2);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 550;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+                background var(--dur) var(--ease), color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.button:hover { background: var(--bg-hover); border-color: var(--border-strong); color: var(--text); text-decoration: none; }
+.button:active { transform: scale(0.97); }
+
+.button.primary { background: var(--accent); border-color: transparent; color: #1a1204; font-weight: 620; box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset; }
+.button.primary:hover { background: var(--accent-hover); color: #1a1204; }
+.button.danger { border-color: rgba(255, 69, 58, 0.5); color: var(--danger); background: transparent; }
+.button.danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+.button.small { padding: 0.28rem 0.72rem; font-size: 0.8rem; }
+.button.wide { width: 100%; }
+.button.copied { border-color: var(--ok); color: var(--ok); }
+
+.button-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 0.5rem 1rem;
+    margin: 0.4rem 0 1.2rem;
+    font-size: 0.9rem;
+    min-width: 0;
+}
+.detail-grid dt { color: var(--text-muted); }
+.detail-grid dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+    /* Phone widths: drop the fixed label column and let long button labels wrap so
+       nothing forces horizontal page scroll. */
+    .detail-grid { grid-template-columns: 1fr; gap: 0.15rem 0; }
+    .detail-grid dt { margin-top: 0.55rem; }
+    .detail-grid dt:first-child { margin-top: 0; }
+    .button { white-space: normal; }
+}
+
+@media print {
+    .sidebar, .content-footer { display: none !important; }
+}
+
+
+/* Icon hosts add no layout box around the Legacy SVGs. */
+app-nav-icon, app-sidebar-nav { display: contents; }

@@ -48,6 +48,7 @@ export interface components {
             displayName: string;
             clearance: string;
             project: string;
+            areas: string[];
         };
     };
     responses: never;

@@ -1,11 +1,14 @@
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
+import { randomBytes } from 'node:crypto';
 import { test, expect } from './fixtures';
+import { verifySidebar } from './sidebar';
 import { freshTotp } from './totp';
 
 // The tests share one vault: the first enrolls the administrator's authenticator, the next signs in with it.
 test.describe.configure({ mode: 'serial' });
 let authenticatorSecret = '';
 let lastSignInStep = -1;
+let administratorCookies: Awaited<ReturnType<BrowserContext['cookies']>> = [];
 
 function adminPassword(): string {
   const password = process.env['Seed__AdminPassword'];
@@ -135,10 +138,9 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
     });
   });
 
-  // /Secrets is still served by MVC. Direct navigation exercises the same-origin handoff before
-  // the Angular shell's navigation arrives in a later migration ticket.
-  const legacyDocument = await page.goto('/Secrets');
-  expect(legacyDocument?.headers()['content-security-policy']).not.toContain('trusted-types');
+  const legacyDocument = page.waitForResponse((response) => response.request().isNavigationRequest());
+  await page.getByRole('link', { name: 'Secrets', exact: true }).click();
+  expect((await legacyDocument).headers()['content-security-policy']).not.toContain('trusted-types');
   await expect(page).toHaveURL(/\/Secrets$/);
   await expect(page.getByRole('heading', { name: 'Secrets', exact: true })).toBeVisible();
   await expect(page.locator('.sidebar')).toContainText('Vault Administrator');
@@ -148,6 +150,47 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
   await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
   expect(signInRequests).toEqual([]);
   expect((await context.cookies()).find((cookie) => cookie.name === 'EclipsVault.Session')?.value).toBe(session?.value);
+  administratorCookies = await context.cookies();
+});
+
+test('the administrator and Standard sidebars match Legacy in both themes and navigate across UIs', async ({ page, browserHealth }, info) => {
+  test.setTimeout(180_000);
+  // Reuse the real session established above. Extra sign-ins would exhaust the production per-IP
+  // password budget before the revocation test; the limiter stays fully enabled.
+  await page.context().addCookies(administratorCookies);
+  await page.goto('/Access');
+  await test.step('administrator navigation and visual comparison', async () => {
+    await verifySidebar(page, info, 'administrator');
+  });
+
+  const username = 'e2e-standard-sidebar';
+  const password = `E2e-${randomBytes(24).toString('hex')}`;
+  await test.step('provision a Standard account through the administrator UI', async () => {
+    await page.goto('/Admin/CreateUser');
+    await page.getByLabel('First name').fill('Standard');
+    await page.getByLabel('Last name').fill('Sidebar');
+    await page.getByLabel('Username').fill(username);
+    await page.getByLabel('Initial password', { exact: true }).fill(password);
+    await page.getByLabel('Clearance').selectOption({ label: 'Standard' });
+    await page.getByLabel('Project').fill('GLOBAL');
+    await page.getByRole('button', { name: 'Create user', exact: true }).click();
+    await expect(page).toHaveURL(/\/Admin\/Users$/);
+  });
+
+  const standard = await (await browserHealth.newContext()).newPage();
+  await test.step('Standard account signs in with its own password and enrolls MFA', async () => {
+    await standard.goto('/Account/Login');
+    await standard.getByLabel('Username').fill(username);
+    await standard.getByLabel('Password', { exact: true }).fill(password);
+    await standard.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(standard).toHaveURL(/\/Account\/EnrollTotp$/);
+    await standard.getByLabel('Confirmation code').fill(await freshTotp(await standard.locator('.secret-code').innerText()));
+    await standard.getByRole('button', { name: 'Confirm enrollment' }).click();
+    await expect(standard).toHaveURL(/\/Secrets$/);
+  });
+  await test.step('Standard navigation and visual comparison', async () => {
+    await verifySidebar(standard, info, 'standard');
+  });
 });
 
 test('a session revoked from another browser is sent to sign-in on its next UI API action', async ({ page, browserHealth }) => {

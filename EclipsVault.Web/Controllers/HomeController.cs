@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EclipsVault.Web.Controllers;
 
-[Authorize]
+[Authorize(Policy = VaultPolicies.Session)]
 public sealed class HomeController : Controller
 {
     private readonly IDashboardService _dashboard;

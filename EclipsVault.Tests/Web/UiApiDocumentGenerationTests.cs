@@ -46,7 +46,7 @@ public sealed class UiApiDocumentGenerationTests
         Assert.Equal("#/components/schemas/MeResponse", response.GetProperty("$ref").GetString());
         var properties = document.RootElement.GetProperty("components").GetProperty("schemas")
             .GetProperty("MeResponse").GetProperty("properties");
-        Assert.Equal(["clearance", "displayName", "project", "username"],
+        Assert.Equal(["areas", "clearance", "displayName", "project", "username"],
             properties.EnumerateObject().Select(property => property.Name).Order().ToArray());
     }
 }

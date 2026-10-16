@@ -56,6 +56,9 @@ public static class AuthSchemes
 
 public static class VaultPolicies
 {
+    /// <summary>The session requirement shared by interactive pages and the UI Area list.</summary>
+    public const string Session = "Session";
+
     public const string SecretAccess = "SecretAccess";
 
     /// <summary>Requires TopSecret clearance; gates the administration area.</summary>

@@ -216,6 +216,8 @@ try
 
     builder.Services.AddAuthorization(options =>
     {
+        options.AddPolicy(VaultPolicies.Session, policy => policy.RequireAuthenticatedUser());
+
         options.AddPolicy(VaultPolicies.SecretAccess, policy => policy
             .RequireAuthenticatedUser()
             .AddRequirements(new SecretAccessRequirement()));
@@ -226,9 +228,7 @@ try
 
         // Default-deny: everything requires an authenticated session unless
         // explicitly marked [AllowAnonymous].
-        options.FallbackPolicy = new AuthorizationPolicyBuilder()
-            .RequireAuthenticatedUser()
-            .Build();
+        options.FallbackPolicy = options.GetPolicy(VaultPolicies.Session);
     });
 
     // Brute-force damping on the authentication surface, partitioned per source IP. Applied by
