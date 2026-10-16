@@ -20,6 +20,24 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
   `.github/workflows/ci.yml`. For Postgres the startup project is `EclipsVault.Web`.
 - Agent guardrail tests: `python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py'`.
 
+## Angular UI
+
+`EclipsVault.AngularUi` sits outside the solution (ADR-0015). Run these in that folder, on the Node
+version in its `.nvmrc`.
+
+- Install: `npm ci`.
+- Lint: `npm run lint`.
+- Test: `npm test -- --watch=false` (Vitest; in a terminal it otherwise watches and never exits), and
+  `npm run test:build-checks` for the build's own checks.
+- Build: `npm run build`. Bundles go to `EclipsVault.Web/wwwroot/ui/`, the index to
+  `EclipsVault.Web/AngularUi/index.html`. The build fails on a runtime package outside `@angular/*`,
+  `rxjs` and `tslib` (ADR-0003; another one needs a new ADR), and on an inline `<script>`, an `on…=`
+  handler, a `<style>` or a `style=` in the index, which the CSP would block.
+- Dev server: `npm start`, on http://localhost:4200, proxying `/api` to the vault on https://localhost:7443.
+- `npm audit --audit-level=high` fails CI on a high or critical finding in any package, dev or runtime.
+  Fix a vulnerable package by upgrading it, or by pinning a patched version in `package.json`
+  `overrides`. The finding itself stays visible: never suppress it or lower the audit level.
+
 ## Known traps
 
 - Errors in files you did not touch (RZ1021, `CS0246` naming `summary` or `button`): run

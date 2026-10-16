@@ -92,6 +92,49 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # The Angular UI (ADR-0015), held to the npm supply-chain rules (ADR-0003). `npm run build` runs
+  # two checks of its own: before building, that the lockfile holds no runtime package outside
+  # @angular/*, rxjs and tslib (check-runtime-deps.mjs); after it, that index.html left wwwroot and
+  # carries no inline code for the CSP to block (check-index.mjs, ADR-0013).
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: EclipsVault.AngularUi
+    steps:
+      - uses: actions/checkout@v7
+
+      # .nvmrc pins the same Node the Dockerfile's ui stage builds with.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+          cache: npm
+          cache-dependency-path: EclipsVault.AngularUi/package-lock.json
+
+      # `npm ci` installs exactly the lockfile, and fails if package.json no longer matches it.
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --watch=false
+
+      - name: Build-check tests
+        run: npm run test:build-checks
+
+      - name: Build
+        run: npm run build
+
+      # Dev packages too: a compromised build tool runs here and on every developer's machine.
+      # High and critical fail the job. Fix one by upgrading the package or pinning a patched version
+      # in `overrides`, never by suppressing the finding.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
   # The vault targets two database engines, so every model change needs a migration in BOTH sets.
   # One that reaches only one engine leaves the schemas silently different, and nothing notices
   # until a deployment on the other engine hits a column that was never created. Neither check
@@ -152,6 +195,17 @@ jobs:
             exit 1
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+
+      # The Angular UI's npm packages, dev and runtime, as the frontend job audits them. npm reads
+      # the lockfile, so nothing needs installing.
+      - name: Audit npm dependencies
+        working-directory: EclipsVault.AngularUi
+        run: npm audit --audit-level=high
+
   # The hook that stops coding agents running destructive git commands is itself security code,
   # and its first version had a bypass that only a test exposed. Run its test table on every change
   # so a broken pattern fails here instead of failing open on someone's machine.
@@ -208,10 +262,16 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore --locked-mode
 
-      # A software bill of materials for the deployed app: every transitive dependency, so a
-      # consumer can audit what ships. Fits the pin-and-prove supply-chain posture.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+
+      # A software bill of materials for the deployed app: every transitive NuGet package and the
+      # Angular UI's npm runtime packages, so a consumer can audit what ships. Fits the pin-and-prove
+      # supply-chain posture. release.yml attests the output of the same script to the image.
       - name: Generate SBOM
-        run: dotnet CycloneDX EclipsVault.Web/EclipsVault.Web.csproj -o sbom -fn sbom.json -F Json
+        run: bash .github/scripts/sbom.sh
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v7

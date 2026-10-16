@@ -78,11 +78,17 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+
+      # The NuGet packages and the Angular UI's npm runtime packages, by the script CI's sbom job runs.
       - name: Generate SBOM
         run: |
           dotnet tool install --global CycloneDX
           dotnet restore --locked-mode
-          dotnet CycloneDX EclipsVault.Web/EclipsVault.Web.csproj -o sbom -fn sbom.json -F Json
+          bash .github/scripts/sbom.sh
 
       - name: Attest the SBOM to the image (keyless)
         env:
