@@ -42,6 +42,37 @@ version in its `.nvmrc`.
   Fix a vulnerable package by upgrading it, or by pinning a patched version in `package.json`
   `overrides`. The finding itself stays visible: never suppress it or lower the audit level.
 
+## Browser end-to-end tests
+
+Run in `EclipsVault.AngularUi` on the Node version in `.nvmrc`. Needs Docker Engine with Compose,
+Linux containers (SQL Server uses `linux/amd64`, including emulation on Apple Silicon), and Chromium:
+
+```sh
+npm ci --ignore-scripts
+npx playwright install --with-deps chromium
+export Seed__AdminPassword="E2e-$(openssl rand -hex 24)"
+export ECLIPSVAULT_KEK="$(openssl rand -base64 32)"
+npm run e2e
+npm run e2e:verify-guards
+unset Seed__AdminPassword ECLIPSVAULT_KEK
+```
+
+`e2e` builds the root production Dockerfile, starts a fresh SQL Server and a TLS proxy on a random
+loopback port, bootstraps `vault-admin` through the normal Production startup, enrolls MFA through
+the browser, then signs in with a real TOTP code. It removes its own containers and image on exit.
+The first run downloads SQL Server (~2.5 GB) and the build images. `E2E_IMAGE=<local-tag>` skips the
+build to test an already-built production image, as CI does. The suite uses the proxy's disposable
+certificate with `ignoreHTTPSErrors`; production CSP, Secure cookies and authentication stay active.
+Always import `test` from `e2e/fixtures.ts` in browser specs: its automatic fixture fails every test
+on CSP violations, console errors or uncaught browser exceptions, including other pages in its context.
+`e2e:verify-guards` intentionally runs three failing Playwright probes against another fresh vault;
+it succeeds only when the shared fixture reports the corresponding failures.
+
+Failures retain traces/screenshots in `test-results/` and an HTML report in `playwright-report/`;
+open with `npx playwright show-report`. Guard evidence is in `guard-results/`. Both runs also save
+`docker.log`. These ignored artifacts can contain disposable passwords, MFA enrollment material and
+session cookies; use only throwaway test credentials. CI uploads them on failure with short retention.
+
 ## Known traps
 
 - Errors in files you did not touch (RZ1021, `CS0246` naming `summary` or `button`): run

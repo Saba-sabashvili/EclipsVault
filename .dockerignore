@@ -8,6 +8,9 @@
 EclipsVault.AngularUi/.angular/
 EclipsVault.Web/wwwroot/ui/
 EclipsVault.Web/AngularUi/
+EclipsVault.AngularUi/test-results/
+EclipsVault.AngularUi/guard-results/
+EclipsVault.AngularUi/playwright-report/
 
 # Local dev secrets — must never enter an image
 **/appsettings.Development.json

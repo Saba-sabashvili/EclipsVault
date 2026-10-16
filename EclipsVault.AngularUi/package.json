@@ -9,7 +9,9 @@
     "postbuild": "node check-index.mjs",
     "test": "ng test",
     "test:build-checks": "node --test build-checks.test.mjs",
-    "lint": "ng lint"
+    "lint": "ng lint && eslint e2e playwright.config.ts && tsc --project e2e/tsconfig.json",
+    "e2e": "node e2e/run.mjs",
+    "e2e:verify-guards": "node e2e/run.mjs --verify-guards"
   },
   "private": true,
   "packageManager": "npm@11.20.0",
@@ -26,6 +28,8 @@
     "@angular/build": "^22.2.3",
     "@angular/cli": "^22.2.3",
     "@angular/compiler-cli": "^22.2.0",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
     "angular-eslint": "^22.6.0",
     "eslint": "^10.12.0",
     "jsdom": "^30.0.0",
