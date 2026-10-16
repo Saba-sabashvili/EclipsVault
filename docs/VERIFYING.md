@@ -19,7 +19,7 @@ Signing is **keyless**, using [Sigstore](https://www.sigstore.dev/) `cosign`:
 The image is published to the GitHub Container Registry:
 
 ```
-ghcr.io/saba-sabashvili/eclipsvault
+ghcr.io/sabysabashvily/eclipsvault
 ```
 
 ## 1. Install cosign
@@ -38,16 +38,34 @@ curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-li
 
 ## 2. Verify the image signature
 
-Replace `1.0.0` with the release you intend to run. Note that **image tags carry no `v` prefix**: the
-git tag `v1.0.0` publishes the image as `:1.0.0` (plus a rolling `:1.0` for the minor series).
+Set the release version you intend to run, without a leading `v`. **Image tags carry no `v`
+prefix**: a git tag `vX.Y.Z` publishes the image as `:X.Y.Z` (plus a rolling `:X.Y` for the minor
+series). For releases signed after the GitHub account was renamed to `sabysabashvily`:
+
+```bash
+VERSION='<version>'
+IMAGE="ghcr.io/sabysabashvily/eclipsvault:${VERSION}"
+IDENTITY="https://github.com/sabysabashvily/EclipsVault/.github/workflows/release.yml@refs/tags/v${VERSION}"
+```
+
+Existing signatures retain the identity recorded when they were created; renaming the account
+does not re-sign an image. Version `1.4.0` is now fetched from the current image namespace, but its
+certificate still names the former owner. To verify that release, use:
+
+```bash
+VERSION='1.4.0'
+IMAGE="ghcr.io/sabysabashvily/eclipsvault:${VERSION}"
+IDENTITY='https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@refs/tags/v1.4.0'
+```
+
+Then verify against the exact expected workflow and version tag:
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp \
-    'https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@.*' \
+  --certificate-identity "$IDENTITY" \
   --certificate-oidc-issuer \
     'https://token.actions.githubusercontent.com' \
-  ghcr.io/saba-sabashvili/eclipsvault:1.0.0
+  "$IMAGE"
 ```
 
 A successful verification prints the checked claims and exits `0`. It confirms the image was signed by
@@ -61,18 +79,17 @@ you always run the exact bytes you checked:
 
 ```bash
 digest=$(cosign verify \
-  --certificate-identity-regexp \
-    'https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@.*' \
+  --certificate-identity "$IDENTITY" \
   --certificate-oidc-issuer \
     'https://token.actions.githubusercontent.com' \
-  ghcr.io/saba-sabashvili/eclipsvault:1.0.0 2>/dev/null \
+  "$IMAGE" 2>/dev/null \
   | jq -r '.[0].critical.image."docker-manifest-digest"')
 
 echo "Verified digest: $digest"
-docker pull "ghcr.io/saba-sabashvili/eclipsvault@${digest}"
+docker pull "ghcr.io/sabysabashvily/eclipsvault@${digest}"
 ```
 
-Use `ghcr.io/saba-sabashvili/eclipsvault@${digest}` wherever `docs/INSTALL.md` shows the image name.
+Use `ghcr.io/sabysabashvily/eclipsvault@${digest}` wherever `docs/INSTALL.md` shows the image name.
 
 ## 4. (Optional) Verify and read the SBOM
 
@@ -82,11 +99,10 @@ audit exactly what ships in the version you run:
 ```bash
 cosign verify-attestation \
   --type cyclonedx \
-  --certificate-identity-regexp \
-    'https://github.com/Saba-sabashvili/EclipsVault/.github/workflows/release.yml@.*' \
+  --certificate-identity "$IDENTITY" \
   --certificate-oidc-issuer \
     'https://token.actions.githubusercontent.com' \
-  ghcr.io/saba-sabashvili/eclipsvault:1.0.0 \
+  "$IMAGE" \
   | jq -r '.payload | @base64d | fromjson | .predicate' > sbom.json
 ```
 
