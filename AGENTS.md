@@ -19,13 +19,17 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
   (`EclipsVault.Migrations.Postgres`). CI checks both; the exact `dotnet ef` commands are in
   `.github/workflows/ci.yml`. For Postgres the startup project is `EclipsVault.Web`.
 - Agent guardrail tests: `python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py'`.
+- SBOM: `bash .github/sbom/sbom.sh` writes `sbom/sbom.json`, which the release signs and attests to the
+  image. Both generators are locked: the CycloneDX dotnet tool in `dotnet-tools.json`, the CycloneDX
+  npm tool in `.github/sbom/package-lock.json` (audited by `security-scan`). Change their versions there.
 
 ## Angular UI
 
 `EclipsVault.AngularUi` sits outside the solution (ADR-0015). Run these in that folder, on the Node
 version in its `.nvmrc`.
 
-- Install: `npm ci`.
+- Install: `npm ci --ignore-scripts`. Keep that flag on installs only: setting it in `.npmrc` would
+  also skip the pre/post-build gates.
 - Lint: `npm run lint`.
 - Test: `npm test -- --watch=false` (Vitest; in a terminal it otherwise watches and never exits), and
   `npm run test:build-checks` for the build's own checks.

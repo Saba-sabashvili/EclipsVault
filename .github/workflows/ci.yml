@@ -15,15 +15,20 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Read-only, whatever the repository's default is. Every job here builds, tests or scans, and each one
+# runs third-party code (packages, tools, actions) that has no use for a token that can write.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -52,7 +57,7 @@ jobs:
       # Only on failure: a clean run deletes its own sequence file, so there is nothing to collect.
       - name: Upload hang evidence
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: EclipsVault.Tests/TestResults/**
@@ -67,10 +72,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -85,7 +90,7 @@ jobs:
 
       - name: Upload hang evidence
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: EclipsVault.IntegrationTests/TestResults/**
@@ -103,11 +108,11 @@ jobs:
       run:
         working-directory: EclipsVault.AngularUi
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # .nvmrc pins the same Node the Dockerfile's ui stage builds with.
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: EclipsVault.AngularUi/.nvmrc
           cache: npm
@@ -115,7 +120,7 @@ jobs:
 
       # `npm ci` installs exactly the lockfile, and fails if package.json no longer matches it.
       - name: Install (locked)
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint
@@ -142,10 +147,10 @@ jobs:
   migrations:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -166,7 +171,7 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # appsettings.Development.json holds the dev KEK fallback and the seed passwords. It is
       # git-ignored, but an ignore rule is a convention and this is a vault — make it a gate.
@@ -179,7 +184,7 @@ jobs:
           echo "OK — appsettings.Development.json is not tracked"
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -196,7 +201,7 @@ jobs:
           fi
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: EclipsVault.AngularUi/.nvmrc
 
@@ -206,13 +211,18 @@ jobs:
         working-directory: EclipsVault.AngularUi
         run: npm audit --audit-level=high
 
+      # The CycloneDX npm tool that writes the release's attested SBOM, locked beside its script.
+      - name: Audit the SBOM tool's npm dependencies
+        working-directory: .github/sbom
+        run: npm audit --audit-level=high
+
   # The hook that stops coding agents running destructive git commands is itself security code,
   # and its first version had a bypass that only a test exposed. Run its test table on every change
   # so a broken pattern fails here instead of failing open on someone's machine.
   agent-guardrails:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Git guardrail hook blocks destructive commands and allows everyday ones
         run: python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py' -v
@@ -231,13 +241,17 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.0
+          cache-binary: false
+          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
 
       - name: Build the production image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: false
@@ -249,32 +263,31 @@ jobs:
   sbom:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install CycloneDX
-        run: dotnet tool install --global CycloneDX
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
 
       - name: Restore (locked)
         run: dotnet restore --locked-mode
 
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: EclipsVault.AngularUi/.nvmrc
-
       # A software bill of materials for the deployed app: every transitive NuGet package and the
       # Angular UI's npm runtime packages, so a consumer can audit what ships. Fits the pin-and-prove
-      # supply-chain posture. release.yml attests the output of the same script to the image.
+      # supply-chain posture. Step for step this is release.yml's sbom job, whose output the release
+      # attests to the image, so a change that breaks it fails here before it can fail a tag.
       - name: Generate SBOM
-        run: bash .github/scripts/sbom.sh
+        run: bash .github/sbom/sbom.sh
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: sbom/sbom.json
+          if-no-files-found: error

@@ -3,7 +3,7 @@
 The browser application replacing the Legacy UI. It lives outside the .NET solution (ADR-0015).
 Use the Node version in `.nvmrc`.
 
-- `npm ci`: install from the lockfile.
+- `npm ci --ignore-scripts`: install from the lockfile without dependency install scripts.
 - `npm run lint`: ESLint with angular-eslint.
 - `npm test`: the Vitest unit tests. `npm run test:build-checks` tests the build's own checks.
 - `npm run build`: production build into `../EclipsVault.Web/wwwroot/ui/` (bundles) and

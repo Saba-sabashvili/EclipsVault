@@ -10,7 +10,7 @@ logs/
 Thumbs.db
 
 # CI artifacts (generated, uploaded from the workflow — never committed)
-sbom/
+/sbom/
 
 # Secrets & local config — never commit these. Use the committed *.template as a starting point.
 appsettings.Production.json
