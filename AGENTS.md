@@ -82,7 +82,8 @@ console error on purpose (a 401 the browser logs) declares it with `browserHealt
 the error must then occur, and nothing else is excused. A second browser context comes from
 `browserHealth.newContext()`, which holds it to the same checks.
 The Trusted Types sink test declares its single deliberate violation with
-`browserHealth.expectCspViolation`, matching every event field exactly; a missing or extra violation fails.
+`browserHealth.expectCspViolation`, matching directive, sink, sample, document URI and disposition exactly;
+a missing or extra violation fails.
 
 Failures retain traces/screenshots in `test-results/` and an HTML report in `playwright-report/`;
 open with `npx playwright show-report`. Guard evidence is in `guard-results/`. Both runs also save

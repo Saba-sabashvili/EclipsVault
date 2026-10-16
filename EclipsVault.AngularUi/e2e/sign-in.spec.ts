@@ -101,7 +101,8 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
     });
     browserHealth.expectConsoleError({
       text: /^This document requires 'TrustedHTML' assignment\. The action has been blocked\.$/,
-      url: /\/Access\/Index$/,
+      // Chromium attributes this browser-generated rejection to no source URL.
+      url: /^$/,
     });
     const result = await page.evaluate(async () => {
       const target = document.createElement('div');
