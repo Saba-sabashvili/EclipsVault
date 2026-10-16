@@ -1,4 +1,5 @@
 using EclipsVault.Web.Extensions;
+using EclipsVault.Web.Middleware;
 using EclipsVault.Web.Models.Ui;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -25,7 +26,7 @@ public sealed class MeController : ControllerBase
         var project = User.GetProject();
         if (User.GetClearanceOrNull() is not { } clearance || project.Length == 0)
         {
-            return Unauthorized();
+            return UiApiProblem.Unauthenticated();
         }
 
         return new MeResponse(User.GetUsername(), User.GetDisplayName(), clearance.ToDisplayName(), project);

@@ -4,7 +4,10 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using EclipsVault.Core.Domain.Enums;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Mvc.Testing.Handlers;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,6 +21,8 @@ namespace EclipsVault.IntegrationTests;
 /// SQL Server container (ADR-0010). Nothing is replaced or faked. It is configured the way a container
 /// deployment configures it, through environment variables, so startup runs its real tasks: the
 /// crypto check, migrations, the bootstrap administrator, the legacy-blob upgrade and the audit chain.
+/// The one addition is the test-only endpoints in <c>TestOnlyEndpoints.cs</c>, which raise each failure
+/// the error mapping must handle; they live in this assembly, so the vault itself never has them.
 /// </summary>
 public sealed partial class VaultFixture : IAsyncLifetime
 {
@@ -29,6 +34,10 @@ public sealed partial class VaultFixture : IAsyncLifetime
         "mcr.microsoft.com/mssql/server:2025-latest@sha256:ca62ad2d75975074cbc9ac39a1329cd88af9cd3ea2ffb59d6302579a97cf32f4";
 
     public const string AdminUsername = "vault-admin";
+
+    public const string SessionCookie = "EclipsVault.Session";
+
+    private static readonly Uri BaseAddress = new("https://localhost");
 
     // The vault signs in to its database as sa, so the password is per run rather than Testcontainers'
     // published default. SQL Server requires upper and lower case, a digit and a symbol.
@@ -60,7 +69,9 @@ public sealed partial class VaultFixture : IAsyncLifetime
         SetEnvironment("Database__MigrateOnStartup", "true");
 
         _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(host => host.UseEnvironment("Production"));
+            .WithWebHostBuilder(host => host
+                .UseEnvironment("Production")
+                .ConfigureTestServices(services => services.AddMvcCore().AddApplicationPart(typeof(VaultFixture).Assembly)));
 
         // Program catches a refused boot, logs it and exits 1, so the factory still returns a host:
         // one that never started. Fail here, pointing at the log, rather than in every test.
@@ -98,7 +109,7 @@ public sealed partial class VaultFixture : IAsyncLifetime
     /// <summary>A client with no session: its own cookies, HTTPS, and redirects left for the test to see.</summary>
     public HttpClient CreateClient() => _factory!.CreateClient(new WebApplicationFactoryClientOptions
     {
-        BaseAddress = new Uri("https://localhost"),
+        BaseAddress = BaseAddress,
         AllowAutoRedirect = false,
         HandleCookies = true,
     });
@@ -134,10 +145,90 @@ public sealed partial class VaultFixture : IAsyncLifetime
             : throw new InvalidOperationException("The service account page showed no newly issued API key.");
     }
 
+    /// <summary>
+    /// A new Standard-clearance vault account, created by the administrator and signed in through the
+    /// real first sign-in. For tests that end their session: revoking one never touches the administrator's.
+    /// </summary>
+    public async Task<VaultSession> SignInNewAccountAsync(string username)
+    {
+        var password = "It-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        var created = await PostFormAsync(await AdminClientAsync(), "/Admin/CreateUser", new()
+        {
+            ["Username"] = username,
+            ["FirstName"] = "Integration",
+            ["LastName"] = "Test",
+            ["Password"] = password,
+            ["Clearance"] = ((int)ClearanceLevel.Standard).ToString(CultureInfo.InvariantCulture),
+            ["ProjectKey"] = "GLOBAL",
+        });
+        if (created.StatusCode != HttpStatusCode.Redirect)
+        {
+            throw new InvalidOperationException($"Creating the account {username} answered {(int)created.StatusCode}, not a redirect.");
+        }
+
+        var session = CreateSession();
+        await SignInFirstTimeAsync(session.Client, username, password);
+        return session;
+    }
+
+    /// <summary>A client with no session whose cookies the test can read, or seed with a copied session cookie.</summary>
+    public VaultSession CreateSession(Cookie? sessionCookie = null)
+    {
+        var cookies = new CookieContainer();
+        if (sessionCookie is not null)
+        {
+            cookies.Add(BaseAddress, new Cookie(sessionCookie.Name, sessionCookie.Value, "/") { Secure = true, HttpOnly = true });
+        }
+
+        return new VaultSession(_factory!.CreateDefaultClient(BaseAddress, new CookieContainerHandler(cookies)), cookies);
+    }
+
+    /// <summary>Revokes every session of an account the way an administrator does, from the Users page.</summary>
+    public async Task RevokeAllSessionsOfAsync(string username)
+    {
+        var admin = await AdminClientAsync();
+        var users = await admin.GetStringAsync("/Admin/Users");
+        var forceLogout = ForceLogoutForm().Matches(users)
+            .FirstOrDefault(m => WebUtility.HtmlDecode(m.Value).Contains($"Revoke all active sessions for '{username}'?", StringComparison.Ordinal))?.Groups[1].Value
+            ?? throw new InvalidOperationException($"The Users page offered no way to revoke {username}'s sessions.");
+
+        var response = await PostFormAsync(admin, forceLogout, new(), formPage: "/Admin/Users");
+        if (response.StatusCode != HttpStatusCode.Redirect)
+        {
+            throw new InvalidOperationException($"Revoking {username}'s sessions answered {(int)response.StatusCode}, not a redirect.");
+        }
+    }
+
+    /// <summary>
+    /// Sends one anonymous GET from <paramref name="source"/>. The test server has no network, so the
+    /// test supplies the address the vault would otherwise read from the connection.
+    /// </summary>
+    public Task<HttpContext> SendFromAsync(IPAddress source, string path) => _factory!.Server.SendAsync(context =>
+    {
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString(BaseAddress.Host);
+        context.Request.Path = path;
+        context.Connection.RemoteIpAddress = source;
+    });
+
+    /// <summary>The vault's own services, for the few things a test cannot do through HTTP.</summary>
+    public IServiceProvider Services => _factory!.Services;
+
     private async Task<HttpClient> SignInAdministratorAsync()
     {
         var client = CreateClient();
-        var afterPassword = await PostFormAsync(client, "/Account/Login", new() { ["Username"] = AdminUsername, ["Password"] = _adminPassword });
+        await SignInFirstTimeAsync(client, AdminUsername, _adminPassword);
+        return client;
+    }
+
+    /// <summary>
+    /// The first sign-in of a new account: the password, then enrolling an authenticator and confirming
+    /// it with a real code.
+    /// </summary>
+    private static async Task SignInFirstTimeAsync(HttpClient client, string username, string password)
+    {
+        var afterPassword = await PostFormAsync(client, "/Account/Login", new() { ["Username"] = username, ["Password"] = password });
         var next = afterPassword.Headers.Location?.OriginalString;
         if (!string.Equals(next, "/Account/EnrollTotp", StringComparison.OrdinalIgnoreCase))
         {
@@ -162,8 +253,6 @@ public sealed partial class VaultFixture : IAsyncLifetime
         {
             throw new InvalidOperationException($"Enrollment did not create a session ({(int)response.StatusCode}, '{landed}').");
         }
-
-        return client;
     }
 
     /// <summary>Posts a form as a browser does: with the antiforgery token from the page that renders it.</summary>
@@ -193,6 +282,16 @@ public sealed partial class VaultFixture : IAsyncLifetime
 
     [GeneratedRegex("<code class=\"secret-code\" id=\"new-token\">([^<]+)</code>")]
     private static partial Regex IssuedApiKey();
+
+    // The form tag helper writes action after the view's own attributes, so match the whole tag.
+    [GeneratedRegex("<form\\b[^>]*\\baction=\"(/Admin/ForceLogout/[0-9a-fA-F-]{36})\"[^>]*>")]
+    private static partial Regex ForceLogoutForm();
+}
+
+/// <summary>A client and the cookies it holds, so a test can inspect or copy its session cookie.</summary>
+public sealed record VaultSession(HttpClient Client, CookieContainer Cookies)
+{
+    public Cookie? SessionCookie => Cookies.GetCookies(Client.BaseAddress!)[VaultFixture.SessionCookie];
 }
 
 /// <summary>Every integration test shares the one vault: starting SQL Server per test would take minutes.</summary>

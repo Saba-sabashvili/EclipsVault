@@ -60,9 +60,16 @@ function verifyGuardFailures(report, exitCode) {
     for (const child of suite.suites ?? []) visit(child);
   }
   visit(report);
-  const diagnostics = ['CSP violation:', 'console.error: e2e console sentinel', 'pageerror: e2e exception sentinel'];
+  const diagnostics = [
+    'CSP violation:',
+    'console.error: e2e console sentinel',
+    'pageerror: e2e exception sentinel',
+    'console.error: e2e second-context sentinel',
+    'console.error: e2e unexcused sentinel',
+    'expected console errors that never occurred',
+  ];
   if (exitCode !== 1 || tests.length !== diagnostics.length || report.errors.length !== 0) {
-    throw new Error('Guard probes did not produce exactly three ordinary test failures');
+    throw new Error(`Guard probes did not produce exactly ${diagnostics.length} ordinary test failures`);
   }
   for (const diagnostic of diagnostics) {
     const match = tests.find((test) => test.results.some((result) =>

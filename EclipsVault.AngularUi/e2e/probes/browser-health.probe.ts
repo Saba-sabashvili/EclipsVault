@@ -29,3 +29,22 @@ test('uncaught browser exception', async ({ page }) => {
   });
   await error;
 });
+
+test('console.error in a second browser context', async ({ browserHealth }) => {
+  const other = await (await browserHealth.newContext()).newPage();
+  await other.goto('/Account/Login');
+  await other.evaluate(() => console.error('e2e second-context sentinel'));
+});
+
+test('an expected console error excuses nothing else', async ({ browserHealth, page }) => {
+  browserHealth.expectConsoleError({ text: /status of 401/, url: /\/api\/ui\/me$/ });
+  await page.goto('/Account/Login');
+  // The excused error does occur (signed out, the UI API answers 401), so only the other one fails.
+  await page.evaluate(() => fetch('/api/ui/me'));
+  await page.evaluate(() => console.error('e2e unexcused sentinel'));
+});
+
+test('an expected console error that never occurs', async ({ browserHealth, page }) => {
+  browserHealth.expectConsoleError({ text: /status of 401/, url: /\/api\/ui\/me$/ });
+  await page.goto('/Account/Login');
+});

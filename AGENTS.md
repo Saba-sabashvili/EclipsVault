@@ -15,6 +15,9 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
   `Program` against it in Production, signing in through the real sign-in. The image is pinned by
   digest in `VaultFixture`, and a machine without it downloads about 2.5 GB on the first run.
   `dotnet test EclipsVault.slnx` runs both suites, so it needs Docker too.
+  The endpoints that throw each domain exception, to pin the UI API's error mapping, live in
+  `EclipsVault.IntegrationTests/TestOnlyEndpoints.cs`. Only `VaultFixture` adds them to the host
+  under test; never put such an endpoint in `EclipsVault.Web`.
 - A model change needs a migration in both sets: SQL Server (`EclipsVault.Infrastructure`) and PostgreSQL
   (`EclipsVault.Migrations.Postgres`). CI checks both; the exact `dotnet ef` commands are in
   `.github/workflows/ci.yml`. For Postgres the startup project is `EclipsVault.Web`.
@@ -65,8 +68,11 @@ build to test an already-built production image, as CI does. The suite uses the 
 certificate with `ignoreHTTPSErrors`; production CSP, Secure cookies and authentication stay active.
 Always import `test` from `e2e/fixtures.ts` in browser specs: its automatic fixture fails every test
 on CSP violations, console errors or uncaught browser exceptions, including other pages in its context.
-`e2e:verify-guards` intentionally runs three failing Playwright probes against another fresh vault;
-it succeeds only when the shared fixture reports the corresponding failures.
+`e2e:verify-guards` intentionally runs six failing Playwright probes against another fresh vault;
+it succeeds only when the shared fixture reports the corresponding failures. A test that causes a
+console error on purpose (a 401 the browser logs) declares it with `browserHealth.expectConsoleError`;
+the error must then occur, and nothing else is excused. A second browser context comes from
+`browserHealth.newContext()`, which holds it to the same checks.
 
 Failures retain traces/screenshots in `test-results/` and an HTML report in `playwright-report/`;
 open with `npx playwright show-report`. Guard evidence is in `guard-results/`. Both runs also save
