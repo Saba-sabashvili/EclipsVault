@@ -85,6 +85,20 @@ jobs:
       - name: Build
         run: dotnet build EclipsVault.IntegrationTests --configuration Release --no-restore
 
+      # Header tests serve the real Angular document through its route table.
+      - name: Setup Node for Angular documents
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+          cache: npm
+          cache-dependency-path: EclipsVault.AngularUi/package-lock.json
+
+      - name: Build Angular documents
+        working-directory: EclipsVault.AngularUi
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
       - name: Integration tests
         run: dotnet test EclipsVault.IntegrationTests --configuration Release --no-build --verbosity normal --blame-hang-timeout 10m --blame-hang-dump-type mini
 

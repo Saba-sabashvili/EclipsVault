@@ -1,3 +1,4 @@
+using EclipsVault.Web.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
@@ -41,12 +42,18 @@ public static class AngularUiRoutes
         }
     }
 
-    private static IResult ServeIndex(IWebHostEnvironment environment)
+    private static IResult ServeIndex(HttpContext context, IWebHostEnvironment environment)
     {
         var index = environment.ContentRootFileProvider.GetFileInfo(IndexPath);
-        return index.Exists
-            ? Results.File(index.PhysicalPath!, "text/html; charset=utf-8")
-            : throw new InvalidOperationException(
+        if (!index.Exists)
+        {
+            throw new InvalidOperationException(
                 $"The Angular UI is not built: {IndexPath} is missing. Run `npm run build` in EclipsVault.AngularUi.");
+        }
+
+        // Set this only when serving the Angular document, after authorization and the file check.
+        // Redirects, legacy pages, API responses and static bundles retain the existing policy.
+        context.Response.Headers["Content-Security-Policy"] = SecurityHeadersMiddleware.AngularContentSecurityPolicy;
+        return Results.File(index.PhysicalPath!, "text/html; charset=utf-8");
     }
 }

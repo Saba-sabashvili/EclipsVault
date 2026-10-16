@@ -32,7 +32,7 @@ async function otherSessionIds(page: Page): Promise<string[]> {
   return page.locator('form input[name="id"]').evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
 }
 
-test('sign in, see the Angular account, visit Legacy UI and return with the same session', async ({ page, context }) => {
+test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI and return', async ({ page, context, browserHealth }) => {
   const password = process.env['Seed__AdminPassword'];
   if (!password) throw new Error('Run through npm run e2e with Seed__AdminPassword supplied');
 
@@ -74,13 +74,70 @@ test('sign in, see the Angular account, visit Legacy UI and return with the same
   expect(session?.secure).toBe(true);
   expect(session?.httpOnly).toBe(true);
 
-  await page.goto('/Access');
+  // The account component is a dynamic import, not part of main.js. Observe its actual chunk load.
+  const lazyAccount = page.waitForResponse(async (response) =>
+    /\/ui\/chunk-[\w-]+\.js$/.test(response.url()) && (await response.text()).includes('Signed in'));
+  const angularDocument = await page.goto('/Access');
+  expect(angularDocument?.headers()['content-security-policy']).toContain(
+    "; require-trusted-types-for 'script'; trusted-types angular angular#bundler",
+  );
+  expect((await lazyAccount).status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
   await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
 
+  await page.goto('/Access/Index');
+  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+
+  await test.step('Trusted Types rejects a raw DOM assignment before it changes the DOM', async () => {
+    // One precise, required violation is intentional; the shared fixture still rejects every other one.
+    browserHealth.expectCspViolation({
+      effectiveDirective: 'require-trusted-types-for',
+      blockedURI: 'trusted-types-sink',
+      sample: 'Element innerHTML|<p>tt-unsafe-assignment</p>',
+      documentURI: page.url(),
+      disposition: 'enforce',
+    });
+    browserHealth.expectConsoleError({
+      text: /^This document requires 'TrustedHTML' assignment\. The action has been blocked\.$/,
+      url: /\/Access\/Index$/,
+    });
+    const result = await page.evaluate(async () => {
+      const target = document.createElement('div');
+      target.textContent = 'safe original';
+      document.body.append(target);
+      const violation = new Promise<SecurityPolicyViolationEvent>((resolve) => {
+        document.addEventListener('securitypolicyviolation', resolve, { once: true });
+      });
+      let threwTypeError = false;
+      try {
+        target.innerHTML = '<p>tt-unsafe-assignment</p>';
+      } catch (error) {
+        threwTypeError = error instanceof TypeError;
+      }
+      const event = await violation;
+      const evidence = {
+        threwTypeError,
+        html: target.innerHTML,
+        directive: event.effectiveDirective,
+        disposition: event.disposition,
+      };
+      target.remove();
+      return evidence;
+    });
+    expect(result).toEqual({
+      threwTypeError: true,
+      html: 'safe original',
+      directive: 'require-trusted-types-for',
+      disposition: 'enforce',
+    });
+  });
+
   // /Secrets is still served by MVC. Direct navigation exercises the same-origin handoff before
   // the Angular shell's navigation arrives in a later migration ticket.
-  await page.goto('/Secrets');
+  const legacyDocument = await page.goto('/Secrets');
+  expect(legacyDocument?.headers()['content-security-policy']).not.toContain('trusted-types');
   await expect(page).toHaveURL(/\/Secrets$/);
   await expect(page.getByRole('heading', { name: 'Secrets', exact: true })).toBeVisible();
   await expect(page.locator('.sidebar')).toContainText('Vault Administrator');

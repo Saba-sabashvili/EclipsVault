@@ -56,26 +56,35 @@ async function waitForVault(baseURL) {
 function verifyGuardFailures(report, exitCode) {
   const tests = [];
   function visit(suite) {
-    for (const spec of suite.specs ?? []) tests.push(...spec.tests);
+    for (const spec of suite.specs ?? []) {
+      tests.push(...spec.tests.map((test) => ({ ...test, title: spec.title })));
+    }
     for (const child of suite.suites ?? []) visit(child);
   }
   visit(report);
   const diagnostics = [
-    'CSP violation:',
-    'console.error: e2e console sentinel',
-    'pageerror: e2e exception sentinel',
-    'console.error: e2e second-context sentinel',
-    'console.error: e2e unexcused sentinel',
-    'expected console errors that never occurred',
+    ['CSP violation', 'CSP violation:'],
+    ['an expected CSP violation excuses nothing else', 'CSP violation: script-src-elem: inline'],
+    ['an expected CSP violation that never occurs', 'expected CSP violations that never occurred'],
+    ['console.error after navigation in a second page', 'console.error: e2e console sentinel'],
+    ['uncaught browser exception', 'pageerror: e2e exception sentinel'],
+    ['console.error in a second browser context', 'console.error: e2e second-context sentinel'],
+    ['an expected console error excuses nothing else', 'console.error: e2e unexcused sentinel'],
+    ['an expected console error that never occurs', 'expected console errors that never occurred'],
   ];
   if (exitCode !== 1 || tests.length !== diagnostics.length || report.errors.length !== 0) {
     throw new Error(`Guard probes did not produce exactly ${diagnostics.length} ordinary test failures`);
   }
-  for (const diagnostic of diagnostics) {
-    const match = tests.find((test) => test.results.some((result) =>
+  for (const [title, diagnostic] of diagnostics) {
+    const match = tests.find((test) => test.title === title && test.results.some((result) =>
       result.status === 'failed' && result.errors.some((error) =>
         error.message?.includes('[browser-health]') && error.message.includes(diagnostic))));
     if (!match) throw new Error(`Guard probe did not fail in the shared fixture for ${diagnostic}`);
+    if (title === 'an expected CSP violation excuses nothing else' &&
+      match.results.some((result) => result.errors.some((error) =>
+        error.message?.includes('expected CSP violations that never occurred')))) {
+      throw new Error('The CSP expectation probe never satisfied its expected violation');
+    }
     console.log(`Verified real Playwright failure: ${diagnostic}`);
   }
 }

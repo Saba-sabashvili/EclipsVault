@@ -16,6 +16,10 @@ public sealed class SecurityHeadersMiddleware
         "form-action 'self'; " +
         "base-uri 'self'";
 
+    // Only the Angular document handler opts in: legacy site.js still writes innerHTML (ADR-0013).
+    internal const string AngularContentSecurityPolicy = ContentSecurityPolicy +
+        "; require-trusted-types-for 'script'; trusted-types angular angular#bundler";
+
     private readonly RequestDelegate _next;
 
     public SecurityHeadersMiddleware(RequestDelegate next) => _next = next;

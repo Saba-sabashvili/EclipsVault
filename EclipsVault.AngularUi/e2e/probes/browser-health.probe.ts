@@ -13,6 +13,37 @@ test('CSP violation', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => 'inlineScriptRan' in window)).toBe(false);
 });
 
+test('an expected CSP violation excuses nothing else', async ({ browserHealth, page }) => {
+  await page.goto('/Account/Login');
+  browserHealth.expectCspViolation({
+    effectiveDirective: 'script-src-elem',
+    blockedURI: 'inline',
+    sample: '',
+    documentURI: page.url(),
+    disposition: 'enforce',
+  });
+  // The first violation satisfies the expectation; the identical second one must still fail.
+  for (let i = 0; i < 2; i++) {
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      document.addEventListener('securitypolicyviolation', () => resolve(), { once: true });
+      const script = document.createElement('script');
+      script.textContent = 'window.inlineScriptRan = true';
+      document.body.append(script);
+    }));
+  }
+});
+
+test('an expected CSP violation that never occurs', async ({ browserHealth, page }) => {
+  await page.goto('/Account/Login');
+  browserHealth.expectCspViolation({
+    effectiveDirective: 'require-trusted-types-for',
+    blockedURI: 'trusted-types-sink',
+    sample: 'Element innerHTML|<p>tt-unsafe-assignment</p>',
+    documentURI: page.url(),
+    disposition: 'enforce',
+  });
+});
+
 test('console.error after navigation in a second page', async ({ context, page }) => {
   await page.goto('/Account/Login');
   const other = await context.newPage();

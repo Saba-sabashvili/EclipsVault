@@ -11,6 +11,8 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
 - Build: `dotnet build EclipsVault.slnx -c Release`. Warnings, including analyzer findings, fail the build.
 - Test (unit, no Docker): `dotnet test EclipsVault.Tests -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`
 - Integration tests: `dotnet test EclipsVault.IntegrationTests -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type mini`.
+  First build the Angular UI (`npm ci --ignore-scripts` then `npm run build` in `EclipsVault.AngularUi`,
+  on its `.nvmrc` Node version): header tests serve its real document through the route table.
   They need Docker running: each run starts SQL Server with Testcontainers and boots the unmodified
   `Program` against it in Production, signing in through the real sign-in. The image is pinned by
   digest in `VaultFixture`, and a machine without it downloads about 2.5 GB on the first run.
@@ -74,11 +76,13 @@ build to test an already-built production image, as CI does. The suite uses the 
 certificate with `ignoreHTTPSErrors`; production CSP, Secure cookies and authentication stay active.
 Always import `test` from `e2e/fixtures.ts` in browser specs: its automatic fixture fails every test
 on CSP violations, console errors or uncaught browser exceptions, including other pages in its context.
-`e2e:verify-guards` intentionally runs six failing Playwright probes against another fresh vault;
+`e2e:verify-guards` intentionally runs eight failing Playwright probes against another fresh vault;
 it succeeds only when the shared fixture reports the corresponding failures. A test that causes a
 console error on purpose (a 401 the browser logs) declares it with `browserHealth.expectConsoleError`;
 the error must then occur, and nothing else is excused. A second browser context comes from
 `browserHealth.newContext()`, which holds it to the same checks.
+The Trusted Types sink test declares its single deliberate violation with
+`browserHealth.expectCspViolation`, matching every event field exactly; a missing or extra violation fails.
 
 Failures retain traces/screenshots in `test-results/` and an HTML report in `playwright-report/`;
 open with `npx playwright show-report`. Guard evidence is in `guard-results/`. Both runs also save

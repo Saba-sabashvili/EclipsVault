@@ -13,6 +13,14 @@ module.exports = defineConfig([
     ],
     processor: angular.processInlineTemplates,
     rules: {
+      // ADR-0013: no sanitization bypasses, including property references and destructuring.
+      'no-restricted-properties': ['error', ...[
+        'bypassSecurityTrustHtml',
+        'bypassSecurityTrustStyle',
+        'bypassSecurityTrustScript',
+        'bypassSecurityTrustUrl',
+        'bypassSecurityTrustResourceUrl',
+      ].map((property) => ({ property, message: 'Angular sanitization bypasses are forbidden (ADR-0013).' }))],
       '@angular-eslint/directive-selector': [
         'error',
         {
