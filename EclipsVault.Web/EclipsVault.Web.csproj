@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="QRCoder" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Serilog.AspNetCore" />
   </ItemGroup>
 

@@ -34,6 +34,12 @@ version in its `.nvmrc`.
 - Install: `npm ci --ignore-scripts`. Keep that flag on installs only: setting it in `.npmrc` would
   also skip the pre/post-build gates.
 - Lint: `npm run lint`.
+- After changing UI API response types or routes, run `npm run generate:api-types` and commit
+  `src/app/ui-api/schema.generated.ts`. `npm run check:api-types` regenerates in memory and fails
+  if that file differs; the `frontend` CI job runs it. Both commands build the .NET metadata-only
+  generator with locked restore; they need the .NET SDK, but no database, KEK or other secret.
+  A solution build also writes the document to `EclipsVault.UiApiDocument/obj/ui-api.openapi.json`.
+  In Development, a signed-in session can fetch `/openapi/ui.json`; other environments return 404.
 - Test: `npm test -- --watch=false` (Vitest; in a terminal it otherwise watches and never exits), and
   `npm run test:build-checks` for the build's own checks.
 - Build: `npm run build`. Bundles go to `EclipsVault.Web/wwwroot/ui/`, the index to

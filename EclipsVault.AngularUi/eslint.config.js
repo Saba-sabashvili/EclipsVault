@@ -32,6 +32,11 @@ module.exports = defineConfig([
     },
   },
   {
+    files: ['src/app/ui-api/schema.generated.ts'],
+    // Keep the generator's index signatures verbatim so regeneration stays reproducible.
+    rules: { '@typescript-eslint/consistent-indexed-object-style': 'off' },
+  },
+  {
     files: ['**/*.html'],
     extends: [angular.configs.templateRecommended, angular.configs.templateAccessibility],
   },
