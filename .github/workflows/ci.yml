@@ -39,7 +39,8 @@ jobs:
         # --blame-hang-timeout aborts (with a dump naming the culprit) if a test hangs, rather than
         # letting one stuck test block the job to the 6h ceiling. The suite runs in seconds, so 5m is
         # only ever reached by a genuine hang.
-        run: dotnet test --configuration Release --no-build --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type mini
+        # The unit project only: the integration project needs Docker and has its own job below.
+        run: dotnet test EclipsVault.Tests --configuration Release --no-build --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type mini
 
       # The step above has been promising a dump "naming the culprit" since PR #32, and the dump was
       # thrown away with the runner every time — which is most of why the intermittent hang has never
@@ -55,6 +56,39 @@ jobs:
         with:
           name: test-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: EclipsVault.Tests/TestResults/**
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # The HTTP integration tests (ADR-0010): the unmodified app in Production against a real SQL Server
+  # that Testcontainers starts on the runner's Docker, signed in through the real sign-in. Kept out of
+  # build-test so the unit suite stays Docker-free and fast. The hang timeout is longer than the unit
+  # job's because it also covers pulling and starting SQL Server before the first test.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      - name: Build
+        run: dotnet build EclipsVault.IntegrationTests --configuration Release --no-restore
+
+      - name: Integration tests
+        run: dotnet test EclipsVault.IntegrationTests --configuration Release --no-build --verbosity normal --blame-hang-timeout 10m --blame-hang-dump-type mini
+
+      - name: Upload hang evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: EclipsVault.IntegrationTests/TestResults/**
           if-no-files-found: ignore
           retention-days: 30
 

@@ -9,7 +9,12 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
 - Restore: `dotnet restore --locked-mode`. It fails when a `packages.lock.json` is stale; regenerate the
   lock files whenever you change `Directory.Packages.props`.
 - Build: `dotnet build EclipsVault.slnx -c Release`. Warnings, including analyzer findings, fail the build.
-- Test: `dotnet test EclipsVault.slnx -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`
+- Test (unit, no Docker): `dotnet test EclipsVault.Tests -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`
+- Integration tests: `dotnet test EclipsVault.IntegrationTests -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type mini`.
+  They need Docker running: each run starts SQL Server with Testcontainers and boots the unmodified
+  `Program` against it in Production, signing in through the real sign-in. The image is pinned by
+  digest in `VaultFixture`, and a machine without it downloads about 2.5 GB on the first run.
+  `dotnet test EclipsVault.slnx` runs both suites, so it needs Docker too.
 - A model change needs a migration in both sets: SQL Server (`EclipsVault.Infrastructure`) and PostgreSQL
   (`EclipsVault.Migrations.Postgres`). CI checks both; the exact `dotnet ef` commands are in
   `.github/workflows/ci.yml`. For Postgres the startup project is `EclipsVault.Web`.
@@ -19,7 +24,8 @@ Core references only the BCL: no NuGet packages, so no `ILogger` and no `IMemory
 
 - Errors in files you did not touch (RZ1021, `CS0246` naming `summary` or `button`): run
   `dotnet build-server shutdown` and rebuild before debugging code. Deleting `obj/` does not help.
-- A test run that stops with "The specified inactivity time of 5 minutes has elapsed" is a hang.
+- A test run that stops with "The specified inactivity time of 5 minutes has elapsed" (10 minutes for the
+  integration tests) is a hang.
   The long-standing `AuditGroupCommitterTests` hang was fixed in #37, so a hang now is a regression
   to investigate, not a known flake. Test output is buffered: the last test printed is not the one
   that hung. The aborted run's blame `Sequence_*.xml` names the test still in flight.

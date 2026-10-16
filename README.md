@@ -50,7 +50,7 @@ EclipsVault.slnx                  # modern XML solution format
 
 Dependency rule: `Web → Infrastructure → Core`. Nothing ever points outward. Database entities never leave Infrastructure; controllers see DTOs; views see ViewModels.
 
-**Reproducible, gated builds** — package versions are pinned centrally in `Directory.Packages.props` with committed `packages.lock.json` files (CI restores in `--locked-mode`); `Directory.Build.props` turns compiler/nullable warnings into build errors. `dotnet test` runs the suite; the GitHub Actions workflow (`.github/workflows/ci.yml`) builds, tests, and fails on any vulnerable dependency. Local secrets never enter source control — see *Configuration & secrets* below.
+**Reproducible, gated builds** — package versions are pinned centrally in `Directory.Packages.props` with committed `packages.lock.json` files (CI restores in `--locked-mode`); `Directory.Build.props` turns compiler/nullable warnings into build errors. `dotnet test EclipsVault.Tests` runs the unit suite and `dotnet test EclipsVault.IntegrationTests` the HTTP integration suite (needs Docker); the GitHub Actions workflow (`.github/workflows/ci.yml`) builds, tests, and fails on any vulnerable dependency. Local secrets never enter source control — see *Configuration & secrets* below.
 
 **Application is sliced by feature** (vertical slices inside the layer): each folder holds the interface, its DTOs, and the service for one capability, so a feature is read and changed in one place. Cross-feature references resolve through per-project `GlobalUsings.cs`, so adding a feature folder needs no per-file `using` edits. `Abstractions/` is the exception — it holds the technical "port" interfaces that Infrastructure implements.
 
