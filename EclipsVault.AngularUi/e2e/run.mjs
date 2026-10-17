@@ -9,7 +9,10 @@ const ui = fileURLToPath(new URL('../', import.meta.url));
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const probes = process.argv.includes('--verify-guards');
 const output = probes ? 'guard-results' : 'test-results';
-const project = process.env.E2E_COMPOSE_PROJECT || `eclipsvault-e2e-${randomUUID().slice(0, 8)}`;
+// Cleanup removes this project's containers and volumes, so the runner always names a project of its
+// own: a prefix may be chosen, the random suffix may not, and an existing project is never adopted.
+// Specs still receive the name as E2E_COMPOSE_PROJECT.
+const project = `${process.env.E2E_PROJECT_PREFIX || 'eclipsvault-e2e'}-${randomUUID().slice(0, 8)}`;
 const image = process.env.E2E_IMAGE || `${project}:test`;
 const abort = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) {

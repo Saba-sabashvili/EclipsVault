@@ -173,6 +173,87 @@ public sealed partial class SignInReturnUrlTests(VaultFixture vault)
     }
 
     [Fact]
+    public async Task A_second_factor_page_that_expired_mid_sign_in_does_not_become_a_redirect_loop()
+    {
+        var (username, password, secret, enrolled) = await EnrollAccountAsync();
+        enrolled.Dispose();
+        using var client = NewClient();
+        // Past the MFA-pending cookie's six minutes, the second-factor page challenges like any
+        // other page and names itself as the place to come back to.
+        var challenge = await client.GetAsync("/Account/Totp");
+        Assert.Equal(HttpStatusCode.Redirect, challenge.StatusCode);
+        var login = await client.GetStringAsync(challenge.Headers.Location);
+        Assert.Equal("/Account/Totp", HiddenReturnUrl(login));
+
+        var afterPassword = await PostFormAsync(client, "/Account/Login", login, new()
+        {
+            ["Username"] = username, ["Password"] = password, ["ReturnUrl"] = HiddenReturnUrl(login)
+        });
+        var totp = await client.GetStringAsync(afterPassword.Headers.Location);
+        var response = await PostFormAsync(client, "/Account/Totp", totp, new()
+        {
+            ["Code"] = Totp.Code(secret, Totp.CurrentStep()), ["ReturnUrl"] = HiddenReturnUrl(totp)
+        });
+        for (var hops = 0; response.StatusCode == HttpStatusCode.Redirect; hops++)
+        {
+            Assert.True(hops < 5, "Sign-in redirects in a loop through " + response.Headers.Location);
+            response = await client.GetAsync(response.Headers.Location);
+        }
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("/Secrets", response.RequestMessage?.RequestUri?.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task A_completed_sign_in_returns_neither_to_a_second_factor_page_nor_to_a_non_ascii_target()
+    {
+        var (_, _, _, client) = await EnrollAccountAsync();
+        using (client)
+        {
+            // Refused in every spelling the browser or Kestrel could read as a second-factor action:
+            // backslashes separate, escapes decode, dot segments resolve, case is ignored.
+            (string Target, string Expected)[] targets =
+            [
+                ("/Account/Totp", "/Secrets"), ("/Account/RecoveryCode", "/Secrets"), ("/Account/EnrollTotp", "/Secrets"),
+                ("/account/TOTP/", "/Secrets"), ("/Account/Totp?ReturnUrl=%2FAccess", "/Secrets"),
+                ("/Account/Totp/1#code", "/Secrets"), ("/Account\\Totp", "/Secrets"), ("/%41ccount/%54otp", "/Secrets"),
+                ("/Secrets/../Account/Totp", "/Secrets"), ("/Secrets/%2e%2e/Account/Totp", "/Secrets"),
+                ("/Account//Totp", "/Secrets"), ("~/Account/Totp", "/Secrets"),
+                ("/Account/Denied", "/Account/Denied"), ("/Account/Totpx", "/Account/Totpx"),
+                // Location carries only ASCII. Model binding decodes %C3%A9 to é, which must not
+                // reach LocalRedirect; the still-encoded form is an ordinary local target.
+                ("/Secrets?q=é", "/Secrets"), ("/Secrets?q=%C3%A9", "/Secrets?q=%C3%A9")
+            ];
+            foreach (var (target, expected) in targets)
+            {
+                var response = await client.GetAsync(WithReturnUrl("/Account/Login", target));
+                Assert.True(HttpStatusCode.Redirect == response.StatusCode, $"{target} answered {response.StatusCode}");
+                Assert.True(expected == response.Headers.Location?.OriginalString, $"{target} went to {response.Headers.Location}");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task A_non_ascii_target_falls_back_instead_of_failing_after_the_code_is_spent()
+    {
+        var (username, password, secret, enrolled) = await EnrollAccountAsync();
+        enrolled.Dispose();
+        using var client = NewClient();
+        var afterPassword = await PostFormAsync(client, "/Account/Login", await client.GetStringAsync("/Account/Login"), new()
+        {
+            ["Username"] = username, ["Password"] = password, ["ReturnUrl"] = "/Secrets?q=é"
+        });
+        var totp = await client.GetStringAsync(afterPassword.Headers.Location);
+        Assert.Equal("/Secrets?q=é", HiddenReturnUrl(totp));
+        var signedIn = await PostFormAsync(client, "/Account/Totp", totp, new()
+        {
+            ["Code"] = Totp.Code(secret, Totp.CurrentStep()), ["ReturnUrl"] = HiddenReturnUrl(totp)
+        });
+        Assert.Equal(HttpStatusCode.Redirect, signedIn.StatusCode);
+        Assert.Equal("/Secrets", signedIn.Headers.Location?.OriginalString);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/ui/me")).StatusCode);
+    }
+
+    [Fact]
     public async Task Passkey_sign_in_uses_the_server_checked_target_only_after_a_valid_assertion()
     {
         var (username, _, _, enrolled) = await EnrollAccountAsync();
@@ -218,7 +299,8 @@ public sealed partial class SignInReturnUrlTests(VaultFixture vault)
             ("/\r\nLocation: https://outside.example", "/Secrets"), ("/\0/outside.example", "/Secrets"),
             ("https%3A%2F%2Foutside.example", "/Secrets"), ("%2f%2foutside.example", "/Secrets"),
             ("/%2foutside.example", "/%2foutside.example"), ("/%5coutside.example", "/%5coutside.example"),
-            ("/folder\\child", "/folder\\child"), ("~/Access", "/Access")
+            ("/folder\\child", "/folder\\child"), ("~/Access", "/Access"),
+            ("/Account/Totp", "/Secrets"), ("/Secrets?q=é", "/Secrets")
         ];
         foreach (var (target, expected) in targets)
         {

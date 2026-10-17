@@ -70,11 +70,43 @@ public sealed class AccountController : Controller
 
     // Form fields, query strings and passkey ceremony state are all untrusted. Make the final
     // decision here, after authentication, and let LocalRedirect enforce it again at execution.
-    private LocalRedirectResult RedirectAfterSignIn(string? returnUrl)
-        => LocalRedirect(SignInTarget(returnUrl));
+    private LocalRedirectResult RedirectAfterSignIn(string? returnUrl, string defaultController = "Secrets")
+        => LocalRedirect(SignInTarget(returnUrl, defaultController));
 
-    private string SignInTarget(string? returnUrl)
-        => Url.IsLocalUrl(returnUrl) ? returnUrl : Url.Action("Index", "Secrets")!;
+    private string SignInTarget(string? returnUrl, string defaultController = "Secrets")
+        => Url.IsLocalUrl(returnUrl)
+            // Location carries only ASCII: LocalRedirect would throw after the session exists.
+            && returnUrl.All(c => c is >= ' ' and <= '~')
+            && !IsSecondFactorPage(returnUrl)
+                ? returnUrl
+                : Url.Action("Index", defaultController)!;
+
+    // These accept only the MFA-pending cookie, which completing sign-in deletes. A full session sent
+    // there is challenged back to Login with the page as its target, and Login sends it straight
+    // back. Every other Account page either serves a full session or ends at Login without a target.
+    private static readonly string[] SecondFactorActions = [nameof(Totp), nameof(RecoveryCode), nameof(EnrollTotp)];
+
+    private static bool IsSecondFactorPage(string target)
+    {
+        // Read the path as the browser and Kestrel will: backslashes separate, escapes decode, dot
+        // segments resolve, case is ignored. Reading too much into it only costs the default page.
+        var path = Uri.UnescapeDataString(target.TrimStart('~').Split('?', '#')[0].Replace('\\', '/'));
+        var segments = new List<string>();
+        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == "..")
+            {
+                if (segments.Count > 0) segments.RemoveAt(segments.Count - 1);
+            }
+            else if (segment != ".")
+            {
+                segments.Add(segment);
+            }
+        }
+        return segments.Count >= 2
+            && segments[0].Equals("Account", StringComparison.OrdinalIgnoreCase)
+            && SecondFactorActions.Contains(segments[1], StringComparer.OrdinalIgnoreCase);
+    }
 
     /// <summary>Stamps the SSO button's state onto the model — it is not part of the posted form.</summary>
     private LoginViewModel Decorate(LoginViewModel model)
@@ -410,7 +442,8 @@ public sealed class AccountController : Controller
         if (decision.SecondFactorSatisfied)
         {
             await CompleteSignInAsync(user);
-            return RedirectAfterSignIn(returnUrl);
+            // SSO has always landed on the dashboard, not the password flow's secrets list.
+            return RedirectAfterSignIn(returnUrl, "Dashboard");
         }
 
         // The IdP proved one factor; this vault wants its own. Rejoin the ordinary flow rather than
