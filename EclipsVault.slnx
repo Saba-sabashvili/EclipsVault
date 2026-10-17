@@ -6,4 +6,5 @@
   <Project Path="EclipsVault.AuditVerifier/EclipsVault.AuditVerifier.csproj" />
   <Project Path="EclipsVault.LicenseForge/EclipsVault.LicenseForge.csproj" />
   <Project Path="EclipsVault.Tests/EclipsVault.Tests.csproj" />
+  <Project Path="EclipsVault.IntegrationTests/EclipsVault.IntegrationTests.csproj" />
 </Solution>

@@ -1,6 +1,8 @@
 # Build outputs
 **/bin/
 **/obj/
+**/TestResults/
+**/logs/
 
 # Local dev secrets — must never enter an image
 **/appsettings.Development.json

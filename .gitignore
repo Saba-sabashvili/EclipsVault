@@ -2,6 +2,7 @@ bin/
 obj/
 logs/
 *.log
+**/TestResults/
 *.user
 .vs/
 .vscode/
