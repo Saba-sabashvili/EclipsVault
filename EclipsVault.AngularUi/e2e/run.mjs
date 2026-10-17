@@ -102,6 +102,8 @@ async function main() {
   const env = {
     ...process.env,
     E2E_IMAGE: image,
+    // Lets a spec reach this run's own disposable database, for state no production screen can create.
+    E2E_COMPOSE_PROJECT: project,
     E2E_SQL_PASSWORD: `Sa1!${randomBytes(24).toString('hex')}`,
     E2E_PROXY_IP: '127.0.0.1', // Replaced with the proxy's actual address before starting the vault.
     ECLIPSVAULT_AUDIT_SIGNING_KEY: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
@@ -140,7 +142,20 @@ async function main() {
       const logs = await compose(['logs', '--no-color'], { capture: true, cleanup: true });
       await writeFile(new URL(`../${output}/docker.log`, import.meta.url), logs);
     } finally {
-      await compose(['down', '--volumes', '--remove-orphans'], { cleanup: true });
+      // These containers belong to this run's unique project. Capture their anonymous image
+      // volumes explicitly so cleanup never asks Compose to remove an unbounded set of volumes.
+      const containers = await compose(['ps', '--all', '--quiet'], { capture: true, cleanup: true });
+      const volumes = new Set();
+      if (containers) {
+        const mounts = await checked('docker', ['inspect', '--format', '{{json .Mounts}}', ...containers.split(/\s+/)], env, { capture: true, cleanup: true });
+        for (const line of mounts.split('\n')) {
+          for (const mount of JSON.parse(line)) {
+            if (mount.Type === 'volume') volumes.add(mount.Name);
+          }
+        }
+      }
+      await compose(['down', '--remove-orphans'], { cleanup: true });
+      if (volumes.size) await checked('docker', ['volume', 'rm', ...volumes], env, { cleanup: true });
       if (builtImage) await checked('docker', ['image', 'rm', image], env, { cleanup: true });
     }
   }

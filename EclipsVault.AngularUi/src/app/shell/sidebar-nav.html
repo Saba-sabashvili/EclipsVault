@@ -25,7 +25,7 @@
 
 <ng-template #link let-entry>
   @if (entry.angular) {
-    <a class="nav-item" [routerLink]="entry.url" [class.active]="active(entry)"
+    <a class="nav-item" data-command-angular [routerLink]="entry.url" [class.active]="active(entry)"
        [attr.aria-current]="active(entry) ? 'page' : null">
       <app-nav-icon [icon]="entry.icon" />
       {{ entry.label }}

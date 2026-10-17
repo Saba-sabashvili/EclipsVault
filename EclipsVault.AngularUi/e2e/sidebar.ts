@@ -56,7 +56,7 @@ async function notices(page: Page) {
   return (await page.locator('.content > .notice').allInnerTexts()).map((text) => text.replace(/\s+/g, ' ').trim());
 }
 
-/** Crop to navigation content; the account menu is compared structurally and the palette is #51. */
+/** Crop to navigation content; the account menu is compared structurally, and the palette is compared in palette.ts. */
 async function screenshot(page: Page, info: TestInfo, name: string) {
   await page.evaluate(() => document.fonts.ready);
   const clip = await page.locator('.sidenav').evaluate((nav) => {

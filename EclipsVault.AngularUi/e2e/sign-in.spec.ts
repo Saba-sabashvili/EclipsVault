@@ -1,6 +1,7 @@
 import type { BrowserContext, Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { test, expect } from './fixtures';
+import { createSecret, markDecoy, openPalette, paletteEntries, searchSecrets, sidebarPages } from './palette';
 import { verifySidebar } from './sidebar';
 import { freshTotp } from './totp';
 
@@ -9,6 +10,7 @@ test.describe.configure({ mode: 'serial' });
 let authenticatorSecret = '';
 let lastSignInStep = -1;
 let administratorCookies: Awaited<ReturnType<BrowserContext['cookies']>> = [];
+let standardCookies: Awaited<ReturnType<BrowserContext['cookies']>> = [];
 
 function adminPassword(): string {
   const password = process.env['Seed__AdminPassword'];
@@ -217,6 +219,7 @@ test('the administrator and Standard sidebars match Legacy in both themes and na
   await test.step('Standard navigation and visual comparison', async () => {
     await verifySidebar(standard, info, 'standard');
   });
+  standardCookies = await standard.context().cookies();
 });
 
 test('both UIs share the theme, and the Angular UI applies it before it starts', async ({ page }) => {
@@ -256,6 +259,193 @@ test('both UIs share the theme, and the Angular UI applies it before it starts',
     await page.goto('/Secrets');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
+});
+
+test('the ⌘K palette offers exactly the sidebar\'s pages, as the Legacy palette does, for an administrator and a Standard account', async ({ page, browserHealth }) => {
+  if (!standardCookies.length) throw new Error('Runs after the sidebar test, which signs in the Standard account');
+  await page.context().addCookies(administratorCookies);
+  const standard = await (await browserHealth.newContext()).newPage();
+  await standard.context().addCookies(standardCookies);
+
+  for (const [account, browser, links] of [['administrator', page, 21], ['standard', standard, 14]] as const) {
+    await test.step(`${account}: Legacy and Angular palettes list the same pages as the sidebar`, async () => {
+      await browser.goto('/Secrets');
+      const legacyChord = await browser.locator('.command-trigger kbd').textContent();
+      await openPalette(browser);
+      const legacy = await paletteEntries(browser);
+      await browser.keyboard.press('Escape');
+
+      await browser.goto('/Access');
+      await expect(browser.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+      await expect(browser.locator('.sidebar > .command-trigger kbd')).toHaveText(legacyChord ?? '');
+      expect(legacyChord).toMatch(/^(⌘K|Ctrl K)$/);
+      const sidebar = await sidebarPages(browser);
+      await openPalette(browser);
+      const angular = await paletteEntries(browser);
+
+      expect(angular).toEqual(sidebar.map((label) => ['Go to', label]));
+      expect(angular).toEqual(legacy);
+      expect(angular).toHaveLength(links);
+      if (account === 'standard') {
+        for (const admin of ['Users', 'Networks', 'Service accounts', 'Audit log', 'Notifications', 'Encryption keys', 'License']) {
+          expect(sidebar).not.toContain(admin);
+        }
+      }
+      await expect(browser.locator('style, [style]')).toHaveCount(0);
+    });
+  }
+});
+
+test('palette search lists only secrets the account could already list, never a decoy, and nothing for one character', async ({ page, browserHealth }) => {
+  test.setTimeout(150_000);
+  await page.context().addCookies(administratorCookies);
+
+  await test.step('the administrator stores a Standard-visible secret, one above Standard clearance, and a decoy', async () => {
+    await createSecret(page, 'Palette_Probe_Listed', 'Internal');
+    await createSecret(page, 'Palette_Probe_Confidential', 'Confidential');
+    // Visible to Standard in every attribute; only being a decoy keeps it out of every list.
+    await createSecret(page, 'Palette_Probe_Decoy', 'Internal');
+    markDecoy('Palette_Probe_Decoy');
+  });
+
+  await test.step('the administrator\'s search finds both real secrets and no decoy', async () => {
+    await page.goto('/Access');
+    await openPalette(page);
+    expect(await searchSecrets(page, 'Palette_Probe')).toEqual({
+      status: 200, names: ['Palette_Probe_Confidential', 'Palette_Probe_Listed'],
+    });
+    expect((await searchSecrets(page, 'Decoy')).names).toEqual([]);
+  });
+
+  const standard = await (await browserHealth.newContext()).newPage();
+  await standard.context().addCookies(standardCookies);
+  await standard.goto('/Access');
+  await expect(standard.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+
+  await test.step('a Standard account finds only the secret its clearance lists, and neither hidden one by name', async () => {
+    await openPalette(standard);
+    expect(await searchSecrets(standard, 'Palette_Probe')).toEqual({ status: 200, names: ['Palette_Probe_Listed'] });
+    const listed = standard.locator('.palette-item').filter({ hasText: 'Palette_Probe_Listed' });
+    await expect(listed.locator('.palette-meta')).toHaveText('GLOBAL · Development');
+    await expect(listed.locator('.badge.sens-1')).toHaveText('Internal');
+    expect((await searchSecrets(standard, 'Palette_Probe_Decoy')).names).toEqual([]);
+    expect((await searchSecrets(standard, 'Palette_Probe_Confidential')).names).toEqual([]);
+    await expect(standard.locator('.palette-empty')).toHaveText('Nothing matches that.');
+  });
+
+  await test.step('a one-character query asks the server nothing, and the server would answer nothing', async () => {
+    const searches: string[] = [];
+    standard.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/Secrets/Search') searches.push(request.url());
+    });
+    await standard.locator('.palette-input').fill('P');
+    // Longer than the debounce, so a search that was going to be sent would have been.
+    await standard.waitForTimeout(600);
+    expect(searches).toEqual([]);
+    expect((await paletteEntries(standard)).filter(([kind]) => kind === 'Secret')).toEqual([]);
+    for (const q of ['P', 'p', '_', ' P ']) {
+      const direct = await standard.request.get(`/Secrets/Search?q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+      expect(direct.status()).toBe(200);
+      expect(await direct.json()).toEqual([]);
+    }
+  });
+
+  await test.step('Enter opens the chosen secret in the Legacy UI', async () => {
+    await searchSecrets(standard, 'Palette_Probe');
+    await standard.keyboard.press('Enter');
+    await expect(standard).toHaveURL(/\/Secrets\/Details\/[0-9a-f-]{36}$/);
+    await expect(standard.getByRole('heading', { name: 'Palette_Probe_Listed', exact: true })).toBeVisible();
+  });
+});
+
+test('the palette is driven from the keyboard, traps focus, and hands it back on Escape', async ({ page }) => {
+  await page.context().addCookies(administratorCookies);
+  await page.goto('/Access/Index');
+  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  const options = page.locator('.palette-item');
+
+  await test.step('Escape returns focus to the element that had it', async () => {
+    const refresh = page.getByRole('button', { name: 'Refresh' });
+    await refresh.focus();
+    await openPalette(page);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(refresh).toBeFocused();
+
+    const trigger = page.getByRole('button', { name: 'Search secrets or jump to a page' });
+    await trigger.click();
+    await expect(page.locator('.palette-input')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+  });
+
+  await test.step('the chord toggles it, arrows move the one highlight, and Tab stays in the dialog', async () => {
+    await openPalette(page);
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await openPalette(page);
+
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowUp');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await expect(options.nth(2)).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[aria-selected="true"]')).toHaveCount(1);
+    await expect(page.locator('.palette-input')).toHaveAttribute('aria-activedescendant', 'palette-option-2');
+    await page.keyboard.press('ArrowUp');
+    await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+
+    for (const key of ['Tab', 'Shift+Tab', 'Tab']) {
+      await page.keyboard.press(key);
+      await expect(page.locator('.palette-input')).toBeFocused();
+    }
+    // A press inside the panel keeps the field focused; one on the backdrop dismisses it.
+    await page.locator('.palette-hint').click();
+    await expect(page.locator('.palette-input')).toBeFocused();
+    await page.locator('.palette-backdrop').click({ position: { x: 5, y: 5 } });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  await test.step('Enter opens an Angular UI page in place, and a Legacy UI page with a page load', async () => {
+    const documents: string[] = [];
+    page.on('request', (request) => {
+      if (request.isNavigationRequest() && request.resourceType() === 'document') documents.push(new URL(request.url()).pathname);
+    });
+    await openPalette(page);
+    await page.locator('.palette-input').fill('my access');
+    await expect(options).toHaveText([/My access/]);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/Access$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(documents).toEqual([]);
+
+    await openPalette(page);
+    await page.locator('.palette-input').fill('signed-in dev');
+    await expect(options).toHaveText([/Signed-in devices/]);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/Sessions$/);
+    expect(documents).toEqual(['/Sessions']);
+  });
+});
+
+test('an ended session makes palette search report a failure, without a console error', async ({ page }) => {
+  await page.context().addCookies(administratorCookies);
+  await page.goto('/Access');
+  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  // Only this browser forgets the session; the administrator's session itself stays valid for later tests.
+  await page.context().clearCookies({ name: 'EclipsVault.Session' });
+
+  await openPalette(page);
+  const redirected = page.waitForResponse((response) => new URL(response.url()).pathname === '/Secrets/Search');
+  await page.locator('.palette-input').fill('Palette_Probe');
+  // /Secrets/Search is a Legacy UI path: no session is answered by the sign-in redirect, not a 401 problem.
+  const answer = await redirected;
+  expect(answer.status()).toBe(302);
+  expect(answer.headers()['location']).toMatch(/\/Account\/Login\?ReturnUrl=/);
+  await expect(page.getByRole('alert')).toHaveText(/Secret search failed/);
+  await expect(page.locator('.palette-empty')).toHaveText('Nothing matches that.');
+  await expect(page.locator('.palette-input')).toBeFocused();
 });
 
 test('a session revoked from another browser is sent to sign-in on its next UI API action', async ({ page, browserHealth }) => {

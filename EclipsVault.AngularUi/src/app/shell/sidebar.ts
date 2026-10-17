@@ -30,7 +30,7 @@ const link = (area: string, label: string, url: string, icon = area, angular = f
   ({ area, label, url, icon, angular });
 
 // Presentation only: the server has already authorized each Area. Clearance is never an input.
-// Profile is offered in the account menu, and the command palette follows in #51.
+// Profile is offered in the account menu. The command palette reads the rendered sidebar links.
 const sections: readonly { label: string; items: readonly (AreaLink | AreaGroup)[] }[] = [
   { label: 'Vault', items: [
     link('overview', 'Overview', '/'),
