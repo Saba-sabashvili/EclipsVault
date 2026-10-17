@@ -21,6 +21,8 @@
          advisory (GHSA-2m69-gcr7-jv3q). Test-only and never shipped, but a known-vulnerable package has
          no business in a vault's dependency tree — pinned forward to the patched build. -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+    <!-- SqlClient's transitive 9.0.4 is vulnerable; keep the dependency audit gate enabled. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.9" />
@@ -33,7 +35,10 @@
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
 
     <!-- Media -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <!-- The release's ImageSharp version is now vulnerable. Match the existing avatar contract
+         with the reviewed adapter, including native support in the Linux production image. -->
+    <PackageVersion Include="SkiaSharp" Version="4.153.1" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
 
     <!-- Logging -->

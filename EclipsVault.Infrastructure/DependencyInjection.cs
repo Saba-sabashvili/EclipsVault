@@ -113,7 +113,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<IBreachedPasswordScreen, BundledBreachedPasswordScreen>();
         services.AddSingleton<ITotpService, TotpService>();
-        services.AddSingleton<IAvatarProcessor, ImageSharpAvatarProcessor>();
+        services.AddSingleton<IAvatarProcessor, SkiaAvatarProcessor>();
         services.AddSingleton<IApiKeyFactory, ApiKeyFactory>();
         services.AddSingleton<IKekProvider, EnvironmentKekProvider>();
         services.AddSingleton<AesGcmCryptoEngine>();
