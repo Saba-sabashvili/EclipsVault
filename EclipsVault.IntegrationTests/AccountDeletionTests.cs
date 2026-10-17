@@ -1,6 +1,8 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 namespace EclipsVault.IntegrationTests;
@@ -28,6 +30,7 @@ public sealed partial class AccountDeletionTests(VaultFixture vault)
         Assert.Equal(value, RevealedValue().Match(await before.Content.ReadAsStringAsync()).Groups[1].Value);
         // Taken now: a refused request clears the session cookie, and the copy below must outlive that.
         var copied = Assert.IsType<Cookie>(session.SessionCookie);
+        var copiedCookies = session.Cookies.GetCookieHeader(session.Client.BaseAddress!);
 
         await vault.DeleteAccountAsync(username);
 
@@ -42,6 +45,31 @@ public sealed partial class AccountDeletionTests(VaultFixture vault)
         var replay = await replayed.Client.GetAsync(details);
         Assert.Equal(HttpStatusCode.Redirect, replay.StatusCode);
         Assert.Equal("/Account/Login", replay.Headers.Location?.AbsolutePath);
+
+        var surviving = await vault.SignInNewAccountAsync("it-delete-surviving", IPAddress.Parse("10.52.0.71"));
+        // A new host has empty in-memory revocation stores, just like a restarted single-node vault.
+        // Its database, KEK and persisted Data Protection ring remain the same.
+        await using var restarted = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(host => host.UseEnvironment("Production"));
+        using var control = ReplayOn(restarted, surviving.Cookies.GetCookieHeader(surviving.Client.BaseAddress!));
+        Assert.Equal(HttpStatusCode.OK, (await control.GetAsync("/api/ui/me")).StatusCode);
+        using var restartedReplay = ReplayOn(restarted, copiedCookies);
+        var afterRestart = await RevealAsync(restartedReplay, details, token);
+        Assert.Equal(HttpStatusCode.Redirect, afterRestart.StatusCode);
+        Assert.Equal("/Account/Login", afterRestart.Headers.Location?.AbsolutePath);
+        Assert.DoesNotContain(value, await afterRestart.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    private static HttpClient ReplayOn(WebApplicationFactory<Program> host, string cookies)
+    {
+        var client = host.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+        client.DefaultRequestHeaders.Add("Cookie", cookies);
+        return client;
     }
 
     /// <summary>Creates a secret the way an administrator does and returns its details page.</summary>
