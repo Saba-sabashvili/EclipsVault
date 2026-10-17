@@ -25,7 +25,9 @@ public sealed class ActivityService : IActivityService
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize <= 0 ? DefaultPageSize : pageSize, 1, MaxPageSize);
 
-        var skip = (page - 1) * pageSize;
+        // Computed in 64 bits: a huge page number would wrap a 32-bit offset into one the database
+        // refuses. Clamped, any page beyond the last reads as empty instead.
+        var skip = (int)Math.Min((long)(page - 1) * pageSize, int.MaxValue);
         // One extra row tells us whether a further page exists — no separate COUNT round-trip.
         var rows = await _audit.ListForActorAsync(userId, skip, pageSize + 1, ct);
         var hasMore = rows.Count > pageSize;
