@@ -27,6 +27,7 @@ public sealed class AccountController : Controller
 {
     /// <summary>Session key holding the challenge issued for an in-flight passkey sign-in.</summary>
     private const string PasskeyAssertionChallengeKey = "passkey:assertion:challenge";
+    private const string PasskeyReturnUrlKey = "passkey:assertion:return-url";
 
     private readonly IVaultAuthenticationService _auth;
     private readonly IPasskeyService _passkeys;
@@ -62,10 +63,18 @@ public sealed class AccountController : Controller
 
     [AllowAnonymous]
     [HttpGet]
-    public IActionResult Login()
+    public IActionResult Login(string? returnUrl)
         => User.Identity?.IsAuthenticated == true
-            ? RedirectToAction("Index", "Secrets")
-            : View(Decorate(new LoginViewModel()));
+            ? RedirectAfterSignIn(returnUrl)
+            : View(Decorate(new LoginViewModel { ReturnUrl = returnUrl }));
+
+    // Form fields, query strings and passkey ceremony state are all untrusted. Make the final
+    // decision here, after authentication, and let LocalRedirect enforce it again at execution.
+    private LocalRedirectResult RedirectAfterSignIn(string? returnUrl)
+        => LocalRedirect(SignInTarget(returnUrl));
+
+    private string SignInTarget(string? returnUrl)
+        => Url.IsLocalUrl(returnUrl) ? returnUrl : Url.Action("Index", "Secrets")!;
 
     /// <summary>Stamps the SSO button's state onto the model — it is not part of the posted form.</summary>
     private LoginViewModel Decorate(LoginViewModel model)
@@ -98,12 +107,12 @@ public sealed class AccountController : Controller
 
         return RedirectToAction(result.Status == CredentialStatus.RequiresTotpEnrollment
             ? nameof(EnrollTotp)
-            : nameof(Totp));
+            : nameof(Totp), new { ReturnUrl = model.ReturnUrl });
     }
 
     [Authorize(AuthenticationSchemes = AuthSchemes.MfaPending)]
     [HttpGet]
-    public IActionResult Totp() => View(new TotpViewModel());
+    public IActionResult Totp(string? returnUrl) => View(new TotpViewModel { ReturnUrl = returnUrl });
 
     [Authorize(AuthenticationSchemes = AuthSchemes.MfaPending)]
     [HttpPost]
@@ -116,7 +125,7 @@ public sealed class AccountController : Controller
 
         if (GetMfaPendingUserId() is not { } userId)
         {
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { ReturnUrl = model.ReturnUrl });
         }
 
         var user = await _auth.VerifyTotpAsync(userId, model.Code, ct);
@@ -127,7 +136,7 @@ public sealed class AccountController : Controller
         }
 
         await CompleteSignInAsync(user);
-        return RedirectToAction("Index", "Secrets");
+        return RedirectAfterSignIn(model.ReturnUrl);
     }
 
     /// <summary>
@@ -137,7 +146,7 @@ public sealed class AccountController : Controller
     /// </summary>
     [Authorize(AuthenticationSchemes = AuthSchemes.MfaPending)]
     [HttpGet]
-    public IActionResult RecoveryCode() => View(new RecoveryCodeViewModel());
+    public IActionResult RecoveryCode(string? returnUrl) => View(new RecoveryCodeViewModel { ReturnUrl = returnUrl });
 
     [Authorize(AuthenticationSchemes = AuthSchemes.MfaPending)]
     [HttpPost]
@@ -150,7 +159,7 @@ public sealed class AccountController : Controller
 
         if (GetMfaPendingUserId() is not { } userId)
         {
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { ReturnUrl = model.ReturnUrl });
         }
 
         var user = await _auth.VerifyRecoveryCodeAsync(userId, model.Code, ct);
@@ -162,21 +171,22 @@ public sealed class AccountController : Controller
 
         await CompleteSignInAsync(user);
         this.FlashInfo("You signed in with a recovery code — that code is now used up. Generate a new set from your profile if you're running low.");
-        return RedirectToAction("Index", "Secrets");
+        return RedirectAfterSignIn(model.ReturnUrl);
     }
 
     [Authorize(AuthenticationSchemes = AuthSchemes.MfaPending)]
     [HttpGet]
-    public async Task<IActionResult> EnrollTotp(CancellationToken ct)
+    public async Task<IActionResult> EnrollTotp(string? returnUrl, CancellationToken ct)
     {
         if (GetMfaPendingUserId() is not { } userId)
         {
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { ReturnUrl = returnUrl });
         }
 
         var enrollment = await _auth.BeginTotpEnrollmentAsync(userId, ct);
         return View(new EnrollTotpViewModel
         {
+            ReturnUrl = returnUrl,
             SecretBase32 = enrollment.SecretBase32,
             QrCodeDataUri = TotpQrCode.PngDataUri(enrollment.OtpAuthUri)
         });
@@ -188,7 +198,7 @@ public sealed class AccountController : Controller
     {
         if (GetMfaPendingUserId() is not { } userId)
         {
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { ReturnUrl = model.ReturnUrl });
         }
 
         if (!ModelState.IsValid)
@@ -204,7 +214,7 @@ public sealed class AccountController : Controller
         }
 
         await CompleteSignInAsync(user);
-        return RedirectToAction("Index", "Secrets");
+        return RedirectAfterSignIn(model.ReturnUrl);
     }
 
     /// <summary>
@@ -218,6 +228,7 @@ public sealed class AccountController : Controller
     {
         var options = await _passkeys.BeginAssertionAsync(model?.Username, ct);
         HttpContext.Session.SetString(PasskeyAssertionChallengeKey, options.Challenge);
+        HttpContext.Session.SetString(PasskeyReturnUrlKey, model?.ReturnUrl ?? string.Empty);
         return Content(options.OptionsJson, "application/json");
     }
 
@@ -227,7 +238,9 @@ public sealed class AccountController : Controller
     public async Task<IActionResult> PasskeyLoginComplete([FromBody] PasskeyAssertionCompletion request, CancellationToken ct)
     {
         var challenge = HttpContext.Session.GetString(PasskeyAssertionChallengeKey);
+        var returnUrl = HttpContext.Session.GetString(PasskeyReturnUrlKey);
         HttpContext.Session.Remove(PasskeyAssertionChallengeKey);
+        HttpContext.Session.Remove(PasskeyReturnUrlKey);
         if (string.IsNullOrEmpty(challenge))
         {
             return Json(new { success = false, error = "Sign-in timed out. Try again." });
@@ -242,7 +255,9 @@ public sealed class AccountController : Controller
         }
 
         await CompleteSignInAsync(result.User);
-        return Json(new { success = true, redirect = Url.Action("Index", "Secrets") });
+        // Fetch's Response.url drops fragments. Navigate at the top level through Login's
+        // signed-in branch, which checks the target again and executes the final LocalRedirect.
+        return Json(new { success = true, redirect = Url.Action(nameof(Login), new { ReturnUrl = SignInTarget(returnUrl) }) });
     }
 
     /// <summary>
@@ -353,9 +368,9 @@ public sealed class AccountController : Controller
     [HttpPost]
     [AllowAnonymous]
     [ValidateAntiForgeryToken]
-    public IActionResult ExternalLogin()
+    public IActionResult ExternalLogin(string? returnUrl)
         => Challenge(
-            new AuthenticationProperties { RedirectUri = Url.Action(nameof(ExternalCallback)) },
+            new AuthenticationProperties { RedirectUri = Url.Action(nameof(ExternalCallback), new { ReturnUrl = returnUrl }) },
             AuthSchemes.Oidc);
 
     /// <summary>
@@ -365,7 +380,7 @@ public sealed class AccountController : Controller
     /// </summary>
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> ExternalCallback(CancellationToken ct)
+    public async Task<IActionResult> ExternalCallback(string? returnUrl, CancellationToken ct)
     {
         var result = await HttpContext.AuthenticateAsync(AuthSchemes.OidcCorrelation);
         // The correlation principal exists only to carry the IdP's answer across this one redirect.
@@ -375,7 +390,7 @@ public sealed class AccountController : Controller
         if (!result.Succeeded || result.Principal is null)
         {
             this.FlashError("Single sign-on did not complete. Please try again.");
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { ReturnUrl = returnUrl });
         }
 
         var identity = ExternalIdentityReader.Read(result.Principal);
@@ -388,21 +403,21 @@ public sealed class AccountController : Controller
             _logger.LogWarning("SSO sign-in refused ({Outcome}) for subject {Subject} from {Issuer}",
                 decision.Outcome, identity.Subject, identity.Issuer);
             this.FlashError("Single sign-on did not grant access to this vault. Contact an administrator.");
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { ReturnUrl = returnUrl });
         }
 
         var user = decision.User;
         if (decision.SecondFactorSatisfied)
         {
             await CompleteSignInAsync(user);
-            return RedirectToAction("Index", "Dashboard");
+            return RedirectAfterSignIn(returnUrl);
         }
 
         // The IdP proved one factor; this vault wants its own. Rejoin the ordinary flow rather than
         // inventing a second one — TOTP, enrollment and recovery codes all already live there.
         var pending = VaultClaimsFactory.CreatePendingMfaPrincipal(user);
         await HttpContext.SignInAsync(AuthSchemes.MfaPending, pending);
-        return RedirectToAction(user.TotpEnabled ? nameof(Totp) : nameof(EnrollTotp));
+        return RedirectToAction(user.TotpEnabled ? nameof(Totp) : nameof(EnrollTotp), new { ReturnUrl = returnUrl });
     }
 
     private async Task CompleteSignInAsync(UserDto user)

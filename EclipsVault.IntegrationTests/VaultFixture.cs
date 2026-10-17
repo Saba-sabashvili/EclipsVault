@@ -42,6 +42,7 @@ public sealed partial class VaultFixture : IAsyncLifetime
     // The vault signs in to its database as sa, so the password is per run rather than Testcontainers'
     // published default. SQL Server requires upper and lower case, a digit and a symbol.
     private readonly MsSqlContainer _sql = new MsSqlBuilder(SqlServerImage)
+        .WithName($"{Environment.GetEnvironmentVariable("ECLIPSVAULT_TEST_RESOURCE_PREFIX") ?? "eclipsvault-it"}-sql-{Guid.NewGuid():N}")
         .WithPassword("Sa1!" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)))
         .Build();
 

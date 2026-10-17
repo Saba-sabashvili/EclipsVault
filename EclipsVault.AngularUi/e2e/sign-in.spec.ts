@@ -466,9 +466,9 @@ test('an access failure shows a retry and the next request restores the live gri
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('a session revoked from another browser is sent to sign-in on its next UI API action', async ({ page, browserHealth }) => {
-  // Two sign-ins, each of which may wait for a new authenticator step.
-  test.setTimeout(150_000);
+test('a session revoked from another browser signs in again and returns to My access', async ({ page, browserHealth }) => {
+  // Three sign-ins, each of which may wait for a new authenticator step.
+  test.setTimeout(210_000);
   if (!authenticatorSecret) throw new Error('Runs after the sign-in test, which enrolls the authenticator');
 
   // Every session but the first browser's, as Signed-in devices shows them to it.
@@ -501,6 +501,15 @@ test('a session revoked from another browser is sent to sign-in on its next UI A
     expect(response.headers()['cache-control']).toContain('no-store');
     await expect(page).toHaveURL(/\/Account\/Login\?ReturnUrl=%2FAccess$/);
     await expect(page.getByLabel('Username')).toBeVisible();
+    await page.getByLabel('Username').fill('vault-admin');
+    await page.getByLabel('Password', { exact: true }).fill(adminPassword());
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page).toHaveURL(/\/Account\/Totp\?ReturnUrl=%2FAccess$/);
+    await page.getByLabel('Authenticator code').fill(await freshTotp(authenticatorSecret, lastSignInStep));
+    lastSignInStep = Math.floor(Date.now() / 30_000);
+    await page.getByRole('button', { name: 'Verify and sign in' }).click();
+    await expect(page).toHaveURL(/\/Access$/);
+    await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
   });
 
   await test.step('the production image serves none of the integration tests\' test-only endpoints', async () => {
@@ -532,4 +541,43 @@ test('a stale-session problem ends the real session through protected sign-out b
   const replay = await browserHealth.newContext();
   await replay.addCookies([session!]);
   expect((await replay.request.get('/api/ui/access')).status()).toBe(401);
+});
+
+test('a real passkey follows the server redirect for local and external return targets', async ({ page, context }) => {
+  test.setTimeout(180_000);
+  await context.addCookies(administratorCookies);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
+      hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
+    },
+  });
+  try {
+    await page.goto('/Profile');
+    await page.getByLabel('New passkey name').fill('issue53-browser');
+    await page.getByRole('button', { name: 'Add a passkey', exact: true }).click();
+    await expect(page.getByText('Passkey added. You can now sign in with it.')).toBeVisible();
+
+    // Start with a fresh production throttle window after the password/TOTP scenarios. The
+    // limiter remains enabled; each passkey attempt below consumes its ordinary two requests.
+    const windowMilliseconds = 120_000;
+    await page.waitForTimeout(windowMilliseconds - Date.now() % windowMilliseconds + 1_000);
+    for (const [returnUrl, expected] of [
+      ['/Access?view=mine#matrix', '/Access?view=mine#matrix'],
+      ['https://outside.example/', '/Secrets'],
+      ['//outside.example/', '/Secrets'],
+      ['/\\outside.example/', '/Secrets'],
+    ]) {
+      await context.clearCookies();
+      await page.goto(`/Account/Login?ReturnUrl=${encodeURIComponent(returnUrl!)}`);
+      await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
+      await expect(page).toHaveURL(new URL(expected!, page.url()).href);
+      expect((await context.cookies()).some((cookie) => cookie.name === 'EclipsVault.Session')).toBe(true);
+    }
+  } finally {
+    await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId });
+    await cdp.detach();
+  }
 });
