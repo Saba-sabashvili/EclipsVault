@@ -16,10 +16,9 @@ function legacyPath(path: string): UrlMatcher {
       : null;
 }
 
-const account = () => import('./account/account-page').then((m) => m.AccountPage);
+const access = () => import('./access/access-page').then((m) => m.AccessPage);
 
 export const routes: Routes = [
-  // My access. Shows the signed-in account until its grid is migrated.
-  { matcher: legacyPath('Access'), loadComponent: account },
-  { matcher: legacyPath('Access/Index'), loadComponent: account },
+  { matcher: legacyPath('Access'), loadComponent: access, title: 'My access — EclipsVault' },
+  { matcher: legacyPath('Access/Index'), loadComponent: access, title: 'My access — EclipsVault' },
 ];

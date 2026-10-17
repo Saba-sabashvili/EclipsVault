@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+    "/api/ui/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccessResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ui/me": {
         parameters: {
             query?: never;
@@ -43,6 +78,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccessCellResponse: {
+            environment: string;
+            allowed: boolean;
+            reason: null | string;
+        };
+        AccessResponse: {
+            clearance: string;
+            /** Format: int32 */
+            clearanceRank: number | string;
+            project: string;
+            crossesProjects: boolean;
+            sourceIp: string;
+            isTrustedNetwork: boolean;
+            isProductionWindowOpen: boolean;
+            /** Format: int32 */
+            windowStartHour: number | string;
+            /** Format: int32 */
+            windowEndHour: number | string;
+            windowZone: string;
+            environments: string[];
+            rows: components["schemas"]["AccessRowResponse"][];
+        };
+        AccessRowResponse: {
+            sensitivity: string;
+            /** Format: int32 */
+            sensitivityRank: number | string;
+            cells: components["schemas"]["AccessCellResponse"][];
+        };
         LicenseNotice: {
             title: string;
             text: string;

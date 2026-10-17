@@ -37,7 +37,7 @@ async function otherSessionIds(page: Page): Promise<string[]> {
   return page.locator('form input[name="id"]').evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
 }
 
-test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI and return', async ({ page, context, browserHealth }) => {
+test('sign in, lazy-load My access with Trusted Types, visit Legacy UI and return', async ({ page, context, browserHealth }) => {
   const password = process.env['Seed__AdminPassword'];
   if (!password) throw new Error('Run through npm run e2e with Seed__AdminPassword supplied');
 
@@ -63,7 +63,7 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
     await other.addCookies([enrolled]);
     const angular = await other.newPage();
     await angular.goto('/Access');
-    await expect(angular.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+    await expect(angular.locator('.access-matrix tbody tr')).toHaveCount(4);
 
     const xsrf = (await other.cookies()).find((cookie) => cookie.name === 'XSRF-TOKEN');
     expect(xsrf).toMatchObject({ secure: true, httpOnly: false, sameSite: 'Strict', path: '/' });
@@ -105,21 +105,21 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
   expect(session?.secure).toBe(true);
   expect(session?.httpOnly).toBe(true);
 
-  // The account component is a dynamic import, not part of main.js. Observe its actual chunk load.
-  const lazyAccount = page.waitForResponse(async (response) =>
-    /\/ui\/chunk-[\w-]+\.js$/.test(response.url()) && (await response.text()).includes('Signed in'));
+  // The access component is a dynamic import, not part of main.js. Observe its actual chunk load.
+  const lazyAccess = page.waitForResponse(async (response) =>
+    /\/ui\/chunk-[\w-]+\.js$/.test(response.url()) && (await response.text()).includes('What you can open right now'));
   const angularDocument = await page.goto('/Access');
   expect(angularDocument?.headers()['content-security-policy']).toContain(
     "; require-trusted-types-for 'script'; trusted-types angular angular#bundler",
   );
-  expect((await lazyAccount).status()).toBe(200);
-  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
-  await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+  expect((await lazyAccess).status()).toBe(200);
+  await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
+  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
 
   await page.goto('/Access/Index');
-  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Refresh' }).click();
-  await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+  await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'My access', exact: true }).click();
+  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
 
   await test.step('Trusted Types rejects a raw DOM assignment before it changes the DOM', async () => {
     // One precise, required violation is intentional; the shared fixture still rejects every other one.
@@ -175,7 +175,7 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
   await page.getByText('Access', { exact: true }).click();
   await page.getByRole('link', { name: 'My access', exact: true }).click();
   await expect(page).toHaveURL(/\/Access$/);
-  await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
   expect(signInRequests).toEqual([]);
   expect((await context.cookies()).find((cookie) => cookie.name === 'EclipsVault.Session')?.value).toBe(session?.value);
   administratorCookies = await context.cookies();
@@ -247,7 +247,7 @@ test('both UIs share the theme, and the Angular UI applies it before it starts',
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.locator('app-root')).toBeEmpty();
     release();
-    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
     await page.unroute(bundle);
   });
 
@@ -276,7 +276,7 @@ test('the ⌘K palette offers exactly the sidebar\'s pages, as the Legacy palett
       await browser.keyboard.press('Escape');
 
       await browser.goto('/Access');
-      await expect(browser.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+      await expect(browser.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
       await expect(browser.locator('.sidebar > .command-trigger kbd')).toHaveText(legacyChord ?? '');
       expect(legacyChord).toMatch(/^(⌘K|Ctrl K)$/);
       const sidebar = await sidebarPages(browser);
@@ -320,7 +320,7 @@ test('palette search lists only secrets the account could already list, never a 
   const standard = await (await browserHealth.newContext()).newPage();
   await standard.context().addCookies(standardCookies);
   await standard.goto('/Access');
-  await expect(standard.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  await expect(standard.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
 
   await test.step('a Standard account finds only the secret its clearance lists, and neither hidden one by name', async () => {
     await openPalette(standard);
@@ -361,7 +361,7 @@ test('palette search lists only secrets the account could already list, never a 
 test('the palette is driven from the keyboard, traps focus, and hands it back on Escape', async ({ page }) => {
   await page.context().addCookies(administratorCookies);
   await page.goto('/Access/Index');
-  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
   const options = page.locator('.palette-item');
 
   await test.step('Escape returns focus to the element that had it', async () => {
@@ -432,7 +432,7 @@ test('the palette is driven from the keyboard, traps focus, and hands it back on
 test('an ended session makes palette search report a failure, without a console error', async ({ page }) => {
   await page.context().addCookies(administratorCookies);
   await page.goto('/Access');
-  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
   // Only this browser forgets the session; the administrator's session itself stays valid for later tests.
   await page.context().clearCookies({ name: 'EclipsVault.Session' });
 
@@ -448,6 +448,20 @@ test('an ended session makes palette search report a failure, without a console 
   await expect(page.locator('.palette-input')).toBeFocused();
 });
 
+test('an access failure shows a retry and the next request restores the live grid', async ({ page, browserHealth }) => {
+  await page.context().addCookies(administratorCookies);
+  browserHealth.expectConsoleError({ text: /status of 503/, url: /\/api\/ui\/access$/ });
+  await page.route('**/api/ui/access', async (route) => {
+    await route.fulfill({ status: 503, contentType: 'application/problem+json', body: JSON.stringify({ code: 'audit_unavailable' }) });
+  }, { times: 1 });
+  await page.goto('/Access');
+  await expect(page.getByRole('alert')).toHaveText('Could not load your access. Reload the page to try again.');
+  await expect(page.locator('.access-matrix')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('a session revoked from another browser is sent to sign-in on its next UI API action', async ({ page, browserHealth }) => {
   // Two sign-ins, each of which may wait for a new authenticator step.
   test.setTimeout(150_000);
@@ -458,8 +472,8 @@ test('a session revoked from another browser is sent to sign-in on its next UI A
   await test.step('the first browser signs in and opens the Angular UI', async () => {
     await signIn(page);
     othersOfFirst = await otherSessionIds(page);
-    await page.goto('/Access');
-    await expect(page.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+    await page.goto('/Access/Index');
+    await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
   });
 
   const second = await (await browserHealth.newContext()).newPage();
@@ -474,9 +488,9 @@ test('a session revoked from another browser is sent to sign-in on its next UI A
 
   await test.step("the first browser's next UI API action sends it to sign-in, returning to My access", async () => {
     // The browser logs the refused request as a console error; that one error is the point of this step.
-    browserHealth.expectConsoleError({ text: /status of 401/, url: /\/api\/ui\/me$/ });
-    const refused = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/ui/me');
-    await page.getByRole('button', { name: 'Refresh' }).click();
+    browserHealth.expectConsoleError({ text: /status of 401/, url: /\/api\/ui\/access$/ });
+    const refused = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/ui/access');
+    await page.getByRole('link', { name: 'My access', exact: true }).click();
     const response = await refused;
     expect(response.status()).toBe(401);
     expect(response.headers()['content-type']).toBe('application/problem+json');
@@ -490,4 +504,28 @@ test('a session revoked from another browser is sent to sign-in on its next UI A
     expect((await second.request.get('/api/ui/test-only/throw/unhandled')).status()).toBe(404);
     expect((await second.request.get('/test-only/throw/unhandled')).status()).toBe(404);
   });
+});
+
+test('a stale-session problem ends the real session through protected sign-out before sign-in', async ({ page, context, browserHealth }) => {
+  await context.addCookies(standardCookies);
+  await page.goto('/Access/Index');
+  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
+  const session = (await context.cookies()).find((cookie) => cookie.name === 'EclipsVault.Session');
+  expect(session).toBeDefined();
+  const xsrf = (await context.cookies()).find((cookie) => cookie.name === 'XSRF-TOKEN');
+  expect(xsrf).toBeDefined();
+  // Integration tests exercise real protected cookies with missing claims. Here the transport
+  // supplies that contract so a production browser must perform the real CSRF-protected sign-out.
+  browserHealth.expectConsoleError({ text: /status of 401/, url: /\/api\/ui\/access$/ });
+  await page.route('**/api/ui/access', async (route) => {
+    await route.fulfill({ status: 401, contentType: 'application/problem+json', body: JSON.stringify({ code: 'stale_session' }) });
+  }, { times: 1 });
+  const logout = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/Account/Logout');
+  await page.getByRole('link', { name: 'My access', exact: true }).click();
+  expect((await logout).headers()['requestverificationtoken']).toBe(xsrf?.value);
+  await expect(page).toHaveURL(/\/Account\/Login$/);
+  expect((await context.cookies()).some((cookie) => cookie.name === 'EclipsVault.Session')).toBe(false);
+  const replay = await browserHealth.newContext();
+  await replay.addCookies([session!]);
+  expect((await replay.request.get('/api/ui/access')).status()).toBe(401);
 });

@@ -37,6 +37,10 @@ public static class UiApiProblem
     /// <summary><see cref="UnauthenticatedAsync"/> as an action result, for a UI API action that finds the session unusable.</summary>
     public static ActionResult Unauthenticated() => new Result(UnauthenticatedAsync);
 
+    /// <summary>An unusable session must be ended through the existing protected sign-out flow.</summary>
+    public static ActionResult StaleSession() => new Result(context =>
+        WriteAsync(context, StatusCodes.Status401Unauthorized, "stale_session", "Sign out and sign in again."));
+
     /// <summary>A session that may not make this request.</summary>
     public static Task ForbiddenAsync(HttpContext context)
         => WriteAsync(context, StatusCodes.Status403Forbidden, "forbidden", "You are not allowed to do this.");

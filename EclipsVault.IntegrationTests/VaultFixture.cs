@@ -151,7 +151,8 @@ public sealed partial class VaultFixture : IAsyncLifetime
     /// Every client shares one address unless the test gives it a <paramref name="source"/> of its own,
     /// and the vault allows each address only a few sign-in steps per window.
     /// </summary>
-    public async Task<VaultSession> SignInNewAccountAsync(string username, IPAddress? source = null)
+    public async Task<VaultSession> SignInNewAccountAsync(
+        string username, IPAddress? source = null, ClearanceLevel clearance = ClearanceLevel.Standard, string project = "GLOBAL")
     {
         var password = "It-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         var created = await PostFormAsync(await AdminClientAsync(), "/Admin/CreateUser", new()
@@ -160,8 +161,8 @@ public sealed partial class VaultFixture : IAsyncLifetime
             ["FirstName"] = "Integration",
             ["LastName"] = "Test",
             ["Password"] = password,
-            ["Clearance"] = ((int)ClearanceLevel.Standard).ToString(CultureInfo.InvariantCulture),
-            ["ProjectKey"] = "GLOBAL",
+            ["Clearance"] = ((int)clearance).ToString(CultureInfo.InvariantCulture),
+            ["ProjectKey"] = project,
         });
         if (created.StatusCode != HttpStatusCode.Redirect)
         {

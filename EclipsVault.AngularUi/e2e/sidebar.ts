@@ -1,5 +1,6 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { expect } from './fixtures';
+import { verifyMyAccess } from './access';
 
 /** Observable navigation, including the exact SVG geometry and styles a person sees. */
 async function navigation(page: Page) {
@@ -78,25 +79,28 @@ export async function verifySidebar(page: Page, info: TestInfo, account: 'admini
 
   for (const theme of ['dark', 'light']) {
     await page.context().addCookies([{ name: 'EclipsVault.Theme', value: theme, url: new URL('/', page.url()).href, secure: true }]);
-    // Until #52 removes the Razor tracer, MVC's ordinary optional-id route lets us compare the
-    // same active page without adding a test-only production endpoint or bypassing authorization.
-    const legacy = await page.goto('/Access/Index/legacy');
+    const legacy = await page.goto('/Secrets');
     expect(legacy?.headers()['content-security-policy']).not.toContain('trusted-types');
-    await expect(page.locator('.sidenav a.active')).toHaveText('My access');
+    await expect(page.locator('.sidenav a.active')).toHaveText('Secrets');
+    // Compare the Legacy styles in the same selected state as My access. The real active states
+    // of both documents are asserted separately; the deleted Razor page is no longer a reference.
+    await page.locator('.sidenav').evaluate((nav) => {
+      nav.querySelectorAll('.active, .has-active').forEach((item) => item.classList.remove('active', 'has-active'));
+      nav.querySelectorAll('details').forEach((group) => group.removeAttribute('open'));
+      const access = nav.querySelector('a[href="/Access"]')!;
+      access.classList.add('active');
+      access.closest('details')!.setAttribute('open', '');
+      access.closest('details')!.querySelector('summary')!.classList.add('has-active');
+    });
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const reference = await navigation(page);
     const referenceMenu = await accountMenu(page);
     const referenceNotices = await notices(page);
-    // Razor's tag helper retains this reference route's ambient optional id on its own link.
-    // Assert that one known alias, then compare it as the canonical Angular-owned destination.
-    const access = reference.items.find((item) => item.label === 'My access');
-    expect(access?.url).toBe('/Access/Index/legacy');
-    if (access) access.url = '/Access';
     await screenshot(page, info, `${account}-${theme}-legacy`);
 
     const angular = await page.goto('/aCcEsS/INDEX');
     expect(angular?.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
-    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
     // The boot script applied the theme from the cookie the Legacy UI reads.
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page.locator('.sidenav a.active')).toHaveAttribute('aria-current', 'page');
@@ -117,6 +121,7 @@ export async function verifySidebar(page: Page, info: TestInfo, account: 'admini
     }
     await expect(page.locator('style, [style]')).toHaveCount(0);
     await screenshot(page, info, `${account}-${theme}-angular`);
+    await verifyMyAccess(page, info, account, theme);
   }
 
   const signInRequests: string[] = [];

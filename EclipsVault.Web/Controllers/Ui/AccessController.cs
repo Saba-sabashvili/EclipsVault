@@ -1,13 +1,16 @@
-using System.Security.Claims;
 using EclipsVault.Core.Application.Abac;
 using EclipsVault.Core.Domain.Enums;
 using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
-using EclipsVault.Web.Models;
+using EclipsVault.Web.Models.Ui;
+using EclipsVault.Web.Middleware;
+using EclipsVault.Web.Services;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace EclipsVault.Web.Controllers;
+namespace EclipsVault.Web.Controllers.Ui;
 
 /// <summary>
 /// Self-service "My access": explains, in plain language, what secrets the signed-in user can open
@@ -20,8 +23,12 @@ namespace EclipsVault.Web.Controllers;
 /// ever evaluates the caller's own clearance and project, and discloses no secrets, no other users,
 /// and not even the trusted-network ranges (only whether the current network is trusted).
 /// </summary>
-[Authorize(Policy = VaultPolicies.Session)]
-public sealed class AccessController : Controller
+[ApiController]
+[Route("api/ui/access")]
+[Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme, Policy = VaultPolicies.Session)]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+[Produces("application/json")]
+public sealed class AccessController : ControllerBase
 {
     // Rows run from most to least sensitive so the clearance cut-off reads top-to-bottom; columns
     // are the deployment environments.
@@ -32,17 +39,23 @@ public sealed class AccessController : Controller
         [SecretEnvironment.Development, SecretEnvironment.Staging, SecretEnvironment.Production];
 
     private readonly IAccessContextProvider _accessContext;
+    private readonly IAntiforgery _antiforgery;
 
-    public AccessController(IAccessContextProvider accessContext) => _accessContext = accessContext;
+    public AccessController(IAccessContextProvider accessContext, IAntiforgery antiforgery)
+    {
+        _accessContext = accessContext;
+        _antiforgery = antiforgery;
+    }
 
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken ct)
+    public async Task<ActionResult<AccessResponse>> Get(CancellationToken ct)
     {
-        var projectClaim = User.FindFirstValue(VaultClaimTypes.Project);
-        if (User.GetClearanceOrNull() is not { } clearance || projectClaim is null)
+        var projectClaim = User.GetProject();
+        if (User.GetClearanceOrNull() is not { } clearance || projectClaim.Length == 0)
         {
             // Missing vault attribute claims — a stale session; send it to sign out.
-            return RedirectToAction("Logout", "Account");
+            UiAntiforgery.IssueToken(HttpContext, _antiforgery);
+            return UiApiProblem.StaleSession();
         }
 
         var context = await _accessContext.CurrentAsync(ct);
@@ -63,24 +76,24 @@ public sealed class AccessController : Controller
                 var resource = new ResourceAttributes(environment, sensitivity, projectClaim);
                 var decision = SecretAccessPolicy.Evaluate(
                     new SubjectAttributes(clearance, projectClaim), resource, requestContext);
-                return new AccessCell(environment, decision.IsAllowed, ShortReason(decision));
+                return new AccessCellResponse(environment.ToString(), decision.IsAllowed, ShortReason(decision));
             }).ToList();
-            return new AccessRow(sensitivity, cells);
+            return new AccessRowResponse(sensitivity.ToDisplayName(), (int)sensitivity, cells);
         }).ToList();
 
-        return View(new MyAccessViewModel
-        {
-            Clearance = clearance,
-            ProjectKey = projectClaim,
-            SourceIp = context.SourceIp?.ToString() ?? "unknown",
-            IsTrustedNetwork = context.IsTrustedNetwork,
-            IsProductionWindowOpen = context.IsWithinProductionWindow,
-            WindowStartHour = context.WindowStartHour,
-            WindowEndHour = context.WindowEndHour,
-            WindowZone = context.WindowZoneLabel,
-            Environments = Environments,
-            Rows = rows
-        });
+        return new AccessResponse(
+            clearance.ToDisplayName(),
+            (int)clearance,
+            projectClaim,
+            clearance == ClearanceLevel.TopSecret,
+            context.SourceIp?.ToString() ?? "unknown",
+            context.IsTrustedNetwork,
+            context.IsWithinProductionWindow,
+            context.WindowStartHour,
+            context.WindowEndHour,
+            context.WindowZoneLabel,
+            Environments.Select(environment => environment.ToString()).ToArray(),
+            rows);
     }
 
     /// <summary>

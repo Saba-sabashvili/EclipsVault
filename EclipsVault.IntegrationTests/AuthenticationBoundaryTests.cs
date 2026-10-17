@@ -55,8 +55,7 @@ public sealed class AuthenticationBoundaryTests(VaultFixture vault)
     }
 
     /// <summary>
-    /// Pins what a bookmark sees. Until #52 deletes My access's Razor controller, that controller also
-    /// requires a session at this URL, so this cannot yet tell which of the two answered.
+    /// Pins what a bookmark sees before the Angular document is served.
     /// </summary>
     [Fact]
     public async Task An_anonymous_request_for_an_angular_owned_path_is_sent_to_sign_in()

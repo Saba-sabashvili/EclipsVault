@@ -1,5 +1,5 @@
 import { Route, UrlSegment, UrlSegmentGroup } from '@angular/router';
-import { AccountPage } from './account/account-page';
+import { AccessPage } from './access/access-page';
 import { routes } from './app.routes';
 
 /** The route the router picks for `url`: the first whose matcher accepts its segments. */
@@ -19,7 +19,7 @@ describe('routes', () => {
       const route = routeFor(url);
 
       expect(route).toBeDefined();
-      expect(await route?.loadComponent?.()).toBe(AccountPage);
+      expect(await route?.loadComponent?.()).toBe(AccessPage);
     },
   );
 

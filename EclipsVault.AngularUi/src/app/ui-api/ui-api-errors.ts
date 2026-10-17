@@ -1,6 +1,6 @@
-import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
-import { DOCUMENT, inject } from '@angular/core';
-import { NEVER, catchError, throwError } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import { DOCUMENT, Injectable, inject } from '@angular/core';
+import { NEVER, Observable, catchError, shareReplay, switchMap, throwError } from 'rxjs';
 
 /** A failed UI API call, carrying the Problem Details `code` the server chose (ADR-0006). */
 export class UiApiError extends Error {
@@ -33,6 +33,28 @@ function toUiApiError(response: HttpErrorResponse): UiApiError {
   );
 }
 
+/** Coalesces stale responses from the shell and page into one antiforgery-protected sign-out. */
+@Injectable({ providedIn: 'root' })
+class StaleSessionSignOut {
+  private readonly http = inject(HttpClient);
+  private readonly document = inject(DOCUMENT);
+  private ending: Observable<never> | undefined;
+
+  end(): Observable<never> {
+    return this.ending ??= this.http.post('/Account/Logout', null, { responseType: 'text' }).pipe(
+      switchMap(() => {
+        this.document.location.assign('/Account/Login');
+        return NEVER;
+      }),
+      catchError(() => {
+        this.ending = undefined;
+        return throwError(() => new UiApiError(0, 'sign_out_failed', 'Could not sign out. Reload the page to try again.'));
+      }),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    );
+  }
+}
+
 /**
  * The one place the Angular UI reacts to UI API failures. A 401 (no session, or a revoked one)
  * sends the browser to sign-in; every other failure reaches the page as a {@link UiApiError}.
@@ -43,12 +65,14 @@ export const uiApiErrors: HttpInterceptorFn = (request, next) => {
   }
 
   const document = inject(DOCUMENT);
+  const staleSession = inject(StaleSessionSignOut);
   return next(request).pipe(
     catchError((error: unknown) => {
       if (!(error instanceof HttpErrorResponse)) {
         return throwError(() => error);
       }
       if (error.status === 401) {
+        if (toUiApiError(error).code === 'stale_session') return staleSession.end();
         document.location.assign(signInUrl(document.location));
         // The page is being left: nothing more for it to show.
         return NEVER;

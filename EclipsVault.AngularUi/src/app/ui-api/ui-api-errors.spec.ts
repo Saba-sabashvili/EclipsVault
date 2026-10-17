@@ -39,6 +39,41 @@ describe('uiApiErrors', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  it('ends a stale session through sign-out before leaving for sign-in, once for concurrent failures', () => {
+    const next = vi.fn();
+    const error = vi.fn();
+    http.get('/api/ui/me').subscribe({ next, error });
+    http.get('/api/ui/access').subscribe({ next, error });
+    for (const path of ['/api/ui/me', '/api/ui/access']) {
+      backend.expectOne(path).flush(
+        { status: 401, code: 'stale_session', title: 'Sign out and sign in again.' },
+        { status: 401, statusText: 'Unauthorized' },
+      );
+    }
+
+    expect(assign).not.toHaveBeenCalled();
+    const logout = backend.expectOne('/Account/Logout');
+    expect(logout.request.method).toBe('POST');
+    logout.flush('');
+    expect(assign).toHaveBeenCalledExactlyOnceWith('/Account/Login');
+    expect(next).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a failed stale-session sign-out without pretending the session ended, and permits retry', () => {
+    const error = vi.fn();
+    http.get('/api/ui/access').subscribe({ error });
+    backend.expectOne('/api/ui/access').flush({ code: 'stale_session' }, { status: 401, statusText: 'Unauthorized' });
+    backend.expectOne('/Account/Logout').flush('', { status: 503, statusText: 'Unavailable' });
+    expect(assign).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ code: 'sign_out_failed' }));
+
+    http.get('/api/ui/access').subscribe();
+    backend.expectOne('/api/ui/access').flush({ code: 'stale_session' }, { status: 401, statusText: 'Unauthorized' });
+    backend.expectOne('/Account/Logout').flush('');
+    expect(assign).toHaveBeenCalledExactlyOnceWith('/Account/Login');
+  });
+
   it.each([
     [503, 'audit_unavailable'],
     [404, 'not_found'],

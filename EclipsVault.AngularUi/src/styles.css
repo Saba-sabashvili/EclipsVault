@@ -773,3 +773,33 @@ kbd {
 
 /* Icon hosts add no layout box around the Legacy SVGs. */
 app-nav-icon, app-sidebar-nav, app-account-menu, app-command-palette { display: contents; }
+
+/* ---- My access (permission matrix) ------------------------------------ */
+.access-matrix { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 520px; }
+.access-matrix th, .access-matrix td { padding: 0.6rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.access-matrix tr:last-child th, .access-matrix tr:last-child td { border-bottom: none; }
+.access-matrix thead th { color: var(--text-muted); font-weight: 600; font-size: 0.8rem; }
+.access-matrix tbody th { font-weight: 500; }
+.cell-icon { width: 15px; height: 15px; vertical-align: middle; margin-right: 0.35rem; }
+.access-matrix td span { vertical-align: middle; }
+.cell-allow { color: var(--ok); background: var(--ok-soft); }
+.cell-deny { color: var(--text-muted); }
+.access-hint { margin: 0.9rem 0 0; font-size: 0.82rem; line-height: 1.5; }
+
+.panel.callout-warn { border-left: 3px solid var(--warn); }
+
+
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.badge.tone-ok { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
+.badge.tone-warn { color: var(--warn); border-color: transparent; background: var(--warn-soft); }
+.badge.tone-danger { color: var(--danger); border-color: transparent; background: var(--danger-soft); }
+.badge.tone-muted { color: var(--text-muted); }
+.badge.tone-critical {
+    color: #fff;
+    border-color: transparent;
+    background: var(--danger);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.68rem;
+}

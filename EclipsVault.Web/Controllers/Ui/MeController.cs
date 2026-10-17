@@ -26,9 +26,6 @@ public sealed class MeController(
     IAntiforgery antiforgery,
     LicenseNudgeState licenseNudge) : ControllerBase
 {
-    /// <summary>The cookie Angular's built-in XSRF support reads, by its default name.</summary>
-    private const string XsrfCookie = "XSRF-TOKEN";
-
     [HttpGet]
     public async Task<ActionResult<MeResponse>> Get()
     {
@@ -37,7 +34,8 @@ public sealed class MeController(
         var project = User.GetProject();
         if (User.GetClearanceOrNull() is not { } clearance || project.Length == 0)
         {
-            return UiApiProblem.Unauthenticated();
+            UiAntiforgery.IssueToken(HttpContext, antiforgery);
+            return UiApiProblem.StaleSession();
         }
 
         var areas = new List<string>();
@@ -49,7 +47,7 @@ public sealed class MeController(
             }
         }
 
-        IssueXsrfToken();
+        UiAntiforgery.IssueToken(HttpContext, antiforgery);
 
         return new MeResponse(
             User.GetUsername(),
@@ -59,23 +57,6 @@ public sealed class MeController(
             areas,
             Url.Action("Avatar", "Profile", new { v = User.GetAvatarVersion() })!,
             areas.Contains(UiAreas.License) ? LicenseNoticeFor(licenseNudge) : null);
-    }
-
-    /// <summary>
-    /// The request token only, readable by script so Angular can echo it in the header antiforgery
-    /// accepts. On its own it is worthless: it must match the HttpOnly antiforgery cookie and this
-    /// session's identity, which is why it is reissued here rather than once per sign-in.
-    /// </summary>
-    private void IssueXsrfToken()
-    {
-        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
-        Response.Cookies.Append(XsrfCookie, tokens.RequestToken!, new CookieOptions
-        {
-            HttpOnly = false,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
-            Path = "/",
-        });
     }
 
     /// <summary>The Legacy UI's licence banner, word for word, or null when it would not show.</summary>
