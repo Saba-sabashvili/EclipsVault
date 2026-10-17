@@ -11,6 +11,12 @@ native Skia includes its upstream third-party notices. Keep the package licenses
 redistributed native assets. The PKCS dependency is centrally pinned to **10.0.13**. Lockfiles are
 regenerated, and locked restore, release build and the transitive vulnerability audit remain gates.
 
+Publishing copies the full upstream license and native notices from the locked packages into
+`ThirdPartyNotices/SkiaSharp/LICENSE.txt` and `ThirdPartyNotices/SkiaSharp/THIRD-PARTY-NOTICES.txt`.
+The root Dockerfile includes those files through its existing copy of the publish output. For the
+pinned version, the MIT license and native notices are identical across the Linux, Windows and
+macOS packages; one complete copy of each text covers the bundled Skia assets.
+
 The complete ImageSharp surface at v1.4.0 was:
 
 - `Media/ImageSharpAvatarProcessor.cs`: format identification, bounded decode, center crop, resize
