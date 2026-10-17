@@ -209,26 +209,39 @@ public sealed partial class SignInReturnUrlTests(VaultFixture vault)
         var (_, _, _, client) = await EnrollAccountAsync();
         using (client)
         {
-            // Refused in every spelling the browser or Kestrel could read as a second-factor action:
-            // backslashes separate, escapes decode, dot segments resolve, case is ignored.
+            // Every Account page but Denied is refused as written, before any decoding, as is any path
+            // that reads as something else once decoded or resolved. A second-factor page would loop.
             (string Target, string Expected)[] targets =
             [
                 ("/Account/Totp", "/Secrets"), ("/Account/RecoveryCode", "/Secrets"), ("/Account/EnrollTotp", "/Secrets"),
                 ("/account/TOTP/", "/Secrets"), ("/Account/Totp?ReturnUrl=%2FAccess", "/Secrets"),
-                ("/Account/Totp/1#code", "/Secrets"), ("/Account\\Totp", "/Secrets"), ("/%41ccount/%54otp", "/Secrets"),
-                ("/Secrets/../Account/Totp", "/Secrets"), ("/Secrets/%2e%2e/Account/Totp", "/Secrets"),
-                ("/Account//Totp", "/Secrets"), ("~/Account/Totp", "/Secrets"),
-                ("/Account/Denied", "/Account/Denied"), ("/Account/Totpx", "/Account/Totpx"),
+                ("/Account/Totp/1#code", "/Secrets"), ("/Account\\Totp", "/Secrets"), ("~/Account/Totp", "/Secrets"),
+                ("/Account//Totp", "/Secrets"), ("/Secrets/../Account/Totp", "/Secrets"), ("/Secrets\\..\\Account\\Totp", "/Secrets"),
+                ("/Secrets/%2e%2e/Account/Totp", "/Secrets"),
+                // Kestrel keeps %2F inside a segment and the default route binds it to {id}.
+                ("/Account/Totp/%2F..", "/Secrets"), ("/Account/Totp/..%2F", "/Secrets"),
+                ("/Account/Totp/x%2F..%2F..", "/Secrets"), ("/Account/RecoveryCode/%2F..", "/Secrets"),
+                ("/Account/EnrollTotp/..%2F", "/Secrets"),
+                ("/Account/Totp/%252F..", "/Secrets"), ("/%2541ccount/Totp", "/Secrets"), ("/Account%252FTotp", "/Secrets"),
+                ("/%41ccount/Totp", "/Secrets"), ("/%41ccount/%54otp", "/Secrets"), ("/Account%2FTotp", "/Secrets"),
+                ("/Account", "/Secrets"), ("/Account;x/Totp", "/Secrets"), ("/Account/Totpx", "/Secrets"),
+                ("/Account/Recover", "/Secrets"), ("/Account/Login?ReturnUrl=%2FAccess", "/Secrets"),
+                ("/Account/Denied", "/Account/Denied"), ("/Account/Denied?x=1", "/Account/Denied?x=1"),
+                ("/Account/Denied#top", "/Account/Denied#top"), ("/Access?view=mine", "/Access?view=mine"),
                 // Location carries only ASCII. Model binding decodes %C3%A9 to é, which must not
-                // reach LocalRedirect; the still-encoded form is an ordinary local target.
+                // reach LocalRedirect; the still-encoded query is an ordinary local target.
                 ("/Secrets?q=é", "/Secrets"), ("/Secrets?q=%C3%A9", "/Secrets?q=%C3%A9")
             ];
+            var wrong = new List<string>();
             foreach (var (target, expected) in targets)
             {
                 var response = await client.GetAsync(WithReturnUrl("/Account/Login", target));
-                Assert.True(HttpStatusCode.Redirect == response.StatusCode, $"{target} answered {response.StatusCode}");
-                Assert.True(expected == response.Headers.Location?.OriginalString, $"{target} went to {response.Headers.Location}");
+                if (response.StatusCode != HttpStatusCode.Redirect || response.Headers.Location?.OriginalString != expected)
+                {
+                    wrong.Add($"{target} answered {(int)response.StatusCode} {response.Headers.Location}");
+                }
             }
+            Assert.True(wrong.Count == 0, string.Join(Environment.NewLine, wrong));
         }
     }
 
@@ -288,8 +301,8 @@ public sealed partial class SignInReturnUrlTests(VaultFixture vault)
             Assert.Equal("/Secrets", final.Headers.Location?.OriginalString);
         }
 
-        // Model binding decodes the transport once. Percent-encoded separators within a local path
-        // remain path text in Location; they do not become an authority or a second decoding step.
+        // Model binding decodes the transport once. A path that is still percent-encoded after that is
+        // refused rather than interpreted, so an encoded separator never becomes an authority.
         (string? Target, string Expected)[] targets =
         [
             ("/Access?view=mine&sort=name#matrix", "/Access?view=mine&sort=name#matrix"),
@@ -298,7 +311,7 @@ public sealed partial class SignInReturnUrlTests(VaultFixture vault)
             ("\\\\outside.example/", "/Secrets"), ("/\t/outside.example", "/Secrets"),
             ("/\r\nLocation: https://outside.example", "/Secrets"), ("/\0/outside.example", "/Secrets"),
             ("https%3A%2F%2Foutside.example", "/Secrets"), ("%2f%2foutside.example", "/Secrets"),
-            ("/%2foutside.example", "/%2foutside.example"), ("/%5coutside.example", "/%5coutside.example"),
+            ("/%2foutside.example", "/Secrets"), ("/%5coutside.example", "/Secrets"),
             ("/folder\\child", "/folder\\child"), ("~/Access", "/Access"),
             ("/Account/Totp", "/Secrets"), ("/Secrets?q=é", "/Secrets")
         ];

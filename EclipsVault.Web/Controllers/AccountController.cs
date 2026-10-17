@@ -77,35 +77,27 @@ public sealed class AccountController : Controller
         => Url.IsLocalUrl(returnUrl)
             // Location carries only ASCII: LocalRedirect would throw after the session exists.
             && returnUrl.All(c => c is >= ' ' and <= '~')
-            && !IsSecondFactorPage(returnUrl)
+            && !MayLeadIntoAccount(returnUrl)
                 ? returnUrl
                 : Url.Action("Index", defaultController)!;
 
-    // These accept only the MFA-pending cookie, which completing sign-in deletes. A full session sent
-    // there is challenged back to Login with the page as its target, and Login sends it straight
-    // back. Every other Account page either serves a full session or ends at Login without a target.
-    private static readonly string[] SecondFactorActions = [nameof(Totp), nameof(RecoveryCode), nameof(EnrollTotp)];
-
-    private static bool IsSecondFactorPage(string target)
+    // A second-factor page accepts only the MFA-pending cookie, which completing sign-in deletes, so a
+    // full session sent there is challenged back to Login with the page as its target, and Login sends
+    // it straight back. Rather than predict how the browser and Kestrel decode and route a path, judge
+    // it as written: refuse every Account page except Denied, the only one a full session is sent to,
+    // and any path that reads differently once decoded or resolved. The cost is the default page.
+    private static bool MayLeadIntoAccount(string target)
     {
-        // Read the path as the browser and Kestrel will: backslashes separate, escapes decode, dot
-        // segments resolve, case is ignored. Reading too much into it only costs the default page.
-        var path = Uri.UnescapeDataString(target.TrimStart('~').Split('?', '#')[0].Replace('\\', '/'));
-        var segments = new List<string>();
-        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        // The browser treats a backslash as a slash; that is the one rewrite applied here.
+        var path = (target.StartsWith('~') ? target[1..] : target).Split('?', '#')[0].Replace('\\', '/');
+        if (path.Contains('%') || path.Split('/').Any(segment => segment is "." or ".."))
         {
-            if (segment == "..")
-            {
-                if (segments.Count > 0) segments.RemoveAt(segments.Count - 1);
-            }
-            else if (segment != ".")
-            {
-                segments.Add(segment);
-            }
+            return true;
         }
-        return segments.Count >= 2
-            && segments[0].Equals("Account", StringComparison.OrdinalIgnoreCase)
-            && SecondFactorActions.Contains(segments[1], StringComparer.OrdinalIgnoreCase);
+        return path != "/Account/Denied"
+            && (path.Equals("/Account", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/Account/", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/Account;", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Stamps the SSO button's state onto the model — it is not part of the posted form.</summary>
