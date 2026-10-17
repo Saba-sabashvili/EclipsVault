@@ -118,9 +118,9 @@ test('sign in, lazy-load My access with Trusted Types, visit Legacy UI and retur
 
   await page.goto('/Access/Index');
   await expect(page.getByRole('heading', { name: 'My access', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'My access', exact: true }).click();
-  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
 
+  // Before any in-app navigation, so page.url() is the document's own address. A router link changes
+  // the address bar while the violation report keeps the address the document was loaded from.
   await test.step('Trusted Types rejects a raw DOM assignment before it changes the DOM', async () => {
     // One precise, required violation is intentional; the shared fixture still rejects every other one.
     browserHealth.expectCspViolation({
@@ -165,6 +165,10 @@ test('sign in, lazy-load My access with Trusted Types, visit Legacy UI and retur
       disposition: 'enforce',
     });
   });
+
+  await page.getByRole('link', { name: 'My access', exact: true }).click();
+  await expect(page).toHaveURL(/\/Access$/);
+  await expect(page.locator('.access-matrix tbody tr')).toHaveCount(4);
 
   const legacyDocument = page.waitForResponse((response) => response.request().isNavigationRequest());
   await page.getByRole('link', { name: 'Secrets', exact: true }).click();
