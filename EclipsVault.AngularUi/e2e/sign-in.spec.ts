@@ -31,6 +31,16 @@ async function signIn(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/Secrets$/);
 }
 
+/**
+ * Waits for a new production throttle window. Every credential POST in this suite comes from one
+ * address, and the vault allows 11 per clock-aligned 120-second window. A scenario that needs
+ * several starts its own window instead of depending on how the earlier tests happened to time.
+ */
+async function freshThrottleWindow(page: Page): Promise<void> {
+  const windowMilliseconds = 120_000;
+  await page.waitForTimeout(windowMilliseconds - Date.now() % windowMilliseconds + 1_000);
+}
+
 /** The ids of the sessions Signed-in devices offers to sign out: every session but the current one. */
 async function otherSessionIds(page: Page): Promise<string[]> {
   await page.goto('/Sessions');
@@ -467,9 +477,11 @@ test('an access failure shows a retry and the next request restores the live gri
 });
 
 test('a session revoked from another browser signs in again and returns to My access', async ({ page, browserHealth }) => {
-  // Three sign-ins, each of which may wait for a new authenticator step.
-  test.setTimeout(210_000);
+  // A fresh throttle window, then three sign-ins, each of which may wait for a new authenticator step.
+  test.setTimeout(330_000);
   if (!authenticatorSecret) throw new Error('Runs after the sign-in test, which enrolls the authenticator');
+  // Its six credential POSTs, with the earlier tests' seven, would exceed one window's budget.
+  await freshThrottleWindow(page);
 
   // Every session but the first browser's, as Signed-in devices shows them to it.
   let othersOfFirst: string[] = [];
@@ -560,10 +572,8 @@ test('a real passkey follows the server redirect for local and external return t
     await page.getByRole('button', { name: 'Add a passkey', exact: true }).click();
     await expect(page.getByText('Passkey added. You can now sign in with it.')).toBeVisible();
 
-    // Start with a fresh production throttle window after the password/TOTP scenarios. The
-    // limiter remains enabled; each passkey attempt below consumes its ordinary two requests.
-    const windowMilliseconds = 120_000;
-    await page.waitForTimeout(windowMilliseconds - Date.now() % windowMilliseconds + 1_000);
+    // Each passkey attempt below consumes its ordinary two credential POSTs.
+    await freshThrottleWindow(page);
     for (const [returnUrl, expected] of [
       ['/Access?view=mine#matrix', '/Access?view=mine#matrix'],
       ['https://outside.example/', '/Secrets'],
