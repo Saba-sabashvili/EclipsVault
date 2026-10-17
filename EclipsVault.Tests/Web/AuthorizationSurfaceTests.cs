@@ -209,6 +209,54 @@ public class AuthorizationSurfaceTests
             string.Join("\n  ", overriding));
     }
 
+    /// <summary>
+    /// <c>/api/ui/me</c> offers each Area by evaluating the policy <see cref="UiAreas"/> names for it
+    /// (ADR-0012). That table restates what the Area's controller enforces, so this pins the two
+    /// together: an Area must name a policy its controller carries, and the controller may carry no
+    /// other policy than <c>Session</c>. Otherwise the sidebar could offer a page that refuses the
+    /// user, or a controller could gain a stricter policy the Area list never hears about.
+    /// </summary>
+    [Fact]
+    public void EveryUiArea_NamesThePolicyItsControllerEnforces()
+    {
+        var controllers = new Dictionary<string, Type>
+        {
+            ["overview"] = typeof(HomeController),
+            ["secrets"] = typeof(SecretsController),
+            ["dynamic-secrets"] = typeof(DynamicSecretsController),
+            ["shared-with-me"] = typeof(SecretsController),
+            ["shared-by-me"] = typeof(SecretsController),
+            ["access"] = typeof(AccessController),
+            ["access-requests"] = typeof(AccessRequestsController),
+            ["security"] = typeof(SecurityController),
+            ["sign-ins"] = typeof(SignInsController),
+            ["sessions"] = typeof(SessionsController),
+            ["activity"] = typeof(ActivityController),
+            ["data"] = typeof(DataController),
+            ["profile"] = typeof(ProfileController),
+            ["users"] = typeof(AdminController),
+            ["networks"] = typeof(AdminController),
+            ["service-accounts"] = typeof(ServiceAccountsController),
+            ["audit"] = typeof(AuditController),
+            ["notifications"] = typeof(NotificationsController),
+            ["encryption"] = typeof(EncryptionController),
+            ["license"] = typeof(LicenseController),
+        };
+
+        Assert.Equal(controllers.Keys.Order(StringComparer.Ordinal),
+            UiAreas.All.Select(area => area.Key).Order(StringComparer.Ordinal));
+
+        foreach (var (key, policy) in UiAreas.All)
+        {
+            var enforced = controllers[key].GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+                .Select(attribute => attribute.Policy)
+                .OfType<string>()
+                .ToList();
+            Assert.True(enforced.Contains(policy) && enforced.All(name => name == VaultPolicies.Session || name == policy),
+                $"Area '{key}' is offered by '{policy}', but {controllers[key].Name} enforces: {string.Join(", ", enforced)}");
+        }
+    }
+
     private static string Name(MethodInfo action)
         => $"{action.DeclaringType!.Name}.{action.Name}";
 

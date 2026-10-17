@@ -228,7 +228,9 @@ try
 
         // Default-deny: everything requires an authenticated session unless
         // explicitly marked [AllowAnonymous].
-        options.FallbackPolicy = options.GetPolicy(VaultPolicies.Session);
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
     });
 
     // Brute-force damping on the authentication surface, partitioned per source IP. Applied by

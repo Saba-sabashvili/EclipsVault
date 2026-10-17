@@ -40,9 +40,9 @@
 
 /* ---- Tokens ---------------------------------------------------- */
 /* The dark palette is the default. A light palette is provided under
-   :root[data-theme="light"]; the server stamps data-theme on <html> from the
-   EclipsVault.Theme cookie (no inline script, no flash), and the sidebar toggle
-   flips it live. Components reference tokens only, so this block is the whole theme. */
+   :root[data-theme="light"]. The Angular document does not set data-theme yet:
+   theme boot and the toggle arrive with the account menu (#50). Components
+   reference tokens only, so this block is the whole theme. */
 :root {
     color-scheme: dark;
 

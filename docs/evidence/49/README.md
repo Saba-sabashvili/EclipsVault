@@ -15,7 +15,7 @@ Run on Node 24.22.0 and .NET SDK 10.0.402.
 | --- | --- |
 | `dotnet restore --locked-mode` | Passed |
 | `dotnet build EclipsVault.slnx -c Release` | Passed, no warnings |
-| .NET unit suite with the documented hang guard | 595 passed |
+| .NET unit suite with the documented hang guard | 596 passed |
 | Production integration suite with SQL Server and the documented hang guard | 43 passed |
 | `npm run lint` (includes browser TypeScript checking and lint guard tests) | Passed |
 | `npm test -- --watch=false` | 22 passed |
@@ -28,8 +28,9 @@ Run on Node 24.22.0 and .NET SDK 10.0.402.
 | `npm run e2e` | 3 passed; both accounts/themes, cross-UI navigation, Trusted Types and revocation |
 | `npm run e2e:verify-guards` | Passed; all 8 deliberate failures detected by the shared fixture |
 
-Browser runs reuse `E2E_IMAGE=eclipsvault:e2e-49`, image ID
-`sha256:1720457d99649fbe42711061d919b7dcd3a44681bf3b8873a9e0aa59ebecd248`.
+Both browser runs reuse one image built from the final tree, `E2E_IMAGE=eclipsvault:e2e-49-r2`,
+image ID `sha256:b367fc1c5a6a23d07abb8a4045bfa6f8c7a71f047f2b5da0affc1641b84a72c2`. Its screenshots
+are byte-identical to those from the pre-review image.
 Each run creates its own throwaway production vault and SQL Server with real password/TOTP sign-in,
 TLS, Secure cookies, production CSP and Trusted Types. No development seed accounts are used.
 
@@ -57,15 +58,37 @@ switching remain in #50. Both token palettes are exercised here without adding t
 
 ## Security review
 
-Pending.
+No defects. The `Session` policy is the previous default `RequireAuthenticatedUser()` rule under a
+name, so no controller gained or lost access. Every Area key matches its controller's policy. Areas
+are evaluated per request against the validated cookie principal (revocation applies, `MfaPending`
+gets 401) and are never cached. The response discloses nothing configuration-dependent. Icons are
+fixed template nodes and link URLs come from a constant table. No style injection, sanitization
+bypass, new endpoint or weakened browser-health guard.
 
 ## Standards
 
-Pending.
+No hard violations. Fixed after review:
+
+- The fallback policy is built independently again rather than read back from the `Session`
+  registration, keeping the two guards `VaultController` documents as independent, and its doc
+  names the policy.
+- `UiAreas` restated controller policies with nothing tying them together; a reflection test now
+  pins each Area's policy to its controller's `[Authorize]` (mutation-checked: setting `license`
+  to `Session` fails it).
+- The ported stylesheet's theme comment claimed Angular already stamps `data-theme`; it now says
+  that arrives with #50.
+
+Left as judgement calls: Area keys are plain strings shared by C# and TypeScript (the generated
+type is `string[]`); CONTEXT.md defines an Area as a migration unit, while #49 and this API use it
+per sidebar entry.
 
 ## Spec
 
-Pending.
+All acceptance criteria met. Policy drift is now pinned by the test above. Noted, not changed:
+the side-by-side check covers the navigation list rather than the brand mark; the My access page
+and content footer adopt the Legacy layout classes; active matching is exact (`/x`, `/x/index`),
+sufficient while My access is the only Angular-owned page; and the shell shows no navigation if
+`/api/ui/me` fails.
 
 All results above are local checks. No claim about hosted CI is made. Nothing has been pushed and
 #49 remains open for the owner to review this evidence.

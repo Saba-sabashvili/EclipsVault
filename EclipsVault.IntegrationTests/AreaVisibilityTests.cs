@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Xunit;
 
 namespace EclipsVault.IntegrationTests;
@@ -13,7 +14,7 @@ public sealed class AreaVisibilityTests(VaultFixture vault)
         var response = await (await vault.AdminClientAsync()).GetAsync("/api/ui/me");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var me = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var me = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal([
             "overview", "secrets", "dynamic-secrets", "shared-with-me", "shared-by-me",
             "access", "access-requests", "security", "sign-ins", "sessions", "activity", "data", "profile",
@@ -28,7 +29,7 @@ public sealed class AreaVisibilityTests(VaultFixture vault)
         var response = await session.Client.GetAsync("/api/ui/me");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var me = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var me = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal([
             "overview", "secrets", "dynamic-secrets", "shared-with-me", "shared-by-me",
             "access", "access-requests", "security", "sign-ins", "sessions", "activity", "data", "profile",

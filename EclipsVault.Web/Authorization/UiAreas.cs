@@ -4,9 +4,9 @@ namespace EclipsVault.Web.Authorization;
 /// The UI's stable Area keys and the named policies their pages enforce. Resource-level secret
 /// authorization still runs at the endpoints; being offered Secrets grants no access to a secret.
 /// </summary>
-internal static class UiAreas
+public static class UiAreas
 {
-    internal static readonly (string Key, string Policy)[] All =
+    public static readonly (string Key, string Policy)[] All =
     [
         ("overview", VaultPolicies.Session),
         ("secrets", VaultPolicies.Session),
