@@ -55,7 +55,7 @@ The server-rendered pages being replaced. Shrinks to nothing by the end of the m
 _Avoid_: Old UI, MVC frontend
 
 **Area**:
-A group of related pages that migrates as one unit (e.g. Profile, Secrets, Administration). At any moment an area belongs wholly to either the Legacy UI or the Angular UI, never both.
+A group of related pages behind one sidebar entry (e.g. Profile, Secrets, Users), named by a stable key such as `users` in `/api/ui/me`. An area migrates as one unit; a migration step may move several at once, as the Administration step moves all the administration areas. At any moment an area belongs wholly to either the Legacy UI or the Angular UI, never both.
 _Avoid_: Module, feature, screen
 
 **Angular UI**:
