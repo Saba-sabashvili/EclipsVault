@@ -41,7 +41,7 @@ Docker Compose:
 ```yaml
 services:
   eclipsvault:
-    image: ghcr.io/saba-sabashvili/eclipsvault:1.1.0
+    image: ghcr.io/sabysabashvily/eclipsvault:1.1.0
     environment:
       ECLIPSVAULT_LICENSE: "EVLIC1.eyJ..."
 ```

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Writes the UI API's OpenAPI document at build time (ADR-0007), from which the Angular UI's
+       TypeScript types are generated. Never ships: the image publishes EclipsVault.Web alone. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <UiApiDocumentPath>$(MSBuildProjectDirectory)/obj/ui-api.openapi.json</UiApiDocumentPath>
+    <DotnetHost>$(DOTNET_HOST_PATH)</DotnetHost>
+    <DotnetHost Condition=" '$(DotnetHost)' == '' ">dotnet</DotnetHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EclipsVault.Web\EclipsVault.Web.csproj" />
+  </ItemGroup>
+
+  <Target Name="WriteUiApiDocument" AfterTargets="Build">
+    <Exec Command="&quot;$(DotnetHost)&quot; &quot;$(TargetPath)&quot; &quot;$(UiApiDocumentPath)&quot;" />
+  </Target>
+
+</Project>

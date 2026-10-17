@@ -103,6 +103,22 @@ public class LayeringTests
     }
 
     /// <summary>
+    /// The UI API tells a stale session apart from a low one. <c>GetClearance()</c> turns a missing
+    /// clearance claim into Standard, so an endpoint using it would show a session a clearance the
+    /// server never issued; <c>GetClearanceOrNull()</c> lets it refuse instead, as My access always has.
+    /// </summary>
+    [Fact]
+    public void The_ui_api_reads_clearance_fail_closed()
+    {
+        var offenders = FilesContaining(Path.Combine("EclipsVault.Web", "Controllers", "Ui"), "GetClearance()");
+
+        Assert.True(
+            offenders.Count == 0,
+            "UI API controllers must use GetClearanceOrNull() and refuse a session without the claim. Offending files: " +
+            string.Join(", ", offenders));
+    }
+
+    /// <summary>
     /// The web layer speaks in DTOs, never persisted entities — which is why controllers pass
     /// resource types as string literals rather than importing <c>Domain.Entities</c>. An entity that
     /// reaches a view is an entity a view can be tempted to mutate.

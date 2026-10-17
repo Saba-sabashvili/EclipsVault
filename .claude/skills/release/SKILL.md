@@ -36,22 +36,23 @@ git push origin vX.Y.Z
 
 ## 5. Verify as an anonymous user
 
-Image tags have no `v`: git tag `v1.5.0` publishes `ghcr.io/saba-sabashvili/eclipsvault:1.5.0`, plus
+Image tags have no `v`: git tag `v1.5.0` publishes `ghcr.io/sabysabashvily/eclipsvault:1.5.0`, plus
 `:1.5` and `:latest` for a normal release. A prerelease gets only its full version tag.
 
 ```bash
-TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:saba-sabashvili/eclipsvault:pull" | jq -r .token)
+TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:sabysabashvily/eclipsvault:pull" | jq -r .token)
 ACCEPT='application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
 for ref in X.Y.Z X.Y latest sha256-<digest-hex>.sig sha256-<digest-hex>.att; do
   printf '%s ' "$ref"
   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" \
-    "https://ghcr.io/v2/saba-sabashvili/eclipsvault/manifests/$ref"
+    "https://ghcr.io/v2/sabysabashvily/eclipsvault/manifests/$ref"
 done
 ```
 
 Every line must print `200`. The `.sig` and `.att` tags hold the signature and the SBOM attestation;
 an image whose signature cannot be fetched fails `cosign verify` even though the image itself pulls.
-If `cosign` is installed, also run the first command in `docs/VERIFYING.md` against the new version.
+If `cosign` is installed, set `VERSION` to the released version and use the current-owner `IDENTITY`
+from `docs/VERIFYING.md`, then run its `cosign verify` command.
 
 ## 6. Publish the GitHub Release
 

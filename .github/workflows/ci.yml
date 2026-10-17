@@ -15,15 +15,20 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Read-only, whatever the repository's default is. Every job here builds, tests or scans, and each one
+# runs third-party code (packages, tools, actions) that has no use for a token that can write.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -39,7 +44,8 @@ jobs:
         # --blame-hang-timeout aborts (with a dump naming the culprit) if a test hangs, rather than
         # letting one stuck test block the job to the 6h ceiling. The suite runs in seconds, so 5m is
         # only ever reached by a genuine hang.
-        run: dotnet test --configuration Release --no-build --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type mini
+        # The unit project only: the integration project needs Docker and has its own job below.
+        run: dotnet test EclipsVault.Tests --configuration Release --no-build --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type mini
 
       # The step above has been promising a dump "naming the culprit" since PR #32, and the dump was
       # thrown away with the runner every time — which is most of why the intermittent hang has never
@@ -51,12 +57,177 @@ jobs:
       # Only on failure: a clean run deletes its own sequence file, so there is nothing to collect.
       - name: Upload hang evidence
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: EclipsVault.Tests/TestResults/**
           if-no-files-found: ignore
           retention-days: 30
+
+  # The HTTP integration tests (ADR-0010): the unmodified app in Production against a real SQL Server
+  # that Testcontainers starts on the runner's Docker, signed in through the real sign-in. Kept out of
+  # build-test so the unit suite stays Docker-free and fast. The hang timeout is longer than the unit
+  # job's because it also covers pulling and starting SQL Server before the first test.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      - name: Build
+        run: dotnet build EclipsVault.IntegrationTests --configuration Release --no-restore
+
+      # Header tests serve the real Angular document through its route table.
+      - name: Setup Node for Angular documents
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+          cache: npm
+          cache-dependency-path: EclipsVault.AngularUi/package-lock.json
+
+      - name: Build Angular documents
+        working-directory: EclipsVault.AngularUi
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Integration tests
+        run: dotnet test EclipsVault.IntegrationTests --configuration Release --no-build --verbosity normal --blame-hang-timeout 10m --blame-hang-dump-type mini
+
+      - name: Upload hang evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-hang-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: EclipsVault.IntegrationTests/TestResults/**
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # The Angular UI (ADR-0015), held to the npm supply-chain rules (ADR-0003). `npm run build` runs
+  # two checks of its own: before building, that the lockfile holds no runtime package outside
+  # @angular/*, rxjs and tslib (check-runtime-deps.mjs); after it, that index.html left wwwroot and
+  # carries no inline code for the CSP to block (check-index.mjs, ADR-0013).
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: EclipsVault.AngularUi
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # .nvmrc pins the same Node the Dockerfile's ui stage builds with.
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+          cache: npm
+          cache-dependency-path: EclipsVault.AngularUi/package-lock.json
+
+      # `npm ci` installs exactly the lockfile, and fails if package.json no longer matches it.
+      - name: Install (locked)
+        run: npm ci --ignore-scripts
+
+      # Regenerate from the web controllers without starting the vault or needing secrets/SQL Server.
+      - name: Setup .NET for the UI API contract
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Check generated UI API types
+        run: npm run check:api-types
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --watch=false
+
+      - name: Build-check tests
+        run: npm run test:build-checks
+
+      - name: Build
+        run: npm run build
+
+      # Dev packages too: a compromised build tool runs here and on every developer's machine.
+      # High and critical fail the job. Fix one by upgrading the package or pinning a patched version
+      # in `overrides`, never by suppressing the finding.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+  # Real Chromium against the release Dockerfile, SQL Server and a TLS-terminating proxy (ADR-0011).
+  # The harness generates disposable SQL/audit credentials; bootstrap credentials and KEK enter
+  # through the test environment, with no repository secrets or development seeding.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+          cache: npm
+          cache-dependency-path: EclipsVault.AngularUi/package-lock.json
+
+      - name: Install (locked)
+        working-directory: EclipsVault.AngularUi
+        run: npm ci --ignore-scripts
+
+      - name: Install Chromium
+        working-directory: EclipsVault.AngularUi
+        run: npx playwright install --with-deps chromium
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.0
+          cache-binary: false
+          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+
+      - name: Build the production image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: eclipsvault:e2e
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Browser end-to-end tests and guard probes
+        working-directory: EclipsVault.AngularUi
+        env:
+          E2E_IMAGE: eclipsvault:e2e
+        run: |
+          Seed__AdminPassword="E2e-$(openssl rand -hex 24)"
+          ECLIPSVAULT_KEK="$(openssl rand -base64 32)"
+          export Seed__AdminPassword ECLIPSVAULT_KEK
+          echo "::add-mask::$Seed__AdminPassword"
+          echo "::add-mask::$ECLIPSVAULT_KEK"
+          npm run e2e
+          npm run e2e:verify-guards
+
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            EclipsVault.AngularUi/test-results/
+            EclipsVault.AngularUi/playwright-report/
+            EclipsVault.AngularUi/guard-results/
+          if-no-files-found: ignore
+          retention-days: 3
 
   # The vault targets two database engines, so every model change needs a migration in BOTH sets.
   # One that reaches only one engine leaves the schemas silently different, and nothing notices
@@ -65,10 +236,10 @@ jobs:
   migrations:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -89,7 +260,7 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # appsettings.Development.json holds the dev KEK fallback and the seed passwords. It is
       # git-ignored, but an ignore rule is a convention and this is a vault — make it a gate.
@@ -102,7 +273,7 @@ jobs:
           echo "OK — appsettings.Development.json is not tracked"
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -118,13 +289,29 @@ jobs:
             exit 1
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
+
+      # The Angular UI's npm packages, dev and runtime, as the frontend job audits them. npm reads
+      # the lockfile, so nothing needs installing.
+      - name: Audit npm dependencies
+        working-directory: EclipsVault.AngularUi
+        run: npm audit --audit-level=high
+
+      # The CycloneDX npm tool that writes the release's attested SBOM, locked beside its script.
+      - name: Audit the SBOM tool's npm dependencies
+        working-directory: .github/sbom
+        run: npm audit --audit-level=high
+
   # The hook that stops coding agents running destructive git commands is itself security code,
   # and its first version had a bypass that only a test exposed. Run its test table on every change
   # so a broken pattern fails here instead of failing open on someone's machine.
   agent-guardrails:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Git guardrail hook blocks destructive commands and allows everyday ones
         run: python3 -I -m unittest discover -s .claude/hooks -p 'test_*.py' -v
@@ -143,13 +330,17 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.0
+          cache-binary: false
+          driver-opts: image=moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
 
       - name: Build the production image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: false
@@ -161,26 +352,31 @@ jobs:
   sbom:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install CycloneDX
-        run: dotnet tool install --global CycloneDX
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: EclipsVault.AngularUi/.nvmrc
 
       - name: Restore (locked)
         run: dotnet restore --locked-mode
 
-      # A software bill of materials for the deployed app: every transitive dependency, so a
-      # consumer can audit what ships. Fits the pin-and-prove supply-chain posture.
+      # A software bill of materials for the deployed app: every transitive NuGet package and the
+      # Angular UI's npm runtime packages, so a consumer can audit what ships. Fits the pin-and-prove
+      # supply-chain posture. Step for step this is release.yml's sbom job, whose output the release
+      # attests to the image, so a change that breaks it fails here before it can fail a tag.
       - name: Generate SBOM
-        run: dotnet CycloneDX EclipsVault.Web/EclipsVault.Web.csproj -o sbom -fn sbom.json -F Json
+        run: bash .github/sbom/sbom.sh
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: sbom/sbom.json
+          if-no-files-found: error

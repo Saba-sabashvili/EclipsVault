@@ -45,6 +45,11 @@ public sealed class IpBlacklistMiddleware
         </html>
         """;
 
+    // The UI API's version of the page above, in the same words (ADR-0006).
+    private const string BlockedProblemDetail =
+        "Requests from your network location have been blocked by the vault's intrusion defence. " +
+        "The event has been reported to the vault administrators.";
+
     private const string DevelopmentHint =
         """<p class="footnote">Development note: the block list is held in process memory — restarting the application also clears it.</p>""";
 
@@ -69,6 +74,12 @@ public sealed class IpBlacklistMiddleware
             && await _blacklist.IsBlockedAsync(sourceIp, context.RequestAborted))
         {
             _logger.LogWarning("Rejected request to {Path} from blacklisted source {SourceIp}", context.Request.Path, sourceIp);
+            if (UiApiProblem.IsUiApi(context.Request))
+            {
+                await UiApiProblem.WriteAsync(context, StatusCodes.Status403Forbidden, "blocked", "Access blocked", BlockedProblemDetail);
+                return;
+            }
+
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             context.Response.ContentType = "text/html; charset=utf-8";
             await context.Response.WriteAsync(_blockedPage);

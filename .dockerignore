@@ -2,6 +2,16 @@
 **/bin/
 **/obj/
 
+# Node: the image installs from the lockfile and builds the Angular UI itself, so neither a local
+# node_modules nor a local Angular build may leak in.
+**/node_modules/
+EclipsVault.AngularUi/.angular/
+EclipsVault.Web/wwwroot/ui/
+EclipsVault.Web/AngularUi/
+EclipsVault.AngularUi/test-results/
+EclipsVault.AngularUi/guard-results/
+EclipsVault.AngularUi/playwright-report/
+
 # Local dev secrets — must never enter an image
 **/appsettings.Development.json
 **/appsettings.*.Development.json

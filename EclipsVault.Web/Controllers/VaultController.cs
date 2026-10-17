@@ -1,3 +1,4 @@
+using EclipsVault.Web.Authorization;
 using EclipsVault.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace EclipsVault.Web.Controllers;
 /// parsing — the logic lives once in <see cref="ClaimsPrincipalExtensions"/>.
 ///
 /// <para>
-/// The <c>[Authorize]</c> here is deliberately redundant with the default-deny fallback policy in
+/// The <c>[Authorize(Policy = VaultPolicies.Session)]</c> here is deliberately redundant with the default-deny fallback policy in
 /// <c>Program.cs</c>, and both should stay. The fallback is a single line in startup that protects
 /// every controller carrying no attribute of its own; if it were ever edited away, nothing in the
 /// controllers themselves would object and the vault would serve secrets to anonymous callers. A
@@ -18,7 +19,7 @@ namespace EclipsVault.Web.Controllers;
 /// the requirement is also written where the code being protected lives.
 /// </para>
 /// </summary>
-[Authorize]
+[Authorize(Policy = VaultPolicies.Session)]
 public abstract class VaultController : Controller
 {
     /// <summary>The signed-in user's id, or <see cref="Guid.Empty"/> when absent (fail-closed).</summary>

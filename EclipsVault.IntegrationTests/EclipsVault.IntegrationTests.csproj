@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Hosts the real vault over HTTP against a real SQL Server that Testcontainers starts per run
+       (ADR-0010), so it needs Docker. The unit suite in EclipsVault.Tests stays Docker-free. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- As in EclipsVault.Tests: test code is exempt from the warnings-as-errors gate so xUnit analyzer
+         suggestions don't fail CI; the projects under test keep the strict gate. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EclipsVault.Web\EclipsVault.Web.csproj" />
+  </ItemGroup>
+
+</Project>

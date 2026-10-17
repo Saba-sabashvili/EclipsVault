@@ -1,0 +1,3 @@
+# Angular is tested with Vitest, and every migrated area with Playwright end to end
+
+Angular units and components are tested with Vitest, Angular's current default runner. Every migrated area ships with Playwright end-to-end tests that run against the real app and SQL Server and prove the Angular UI behaves like the page it replaced. The sign-in suite computes real TOTP codes and drives passkeys through Chrome's virtual authenticator. It covers reveal, step-up, and a revoked session dying on its next request. CI gains a frontend job (install, lint, unit tests, build, audit) and an `e2e` job. All of this tooling is dev-only and audited under ADR-0003.

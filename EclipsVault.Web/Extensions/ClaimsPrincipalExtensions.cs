@@ -31,6 +31,14 @@ public static class ClaimsPrincipalExtensions
     public static string GetUsername(this ClaimsPrincipal principal)
         => principal.Identity?.Name ?? string.Empty;
 
+    /// <summary>The user-editable name to show, falling back to the username when none is set.</summary>
+    public static string GetDisplayName(this ClaimsPrincipal principal)
+        => principal.FindFirstValue(VaultClaimTypes.Display) ?? principal.GetUsername();
+
+    /// <summary>Changes whenever the avatar does, so an avatar URL carrying it is never served stale; "0" before any change.</summary>
+    public static string GetAvatarVersion(this ClaimsPrincipal principal)
+        => principal.FindFirstValue(VaultClaimTypes.AvatarVersion) ?? "0";
+
     /// <summary>This device's session id, or null when the principal carries none (e.g. an API-key caller).</summary>
     public static Guid? GetSessionId(this ClaimsPrincipal principal)
         => Guid.TryParse(principal.FindFirstValue(VaultClaimTypes.SessionId), out var id) ? id : null;

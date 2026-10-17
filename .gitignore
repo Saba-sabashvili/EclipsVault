@@ -10,7 +10,7 @@ logs/
 Thumbs.db
 
 # CI artifacts (generated, uploaded from the workflow — never committed)
-sbom/
+/sbom/
 
 # Secrets & local config — never commit these. Use the committed *.template as a starting point.
 appsettings.Production.json
@@ -37,3 +37,12 @@ TestResults/
 .claude/settings.local.json
 .claude/skills/mint-licence/
 __pycache__/
+
+# Angular UI build output, written into the web app by `npm run build` in EclipsVault.AngularUi.
+EclipsVault.Web/wwwroot/ui/
+EclipsVault.Web/AngularUi/
+
+# Browser traces, screenshots and reports can contain disposable test credentials.
+EclipsVault.AngularUi/test-results/
+EclipsVault.AngularUi/guard-results/
+EclipsVault.AngularUi/playwright-report/

@@ -9,6 +9,7 @@ using EclipsVault.Web.Authentication;
 using EclipsVault.Infrastructure.Security;
 using EclipsVault.Infrastructure.Security.Licensing;
 using EclipsVault.Web.Authorization;
+using EclipsVault.Web.Hosting;
 using EclipsVault.Web.Middleware;
 using EclipsVault.Web.Security;
 using EclipsVault.Web.Services;
@@ -75,6 +76,7 @@ try
             options.AccessDeniedPath = "/Account/Denied";
             options.ExpireTimeSpan = SessionDefaults.InteractiveLifetime;
             options.SlidingExpiration = true;
+            var cookieDefaults = new CookieAuthenticationEvents();
             options.Events = new CookieAuthenticationEvents
             {
                 // Server-side kill switch: sessions revoked by the intrusion response
@@ -130,7 +132,17 @@ try
                         context.RejectPrincipal();
                         await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                     }
-                }
+                },
+
+                // The UI API answers with Problem Details, not a redirect to an HTML page (ADR-0006).
+                // A missing or revoked session is a 401 the Angular UI turns into a trip to sign-in.
+                // Every other path keeps the framework's behaviour.
+                OnRedirectToLogin = context => UiApiProblem.IsUiApi(context.Request)
+                    ? UiApiProblem.UnauthenticatedAsync(context.HttpContext)
+                    : cookieDefaults.RedirectToLogin(context),
+                OnRedirectToAccessDenied = context => UiApiProblem.IsUiApi(context.Request)
+                    ? UiApiProblem.ForbiddenAsync(context.HttpContext)
+                    : cookieDefaults.RedirectToAccessDenied(context),
             };
         })
         .AddCookie(AuthSchemes.MfaPending, options =>
@@ -204,6 +216,8 @@ try
 
     builder.Services.AddAuthorization(options =>
     {
+        options.AddPolicy(VaultPolicies.Session, policy => policy.RequireAuthenticatedUser());
+
         options.AddPolicy(VaultPolicies.SecretAccess, policy => policy
             .RequireAuthenticatedUser()
             .AddRequirements(new SecretAccessRequirement()));
@@ -248,6 +262,7 @@ try
     {
         // CSRF: every unsafe verb on every controller validates the antiforgery token.
         options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+        options.Filters.Add(new UiApiAntiforgeryFilter());
     });
 
     builder.Services.AddAntiforgery(options =>
@@ -320,6 +335,12 @@ try
     app.UseSession();
     app.UseAuthentication();
     app.UseAuthorization();
+
+    app.MapAngularUi();
+
+    // An unknown UI API path is a Problem Details not-found like any other UI API failure (ADR-0006).
+    // It still needs a session: the fallback authorization policy applies to it.
+    app.MapFallback("/api/ui/{**path}", UiApiProblem.NotFoundAsync);
 
     app.MapControllerRoute(
         name: "default",

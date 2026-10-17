@@ -1,0 +1,36 @@
+# Separate from the laptop's development stack: fresh storage and no published SQL port.
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2025-latest@sha256:ca62ad2d75975074cbc9ac39a1329cd88af9cd3ea2ffb59d6302579a97cf32f4
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_SA_PASSWORD: ${E2E_SQL_PASSWORD:?Set by run.mjs}
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" > /dev/null']
+      interval: 2s
+      timeout: 5s
+      retries: 90
+
+  vault:
+    image: ${E2E_IMAGE:?Set by run.mjs}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      AllowedHosts: localhost
+      ForwardedHeaders__KnownProxies__0: ${E2E_PROXY_IP:?Set by run.mjs}
+      ConnectionStrings__DefaultConnection: Server=sql;Database=EclipsVault;User Id=sa;Password=${E2E_SQL_PASSWORD};Encrypt=True;TrustServerCertificate=True
+      Database__MigrateOnStartup: 'true'
+      Seed__AdminPassword: ${Seed__AdminPassword:?Supply a unique test password}
+      ECLIPSVAULT_KEK: ${ECLIPSVAULT_KEK:?Supply a base64 32-byte test KEK}
+      ECLIPSVAULT_AUDIT_SIGNING_KEY: ${ECLIPSVAULT_AUDIT_SIGNING_KEY:?Set by run.mjs}
+      DataProtection__KeyRingPath: /tmp/keyring
+      Email__Enabled: 'false'
+    depends_on:
+      sql:
+        condition: service_healthy
+
+  proxy:
+    image: caddy:2.11.6@sha256:13b7fbadd017b042956fddbceedeeea12bb1e560534f9b3df281269dbcc61813
+    ports: ['127.0.0.1::443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro

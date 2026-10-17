@@ -7,12 +7,14 @@ effort: low
 ---
 
 Build: `dotnet build EclipsVault.slnx -c Release`. The solution is `.slnx`; there is no `.sln`.
-Test: `dotnet test EclipsVault.slnx -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`.
+Test: `dotnet test EclipsVault.Tests -c Release --no-build --blame-hang-timeout 5m --blame-hang-dump-type mini`.
+Integration tests, only when asked: `dotnet test EclipsVault.IntegrationTests -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type mini`.
+They need Docker running; if Docker is not running, report that instead of a failure.
 The hang timeout is what stops a stuck run, because macOS has no `timeout` command.
 
 - If the build reports errors in files nobody touched, run `dotnet build-server shutdown`, rebuild
   once, and only then report.
-- "The specified inactivity time of 5 minutes has elapsed" means a test hung. Report it as a failure,
+- "The specified inactivity time of N minutes has elapsed" (5 for the unit tests, 10 for the integration tests) means a test hung. Report it as a failure,
   naming the test the blame `Sequence_*.xml` shows in flight. Output is buffered, so never blame the
   last test printed.
 - When asked to repeat the suite, run the repetitions one after another, never in the background.
