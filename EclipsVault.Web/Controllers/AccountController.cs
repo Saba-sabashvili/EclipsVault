@@ -304,8 +304,15 @@ public sealed class AccountController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> Logout()
+    public async Task<IActionResult> Logout(CancellationToken ct)
     {
+        // Dropping the cookie only ends the session in this browser. Revoke it on the server too, so
+        // a copy of the cookie dies on its next request rather than living out its lifetime.
+        if (User.GetSessionId() is { } sessionId)
+        {
+            await _sessions.RevokeAsync(User.GetUserId(), sessionId, ct);
+        }
+
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction("Index", "Home");
     }

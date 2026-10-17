@@ -53,9 +53,35 @@ test('sign in, lazy-load the Angular account with Trusted Types, visit Legacy UI
   await page.getByRole('button', { name: 'Confirm enrollment' }).click();
   await expect(page).toHaveURL(/\/Secrets$/);
 
-  // Sign out through the vault, then exercise an enrolled account's ordinary two-factor sign-in.
-  await page.locator('summary.user-card').click();
-  await page.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
+  await test.step('sign out through the Angular account menu, which ends the session on the server', async () => {
+    const enrolled = (await context.cookies()).find((cookie) => cookie.name === 'EclipsVault.Session');
+    if (!enrolled) throw new Error('Enrollment created no session cookie');
+    // Another browser holding a copy of this session signs out; this one keeps its copy to replay.
+    const other = await browserHealth.newContext();
+    await other.addCookies([enrolled]);
+    const angular = await other.newPage();
+    await angular.goto('/Access');
+    await expect(angular.locator('dd')).toHaveText(['Vault Administrator', 'vault-admin', 'Top Secret', 'GLOBAL']);
+
+    const xsrf = (await other.cookies()).find((cookie) => cookie.name === 'XSRF-TOKEN');
+    expect(xsrf).toMatchObject({ secure: true, httpOnly: false, sameSite: 'Strict', path: '/' });
+    expect(xsrf?.value).not.toBe(enrolled.value);
+
+    await angular.locator('summary.user-card').click();
+    const signOut = angular.waitForRequest((request) =>
+      request.method() === 'POST' && new URL(request.url()).pathname === '/Account/Logout');
+    await angular.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
+    expect((await signOut).headers()['requestverificationtoken']).toBe(xsrf?.value);
+    await expect(angular).toHaveURL(/\/Account\/Login$/);
+    await expect(angular.getByLabel('Username')).toBeVisible();
+    expect((await other.cookies()).some((cookie) => cookie.name === 'EclipsVault.Session')).toBe(false);
+
+    const replayed = await page.request.get('/api/ui/me');
+    expect(replayed.status()).toBe(401);
+    expect(replayed.headers()['content-type']).toBe('application/problem+json');
+  });
+
+  // Exercise an enrolled account's ordinary two-factor sign-in.
   await page.goto('/Account/Login');
   await page.getByLabel('Username').fill('vault-admin');
   await page.getByLabel('Password', { exact: true }).fill(password);
@@ -190,6 +216,45 @@ test('the administrator and Standard sidebars match Legacy in both themes and na
   });
   await test.step('Standard navigation and visual comparison', async () => {
     await verifySidebar(standard, info, 'standard');
+  });
+});
+
+test('both UIs share the theme, and the Angular UI applies it before it starts', async ({ page }) => {
+  await page.context().addCookies(administratorCookies);
+  await page.goto('/Secrets');
+  await page.context().addCookies([{ name: 'EclipsVault.Theme', value: 'dark', url: new URL('/', page.url()).href, secure: true }]);
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+  await test.step('switched in the Legacy UI, the theme is on the Angular document before Angular runs', async () => {
+    await page.locator('summary.user-card').click();
+    await page.getByRole('menuitem', { name: 'Switch to light', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+    // Hold the application bundle, so only the external boot script can have set the theme.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const bundle = /\/ui\/main-[\w-]+\.js$/;
+    await page.route(bundle, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto('/Access', { waitUntil: 'commit' });
+    await page.waitForFunction(() => document.documentElement.hasAttribute('data-theme'));
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('app-root')).toBeEmpty();
+    release();
+    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+    await page.unroute(bundle);
+  });
+
+  await test.step('switched in the Angular UI, the theme reaches the Legacy UI', async () => {
+    await page.locator('summary.user-card').click();
+    await page.getByRole('menuitem', { name: 'Switch to dark', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    expect((await page.context().cookies()).find((cookie) => cookie.name === 'EclipsVault.Theme')?.value).toBe('dark');
+    await page.goto('/Secrets');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 });
 

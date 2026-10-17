@@ -224,7 +224,7 @@ public sealed class UiApiFailureContractTests(VaultFixture vault)
         Assert.Empty(await noKey.Content.ReadAsStringAsync());
     }
 
-    private static async Task AssertProblemAsync(HttpResponseMessage response, int status, string code)
+    internal static async Task AssertProblemAsync(HttpResponseMessage response, int status, string code)
     {
         var body = await response.Content.ReadAsStringAsync();
         Assert.Equal(status, (int)response.StatusCode);

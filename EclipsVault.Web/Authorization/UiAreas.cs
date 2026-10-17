@@ -6,6 +6,9 @@ namespace EclipsVault.Web.Authorization;
 /// </summary>
 public static class UiAreas
 {
+    /// <summary>The area whose pages act on the licence, so its notice goes to whoever may open it.</summary>
+    public const string License = "license";
+
     public static readonly (string Key, string Policy)[] All =
     [
         ("overview", VaultPolicies.Session),
@@ -27,6 +30,6 @@ public static class UiAreas
         ("audit", VaultPolicies.AdminOnly),
         ("notifications", VaultPolicies.AdminOnly),
         ("encryption", VaultPolicies.AdminOnly),
-        ("license", VaultPolicies.AdminOnly),
+        (License, VaultPolicies.AdminOnly),
     ];
 }

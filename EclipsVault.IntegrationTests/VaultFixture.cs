@@ -148,8 +148,10 @@ public sealed partial class VaultFixture : IAsyncLifetime
     /// <summary>
     /// A new Standard-clearance vault account, created by the administrator and signed in through the
     /// real first sign-in. For tests that end their session: revoking one never touches the administrator's.
+    /// Every client shares one address unless the test gives it a <paramref name="source"/> of its own,
+    /// and the vault allows each address only a few sign-in steps per window.
     /// </summary>
-    public async Task<VaultSession> SignInNewAccountAsync(string username)
+    public async Task<VaultSession> SignInNewAccountAsync(string username, IPAddress? source = null)
     {
         var password = "It-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         var created = await PostFormAsync(await AdminClientAsync(), "/Admin/CreateUser", new()
@@ -166,13 +168,16 @@ public sealed partial class VaultFixture : IAsyncLifetime
             throw new InvalidOperationException($"Creating the account {username} answered {(int)created.StatusCode}, not a redirect.");
         }
 
-        var session = CreateSession();
+        var session = CreateSession(source: source);
         await SignInFirstTimeAsync(session.Client, username, password);
         return session;
     }
 
-    /// <summary>A client with no session whose cookies the test can read, or seed with a copied session cookie.</summary>
-    public VaultSession CreateSession(Cookie? sessionCookie = null)
+    /// <summary>
+    /// A client with no session whose cookies the test can read, or seed with a copied session cookie.
+    /// The test server has no network, so a <paramref name="source"/> stands in for the connection's address.
+    /// </summary>
+    public VaultSession CreateSession(Cookie? sessionCookie = null, IPAddress? source = null)
     {
         var cookies = new CookieContainer();
         if (sessionCookie is not null)
@@ -180,7 +185,11 @@ public sealed partial class VaultFixture : IAsyncLifetime
             cookies.Add(BaseAddress, new Cookie(sessionCookie.Name, sessionCookie.Value, "/") { Secure = true, HttpOnly = true });
         }
 
-        return new VaultSession(_factory!.CreateDefaultClient(BaseAddress, new CookieContainerHandler(cookies)), cookies);
+        var handler = new CookieContainerHandler(cookies)
+        {
+            InnerHandler = _factory!.Server.CreateHandler(context => context.Connection.RemoteIpAddress ??= source),
+        };
+        return new VaultSession(new HttpClient(handler) { BaseAddress = BaseAddress }, cookies);
     }
 
     /// <summary>Revokes every session of an account the way an administrator does, from the Users page.</summary>
@@ -259,14 +268,15 @@ public sealed partial class VaultFixture : IAsyncLifetime
     private static async Task<HttpResponseMessage> PostFormAsync(
         HttpClient client, string path, Dictionary<string, string> fields, string? formPage = null)
     {
-        var page = await client.GetStringAsync(formPage ?? path);
-        var token = AntiforgeryField().Match(page) is { Success: true } match
-            ? WebUtility.HtmlDecode(match.Groups[1].Value)
-            : throw new InvalidOperationException($"{formPage ?? path} rendered no antiforgery token.");
-
-        fields["__RequestVerificationToken"] = token;
+        fields["__RequestVerificationToken"] = FormTokenOf(await client.GetStringAsync(formPage ?? path), formPage ?? path);
         return await client.PostAsync(path, new FormUrlEncodedContent(fields));
     }
+
+    /// <summary>The antiforgery token a Legacy UI page renders into its forms, where its own scripts read it.</summary>
+    public static string FormTokenOf(string page, string path)
+        => AntiforgeryField().Match(page) is { Success: true } match
+            ? WebUtility.HtmlDecode(match.Groups[1].Value)
+            : throw new InvalidOperationException($"{path} rendered no antiforgery token.");
 
     private void SetEnvironment(string name, string value)
     {

@@ -24,7 +24,39 @@ async function navigation(page: Page) {
   }));
 }
 
-/** Crop to navigation content; account menu and palette are intentionally separate tickets. */
+/**
+ * The account card and its open menu as a person sees them: who, which avatar, each entry and its
+ * styles. Leaves the menu closed again.
+ */
+async function accountMenu(page: Page) {
+  const footer = page.locator('.sidebar-footer');
+  await footer.locator('summary.user-card').click();
+  const menu = await footer.evaluate((root) => {
+    const look = (element: Element) => {
+      const style = getComputedStyle(element);
+      return [style.color, style.fontFamily, style.fontSize, style.fontWeight, style.padding, style.gap];
+    };
+    return {
+      title: root.querySelector('summary')?.getAttribute('title'),
+      avatar: root.querySelector('img.avatar-img')?.getAttribute('src'),
+      who: [...root.querySelectorAll('.user-name, .user-clearance')].map((part) => [part.textContent?.trim(), look(part)]),
+      items: [...root.querySelectorAll('[role="menuitem"]')].map((item) => ({
+        label: item.textContent?.trim(),
+        href: item.getAttribute('href'),
+        style: look(item),
+      })),
+    };
+  });
+  await footer.locator('summary.user-card').click();
+  return menu;
+}
+
+/** The licensing notices above the page, as text. */
+async function notices(page: Page) {
+  return (await page.locator('.content > .notice').allInnerTexts()).map((text) => text.replace(/\s+/g, ' ').trim());
+}
+
+/** Crop to navigation content; the account menu is compared structurally and the palette is #51. */
 async function screenshot(page: Page, info: TestInfo, name: string) {
   await page.evaluate(() => document.fonts.ready);
   const clip = await page.locator('.sidenav').evaluate((nav) => {
@@ -53,6 +85,8 @@ export async function verifySidebar(page: Page, info: TestInfo, account: 'admini
     await expect(page.locator('.sidenav a.active')).toHaveText('My access');
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const reference = await navigation(page);
+    const referenceMenu = await accountMenu(page);
+    const referenceNotices = await notices(page);
     // Razor's tag helper retains this reference route's ambient optional id on its own link.
     // Assert that one known alias, then compare it as the canonical Angular-owned destination.
     const access = reference.items.find((item) => item.label === 'My access');
@@ -63,16 +97,21 @@ export async function verifySidebar(page: Page, info: TestInfo, account: 'admini
     const angular = await page.goto('/aCcEsS/INDEX');
     expect(angular?.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
     await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
-    // Theme boot and switching belong to #50. Exercise both ported token sets without implementing
-    // that account-menu feature here. No style injection or sanitization bypass is involved.
-    await page.evaluate((value) => { document.documentElement.dataset['theme'] = value; }, theme);
+    // The boot script applied the theme from the cookie the Legacy UI reads.
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page.locator('.sidenav a.active')).toHaveAttribute('aria-current', 'page');
     expect(await navigation(page)).toEqual(reference);
+    expect(await accountMenu(page)).toEqual(referenceMenu);
+    expect(await notices(page)).toEqual(referenceNotices);
     if (account === 'standard') {
+      // Only someone who can act on the licence is told about it, and the server decides who.
+      expect(referenceNotices).toEqual([]);
+      expect(await page.content()).not.toMatch(/unlicensed|notice-warn/i);
       await expect(page.locator('.sidenav')).not.toContainText('Administration');
       await expect(page.locator('.sidenav a')).toHaveCount(13);
       await expect(page.locator('a[href^="/Admin"], a[href="/ServiceAccounts"], a[href="/Audit"], a[href="/Notifications"], a[href="/Encryption"], a[href="/License"]')).toHaveCount(0);
     } else {
+      expect(referenceNotices).toEqual([expect.stringMatching(/^Running unlicensed\. .+ View license$/)]);
       await expect(page.locator('.sidenav .nav-section')).toHaveText(['Vault', 'Account', 'Administration']);
       await expect(page.locator('.sidenav a')).toHaveCount(20);
     }

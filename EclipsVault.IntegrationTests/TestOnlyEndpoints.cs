@@ -59,6 +59,10 @@ public sealed class TestOnlyUiApiController(IIntrusionResponseService intrusion)
     [HttpGet("forbidden")]
     [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme, Roles = TestOnlyFailures.UnheldRole)]
     public IActionResult Forbidden() => NoContent();
+
+    /// <summary>An unsafe UI API request that changes nothing, so the antiforgery check alone decides its answer.</summary>
+    [HttpPost("unsafe")]
+    public IActionResult Unsafe() => NoContent();
 }
 
 /// <summary>The same failures on a Legacy UI path, which must keep its redirects.</summary>

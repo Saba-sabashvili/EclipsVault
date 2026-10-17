@@ -262,6 +262,7 @@ try
     {
         // CSRF: every unsafe verb on every controller validates the antiforgery token.
         options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+        options.Filters.Add(new UiApiAntiforgeryFilter());
     });
 
     builder.Services.AddAntiforgery(options =>

@@ -41,6 +41,13 @@ public static class UiApiProblem
     public static Task ForbiddenAsync(HttpContext context)
         => WriteAsync(context, StatusCodes.Status403Forbidden, "forbidden", "You are not allowed to do this.");
 
+    /// <summary>An unsafe request without a valid antiforgery token (ADR-0004). Reloading fetches a fresh one.</summary>
+    public static Task AntiforgeryRejectedAsync(HttpContext context)
+        => WriteAsync(context, StatusCodes.Status400BadRequest, "antiforgery_rejected", "The request could not be verified. Reload the page and try again.");
+
+    /// <summary><see cref="AntiforgeryRejectedAsync"/> as an action result, for the filter that replaces MVC's bare 400.</summary>
+    public static ActionResult AntiforgeryRejected() => new Result(AntiforgeryRejectedAsync);
+
     private sealed class Result(Func<HttpContext, Task> write) : ActionResult
     {
         public override Task ExecuteResultAsync(ActionContext context) => write(context.HttpContext);

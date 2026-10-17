@@ -9,4 +9,13 @@ namespace EclipsVault.Web.Models.Ui;
 /// <param name="Clearance">The clearance's display name, e.g. "Top Secret".</param>
 /// <param name="Project">The project the account belongs to.</param>
 /// <param name="Areas">Area keys authorized for this session by the pages' named policies.</param>
-public sealed record MeResponse(string Username, string DisplayName, string Clearance, string Project, IReadOnlyList<string> Areas);
+/// <param name="AvatarUrl">The account's avatar, from the existing avatar endpoint.</param>
+/// <param name="LicenseNotice">The licensing reminder, only for a session that can act on it; otherwise null.</param>
+public sealed record MeResponse(
+    string Username,
+    string DisplayName,
+    string Clearance,
+    string Project,
+    IReadOnlyList<string> Areas,
+    string AvatarUrl,
+    LicenseNotice? LicenseNotice);

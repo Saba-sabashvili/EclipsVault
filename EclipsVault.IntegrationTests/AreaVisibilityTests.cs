@@ -34,6 +34,8 @@ public sealed class AreaVisibilityTests(VaultFixture vault)
             "overview", "secrets", "dynamic-secrets", "shared-with-me", "shared-by-me",
             "access", "access-requests", "security", "sign-ins", "sessions", "activity", "data", "profile",
         ], me.GetProperty("areas").EnumerateArray().Select(area => area.GetString()!).ToArray());
+        // The vault is unlicensed, but only someone who can act on that is told.
+        Assert.Equal(JsonValueKind.Null, me.GetProperty("licenseNotice").ValueKind);
 
         foreach (var path in new[] { "/Admin/Users", "/Admin/Networks", "/ServiceAccounts", "/Audit", "/Notifications", "/Encryption", "/License" })
         {

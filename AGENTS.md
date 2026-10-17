@@ -72,7 +72,10 @@ unset Seed__AdminPassword ECLIPSVAULT_KEK
 loopback port, bootstraps `vault-admin` through the normal Production startup, enrolls MFA through
 the browser, then signs in with a real TOTP code. It removes its own containers and image on exit.
 The first run downloads SQL Server (~2.5 GB) and the build images. `E2E_IMAGE=<local-tag>` skips the
-build to test an already-built production image, as CI does. The suite uses the proxy's disposable
+build to test an already-built production image, as CI does.
+An image you tag for E2E_IMAGE reuse is yours to remove: delete it with docker rmi when the ticket is
+done. Never remove images or containers you did not create.
+The suite uses the proxy's disposable
 certificate with `ignoreHTTPSErrors`; production CSP, Secure cookies and authentication stay active.
 Always import `test` from `e2e/fixtures.ts` in browser specs: its automatic fixture fails every test
 on CSP violations, console errors or uncaught browser exceptions, including other pages in its context.

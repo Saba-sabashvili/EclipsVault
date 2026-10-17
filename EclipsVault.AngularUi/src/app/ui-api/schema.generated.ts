@@ -43,12 +43,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LicenseNotice: {
+            title: string;
+            text: string;
+        };
         MeResponse: {
             username: string;
             displayName: string;
             clearance: string;
             project: string;
             areas: string[];
+            avatarUrl: string;
+            licenseNotice: null | components["schemas"]["LicenseNotice"];
         };
     };
     responses: never;
