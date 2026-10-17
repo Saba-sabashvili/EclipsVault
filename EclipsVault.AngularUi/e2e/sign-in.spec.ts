@@ -365,12 +365,12 @@ test('the palette is driven from the keyboard, traps focus, and hands it back on
   const options = page.locator('.palette-item');
 
   await test.step('Escape returns focus to the element that had it', async () => {
-    const refresh = page.getByRole('button', { name: 'Refresh' });
-    await refresh.focus();
+    const origin = page.getByRole('link', { name: 'My access', exact: true });
+    await origin.focus();
     await openPalette(page);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(refresh).toBeFocused();
+    await expect(origin).toBeFocused();
 
     const trigger = page.getByRole('button', { name: 'Search secrets or jump to a page' });
     await trigger.click();

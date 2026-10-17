@@ -20,7 +20,7 @@ export async function verifyMyAccess(page: Page, info: TestInfo, account: 'admin
   // Docker allocates the proxy's forwarded source address; it is not necessarily loopback.
   expect(access.isTrustedNetwork).toBe(true);
   await expect(now.locator('dd').nth(0)).toHaveText(`${access.sourceIp} Trusted`);
-  await expect(now.locator('dd').nth(1)).toHaveText(/^(Open now|Closed) 06:00–22:00 UTC$/);
+  await expect(now.locator('dd').nth(1)).toHaveText(/^\s*(Open now|Closed)\s+06:00–22:00 UTC\s*$/);
   const production = (await now.locator('dd').nth(1).innerText()).includes('Open now') ? 'Can open' : 'Outside access hours';
   const rows = page.locator('.access-matrix tbody tr');
   await expect(page.locator('.access-matrix thead th')).toHaveText(['Sensitivity', 'Development', 'Staging', 'Production']);
