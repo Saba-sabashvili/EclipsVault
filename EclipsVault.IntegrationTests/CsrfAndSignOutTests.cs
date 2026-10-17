@@ -147,7 +147,7 @@ public sealed class CsrfAndSignOutTests(VaultFixture vault)
         var anonymous = vault.CreateClient();
         Assert.Equal(HttpStatusCode.Redirect, (await anonymous.PostAsync("/Account/Logout", null)).StatusCode);
         var session = await vault.SignInNewAccountAsync("it-sign-out-post", IPAddress.Parse("198.51.100.94"));
-        Assert.Equal(HttpStatusCode.NotFound, (await session.Client.GetAsync("/Account/Logout")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await session.Client.GetAsync("/Account/Logout")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await session.Client.GetAsync("/api/ui/me")).StatusCode);
     }
 
